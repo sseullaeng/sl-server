@@ -28,7 +28,10 @@ EC2 + Docker Compose 배포 / Let's Encrypt
 
 ## 3. 코딩 컨벤션 (강제)
 
-### 3.1 패키지 구조 (도메인 중심)
+### 3.1 패키지 구조 (DDD-lite)
+
+> 1인 9일 일정 + DDD 핵심(Aggregate / VO / Domain Event / Repository 인터페이스 분리)
+
 ```
 com.sseulang
 ├── global/        config, security, exception, common, infra
@@ -36,7 +39,31 @@ com.sseulang
                    delivery, chat, notification, report, review,
                    notice, banner, admin, category
 ```
-각 도메인 하위: `controller / service / repository / entity / dto / event`
+
+각 도메인 하위 4-layer:
+```
+domain/{도메인}/
+├── application/        # UseCase, ApplicationService (트랜잭션 경계)
+│   └── dto/            # Command, Query, Result (계층 내부 DTO)
+├── domain/             # Aggregate Root, Entity, ValueObject,
+│   │                   # DomainService, Repository(인터페이스), DomainEvent
+│   └── event/
+├── infrastructure/     # JPA RepositoryImpl, 외부 시스템 어댑터
+│   └── persistence/
+└── presentation/       # Controller, Request/Response DTO
+    └── dto/
+```
+
+#### DDD-lite 원칙
+- **Aggregate Root**만 Repository로 직접 접근. 자식 Entity는 root 통해 조작
+- **Value Object** 적극 활용 — `Money`, `Email`, `Phone`, `PointBalance`, `Address` (불변 + 자가 검증)
+- **Repository 인터페이스는 `domain/`에**, JPA 구현은 `infrastructure/persistence/`에
+- **DomainEvent**는 `domain/event/`에 정의, 발행은 Aggregate Root가, 처리는 ApplicationService 또는 별도 EventListener
+- **외부 시스템(토스/카카오/S3)** = `domain/`에 인터페이스만, 어댑터는 `infrastructure/` (anti-corruption)
+- **ApplicationService = 트랜잭션 경계 + 흐름 조율**, **DomainService = 여러 Aggregate에 걸친 도메인 규칙**
+
+#### 도입 안 함 (over-engineering)
+- 헥사고날 별도 모듈 분리, CQRS, Event Sourcing, 도메인 이벤트 비동기 분산 처리
 
 ### 3.2 명명 규칙
 - 패키지: 소문자, 단수형 (`item`, `user` ✅ / `items`, `users` ❌)
@@ -48,17 +75,26 @@ com.sseulang
 - 테스트: `대상메서드_상황_기대결과` (예: `signup_이메일중복시_예외발생`)
 
 ### 3.3 레이어 룰 (절대 금지)
-- ❌ Controller가 Repository 직접 호출
-- ❌ Service가 다른 도메인 Repository 직접 호출 → **다른 도메인 Service를 통해**
-- ❌ Entity를 Controller까지 노출 → 무조건 DTO 변환
-- ❌ Service에서 HttpServletRequest 받기 → Controller에서 추출해 전달
-- ❌ Entity 안에 Setter 사용 → 비즈니스 메서드로 상태 변경
-- ✅ Entity 생성/수정은 정적 팩토리 메서드 또는 도메인 메서드로
+
+**의존 방향**: `presentation → application → domain ← infrastructure`
+(domain은 어디에도 의존하지 않는다)
+
+- ❌ Presentation(Controller)이 Repository / domain entity 직접 호출 → ApplicationService 경유
+- ❌ ApplicationService가 다른 도메인 Repository 직접 호출 → **다른 도메인의 ApplicationService 통해**
+- ❌ Domain layer가 Spring/JPA/Web 어노테이션에 의존 (`@Service`, `@Transactional`, `@RestController` 등) → 순수 POJO
+- ❌ Aggregate 자식 Entity를 외부에서 직접 조작 → 반드시 Aggregate Root 메서드 통해
+- ❌ Entity / Aggregate를 Presentation까지 노출 → Response DTO로 변환
+- ❌ Application/Domain Service에서 `HttpServletRequest` 받기 → Controller에서 추출해 전달
+- ❌ Entity 안 Setter 사용 → 비즈니스 메서드(상태 전이 의도가 이름에 드러남)로 변경
+- ❌ Repository 구현체를 직접 import → 인터페이스만 의존 (구현은 `infrastructure/persistence/`)
+- ✅ Entity / Aggregate 생성은 정적 팩토리 메서드 또는 도메인 메서드로
+- ✅ ValueObject는 불변 + 생성자에서 자가 검증
 
 ### 3.4 트랜잭션
-- `@Transactional`은 **Service에만** (Controller, Repository에 X)
+- `@Transactional`은 **ApplicationService에만** (Controller, Repository, Domain Layer에 X)
 - 조회 전용은 `@Transactional(readOnly = true)`
 - 클래스 단위 readOnly 기본 + 쓰기 메서드만 `@Transactional` 오버라이드 패턴 권장
+- DomainService는 트랜잭션을 모름 — 호출하는 ApplicationService가 경계 책임
 
 ### 3.5 예외 처리
 - 비즈니스 예외: `BusinessException(ErrorCode)` 사용
@@ -179,17 +215,43 @@ WHERE id = ? AND point_balance + ? >= 0
 - 응답은 `PageResponse<T>`로 변환
 - 채팅 메시지는 **커서 페이징** (`?before={messageId}&size=30`)
 
-## 7. 테스트 전략
+## 7. 테스트 전략 (TDD)
 
-### 7.1 우선순위
-- **단위 테스트 필수**: 결제, 거래 상태 전이, 포인트 동시성, JWT 검증, 토큰 Rotation
-- **통합 테스트**: Controller 레벨 핵심 플로우 (회원가입, 로그인, 물품 등록, 결제)
-- CRUD: Swagger 수동 테스트로 갈음 OK
+### 7.1 흐름 — RED → GREEN → REFACTOR
+1. **RED**: 의도를 표현하는 **실패하는 테스트**부터 작성. 컴파일 에러도 RED.
+2. **GREEN**: 테스트를 통과시키는 **최소 구현**. 우아함보다 통과가 우선.
+3. **REFACTOR**: 통과 상태 유지하며 중복 제거 / 이름 정리 / 구조 개선.
 
-### 7.2 도구
+### 7.2 강도 (영역별 차등)
+
+| 영역 | 강도 | 위반 시 |
+|---|---|---|
+| 보안 / 결제 / 포인트 / 거래 상태 전이 / JWT / 토큰 Rotation / 동시성 | 🔒 **테스트 먼저 필수** (구현 전 RED) | PR 리젝, Codex 리뷰 거부 |
+| 일반 도메인 로직 (Aggregate 메서드, DomainService, ApplicationService, ValueObject) | TDD 권장 (RED-GREEN-REFACTOR 기본) | 리뷰에서 지적 |
+| 트리비얼 어댑터 (Controller 라우팅, JPA Repository, DTO 변환) | 통합 테스트로 갈음 OK | — |
+
+### 7.3 테스트 종류와 적용 범위
+- **순수 단위 테스트** (`domain/` layer): Spring 컨텍스트 X, Mockito 거의 X — domain은 외부 의존 0이라 가능
+- **단위 테스트 + Mockito** (`application/` layer): 도메인 Repository / 다른 ApplicationService를 mock
+- **Slice 테스트**: `@WebMvcTest` (Controller), `@DataJpaTest` (Repository 실제 동작), `@JsonTest` (DTO 직렬화)
+- **통합 테스트**: `@SpringBootTest` + Testcontainers — 핵심 플로우(회원가입, 로그인, 결제 end-to-end)에만 한정
+- `@SpringBootTest` 남발 금지 — 느림 + TDD 사이클 깨짐
+
+### 7.4 커버리지 (Jacoco)
+- 리포트는 항상 생성 (`./gradlew test jacocoTestReport`)
+- 임계 강제는 도메인 30% 이상 작성 시 활성화 (build.gradle TODO 참조)
+- 점진 상향: 1단계 라인 50% / 보안·결제·포인트 80% → 2단계 70% / 90%
+
+### 7.5 도구
 - JUnit 5 + Mockito + AssertJ
+- spring-security-test (`@WithMockUser` 등)
 - Testcontainers (MySQL, MongoDB)
-- `@SpringBootTest` 무분별 사용 X — 가능하면 Slice 테스트(`@WebMvcTest`, `@DataJpaTest`)
+- 테스트 메서드명: `대상_상황_기대결과` (예: `차감_잔액부족_예외발생`)
+
+### 7.6 동시성 테스트 (필수)
+- 잔액 변경 코드는 반드시 동시 실행 시나리오 테스트
+- `CompletableFuture` + `CountDownLatch` 또는 `ExecutorService`로 race 재현
+- 락/원자 연산이 정상 작동하는지 검증
 
 ## 8. Git 컨벤션
 
@@ -263,6 +325,9 @@ WHERE id = ? AND point_balance + ? >= 0
 - ❌ 잔액 변경을 비원자 연산으로 처리
 - ❌ Entity 직접 직렬화하여 응답
 - ❌ 사용자 입력을 그대로 SQL 조립 (QueryDSL/JPQL 파라미터 바인딩 사용)
+- ❌ Domain layer에 Spring/JPA 어노테이션 의존 (DDD 위반)
+- ❌ Aggregate 자식 Entity 외부 직접 조작 (반드시 Root 통해)
+- ❌ 보안/결제/포인트 코드를 테스트 없이 작성 (TDD §7.2 강제 영역)
 
 ## 12. 참고 문서
 
