@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'jacoco'
     id 'org.springframework.boot' version '3.3.5'
     id 'io.spring.dependency-management' version '1.1.6'
 }
@@ -65,7 +66,63 @@ dependencies {
     testRuntimeOnly  'org.junit.platform:junit-platform-launcher'
 }
 
-test { useJUnitPlatform() }
+test {
+    useJUnitPlatform()
+    failFast = true
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        showStandardStreams = false
+        exceptionFormat = 'full'
+    }
+    finalizedBy jacocoTestReport
+}
+
+jacoco {
+    toolVersion = '0.8.12'
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    // QueryDSL Q-class 등 자동 생성 코드 제외
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                '**/Q*.class',
+                'com/sseulang/SseulangApplication.class',
+                '**/dto/**',
+                '**/config/**'
+            ])
+        }))
+    }
+}
+
+// 커버리지 임계 검증 — 도메인 코드가 차오르면 단계적으로 활성화
+// TODO(도메인 30% 이상 작성 시): enabled = true 로 전환, 임계 점진 상향
+//   - 1단계: 라인 50% / 보안·결제·포인트 패키지 80%
+//   - 2단계: 라인 70% / 보안·결제·포인트 패키지 90%
+jacocoTestCoverageVerification {
+    enabled = false
+    violationRules {
+        rule {
+            element = 'BUNDLE'
+            limit { counter = 'LINE'; minimum = 0.50 }
+        }
+        rule {
+            element = 'PACKAGE'
+            includes = [
+                'com.sseulang.global.security.*',
+                'com.sseulang.domain.auth.*',
+                'com.sseulang.domain.payment.*',
+                'com.sseulang.domain.point.*'
+            ]
+            limit { counter = 'LINE'; minimum = 0.80 }
+        }
+    }
+}
 
 // QueryDSL Q-class 생성 위치
 def querydslSrcDir = 'build/generated/querydsl'
