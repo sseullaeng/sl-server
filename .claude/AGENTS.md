@@ -143,31 +143,58 @@ springdoc-openapi (Swagger)
 - 호출 timeout 설정 누락 (기본값에 의존하면 위험)
 - 외부 응답을 그대로 사용자에게 노출하지 않는가 (정보 누출)
 
-### 3.11 테스트 전략
+### 3.11 테스트 전략 (TDD)
 
-- 핵심 영역(결제, 거래 상태 전이, 포인트 동시성, JWT 검증, 토큰 Rotation) **단위 테스트 누락 시 Critical**
-- Slice 테스트(`@WebMvcTest`, `@DataJpaTest`) 가능한데 `@SpringBootTest` 남발하는가
-- Testcontainers(MySQL, MongoDB) 대신 로컬 인스턴스 의존 — 재현성 떨어짐
-- 테스트 메서드명: `대상메서드_상황_기대결과` 패턴 준수
+**RED → GREEN → REFACTOR 사이클 준수 여부 검토.**
+
+영역별 강도:
+| 영역 | 강도 | 위반 시 |
+|---|---|---|
+| 보안 / 결제 / 포인트 / 거래 상태 전이 / JWT / 토큰 Rotation / 동시성 | 🔒 **테스트 먼저 필수** | **Critical** — 리뷰 거부, 구현 전 RED 요구 |
+| 일반 도메인 (Aggregate, DomainService, ApplicationService, ValueObject) | TDD 권장 | Warning |
+| 트리비얼 어댑터 (Controller 라우팅, JPA Repository, DTO) | 통합 테스트로 갈음 OK | — |
+
+체크 항목:
+- 핵심 영역에 단위 테스트 누락 — **Critical**
+- `domain/` layer 테스트가 Spring 컨텍스트 띄우는지 — 순수 단위로 가능해야 함
+- Slice 테스트(`@WebMvcTest`, `@DataJpaTest`) 가능한데 `@SpringBootTest` 남발 — 느림 + TDD 사이클 깨짐
+- Testcontainers(MySQL, MongoDB) 대신 로컬 인스턴스 의존 — 재현성 ↓
+- 테스트 메서드명: `대상_상황_기대결과` (예: `차감_잔액부족_예외발생`)
 - 동시성 테스트: 여러 스레드/CompletableFuture로 race 시나리오 재현되는가
+- Jacoco 커버리지 리포트 확인 (CI artifact `jacoco-report`) — 보안·결제·포인트 패키지가 비어 있으면 Critical
 
-## 4. 코딩 컨벤션 (검토 시 적용)
+## 4. 코딩 컨벤션 (검토 시 적용) — DDD-lite
 
 ### 4.1 패키지 / 명명
 - 패키지: 소문자, 단수형 (`item` ✅ / `items` ❌)
-- DTO: `Request`, `Response` 접미사
-- Entity = 테이블명 단수 PascalCase
+- DTO: `Request`, `Response` 접미사 (Presentation), `Command`/`Query`/`Result` (Application 내부)
+- Entity = 테이블명 단수 PascalCase, Aggregate Root는 도메인 명사
+- ValueObject는 불변 + 자가 검증 (`Money`, `Email`, `Phone`, `PointBalance`)
 - 테스트 메서드: `대상_상황_기대결과`
 
-### 4.2 레이어 분리
-- Controller → Service → Repository (역방향 호출 X)
-- Service 간 호출은 다른 도메인 Service를 통해 (Repository 직접 X)
-- Entity Setter X → 비즈니스 메서드로 상태 변경
-- Service에 HttpServletRequest 받지 않기
+### 4.2 패키지 구조 (4-layer)
+```
+domain/{도메인}/
+├── application/        # UseCase, ApplicationService (트랜잭션 경계), dto/
+├── domain/             # Aggregate, ValueObject, DomainService,
+│                       # Repository(인터페이스), DomainEvent (event/)
+├── infrastructure/     # JPA RepositoryImpl (persistence/), 외부 어댑터
+└── presentation/       # Controller, Request/Response DTO (dto/)
+```
 
-### 4.3 트랜잭션
-- `@Transactional`: Service에만
+### 4.3 레이어 분리 (의존 방향: presentation → application → domain ← infrastructure)
+- Presentation은 ApplicationService만 호출 (Repository / Entity 직접 X)
+- ApplicationService 간 호출은 다른 도메인의 ApplicationService를 통해 (Repository 직접 X)
+- **Domain layer는 Spring/JPA/Web 어노테이션 의존 금지** (`@Service`, `@Transactional`, `@Entity` 제외하고 순수 POJO)
+- Repository = 도메인 인터페이스, JPA 구현은 `infrastructure/persistence/`
+- Aggregate 자식 Entity는 외부에서 직접 조작 금지 (반드시 Root 메서드 통해)
+- Entity Setter X → 비즈니스 메서드(상태 전이 의도)
+- Application/Domain Service에 HttpServletRequest 받지 않기
+
+### 4.4 트랜잭션
+- `@Transactional`: **ApplicationService에만**
 - 조회 전용: `@Transactional(readOnly = true)`
+- DomainService는 트랜잭션을 모름 — 호출자가 책임
 
 ## 5. 리뷰 출력 형식
 
@@ -225,6 +252,9 @@ springdoc-openapi (Swagger)
 - ❌ 트랜잭션 없이 다중 쓰기
 - ❌ 토스 결제 금액 백엔드 재검증 누락
 - ❌ 멱등성 키 없는 결제 처리
+- ❌ Domain layer가 Spring/JPA/Web 어노테이션 의존 (DDD 위반)
+- ❌ Aggregate 자식 Entity 외부 직접 조작 (Root 우회)
+- ❌ 보안/결제/포인트 코드 테스트 없이 작성 (TDD 강제 영역)
 
 ## 9. Claude Code와의 협업
 
