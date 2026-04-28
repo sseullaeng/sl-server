@@ -5,17 +5,21 @@
 
 ---
 
-## 1. 게이트 1 리뷰 결과 요약
+## 1. 게이트 1 / mini 게이트 2 리뷰 결과 요약
 
-리뷰 thread: `019dd216-bcea-7c42-8cc6-113c6dab9989` (`.logs/codex-review.log` 참고).
+- 게이트 1 thread: `019dd216-bcea-7c42-8cc6-113c6dab9989`
+- mini 게이트 2 thread: `019dd22d-72ab-7d91-9602-0672679a2429`
+- (`.logs/codex-review.log` 참고. 보안 영역 작업 직후엔 비울 것.)
 
 | 항목 | 분류 | 처리 | 커밋/이슈 |
 |------|------|------|-----------|
-| C1: AT 블랙리스트 검증 부재 | 🔴 Critical | **적용 (옵션 b — jti 블랙리스트)** | 본 PR |
-| C2: rotation race (isValid+revoke 분리) | 🔴 Critical | **적용 (consume atomic)** | 본 PR |
-| W1: AuthenticationEntryPoint 부재 | 🟡 Warning | **적용** | 본 PR |
-| W2: revokeAll SCAN 비효율 | 🟡 Warning | **TODO 주석 + 후속 이슈** | (별도 이슈) |
-| C1-a 보강: user-level token version | — | **후속 이슈로 분리 (Day 3 User 도메인 후)** | (별도 이슈) |
+| **게이트 1** C1: AT 블랙리스트 검증 부재 | 🔴 Critical | **적용 (옵션 b — jti 블랙리스트)** | 본 PR |
+| **게이트 1** C2: rotation race (isValid+revoke 분리) | 🔴 Critical | **적용 (consume atomic)** | 본 PR |
+| **게이트 1** W1: AuthenticationEntryPoint 부재 | 🟡 Warning | **적용** (`JwtAuthenticationEntryPoint` + `JwtAccessDeniedHandler`) | 본 PR |
+| **게이트 1** W2: revokeAll SCAN 비효율 | 🟡 Warning | **TODO 주석 + 후속 이슈** | #5 |
+| **mini 게이트 2** Critical: Redis 어댑터 통합 테스트 부재 | 🔴 Critical | **적용** — testcontainers Redis IT (blacklist / consume / revokeAll / TTL / race) | 본 PR |
+| **mini 게이트 2** Warning: SecurityConfig wiring + traceId 일관성 미검증 | 🟡 Warning | **적용** — `AuthSecurityFlowIT` (WebMvcTest 슬라이스 + traceId 일치 검증) | 본 PR |
+| C1-a 보강: user-level token version | — | **후속 이슈로 분리 (Day 3 User 도메인 후)** | #4 |
 
 ---
 
