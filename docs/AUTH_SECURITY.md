@@ -5,11 +5,17 @@
 
 ---
 
-## 1. 게이트 1 / mini 게이트 2 리뷰 결과 요약
+## 1. 게이트 리뷰 결과 요약
 
+### Day 2 (JWT 인증 흐름)
 - 게이트 1 thread: `019dd216-bcea-7c42-8cc6-113c6dab9989`
 - mini 게이트 2 thread: `019dd22d-72ab-7d91-9602-0672679a2429`
-- (`.logs/codex-review.log` 참고. 보안 영역 작업 직후엔 비울 것.)
+
+### Day 3 (OAuth + User 도메인)
+- 게이트 1 thread: `019dd299-d74b-7ec0-99b5-90d6922df8d4`
+- mini 게이트 2 thread: `019dd2af-c49e-7621-b486-2b541121fe0f`
+
+`.logs/codex-review.log` 참고. 보안 영역 작업 직후엔 비울 것.
 
 | 항목 | 분류 | 처리 | 커밋/이슈 |
 |------|------|------|-----------|
@@ -18,8 +24,16 @@
 | **게이트 1** W1: AuthenticationEntryPoint 부재 | 🟡 Warning | **적용** (`JwtAuthenticationEntryPoint` + `JwtAccessDeniedHandler`) | 본 PR |
 | **게이트 1** W2: revokeAll SCAN 비효율 | 🟡 Warning | **TODO 주석 + 후속 이슈** | #5 |
 | **mini 게이트 2** Critical: Redis 어댑터 통합 테스트 부재 | 🔴 Critical | **적용** — testcontainers Redis IT (blacklist / consume / revokeAll / TTL / race) | 본 PR |
-| **mini 게이트 2** Warning: SecurityConfig wiring + traceId 일관성 미검증 | 🟡 Warning | **적용** — `AuthSecurityFlowIT` (WebMvcTest 슬라이스 + traceId 일치 검증) | 본 PR |
+| **mini 게이트 2** Warning: SecurityConfig wiring + traceId 일관성 미검증 | 🟡 Warning | **적용** — `AuthSecurityFlowIT` (WebMvcTest 슬라이스 + traceId 일치 검증) | (Day 2 PR) |
 | C1-a 보강: user-level token version | — | **후속 이슈로 분리 (Day 3 User 도메인 후)** | #4 |
+| **Day 3 게이트 1** Critical: `findOrCreateBySocial` race | 🔴 | **적용** — `DataIntegrityViolationException` catch + race winner 재조회 | (Day 3 PR) |
+| **Day 3 게이트 1** Warning: 외부 OAuth 호출이 트랜잭션 안에서 일어남 | 🟡 | **적용** — `OAuthLoginService` 클래스 `@Transactional` 제거 (가이드 §3.10) | (Day 3 PR) |
+| **Day 3 게이트 1** Warning: Google `email_verified=null` 통과 | 🟡 | **적용** — `!Boolean.TRUE.equals` 로 null/false 모두 거부 | (Day 3 PR) |
+| **Day 3 게이트 1** Warning: 외부 호출 실패 원인 분리 X | 🟡 | **적용** — `ExternalApiException` 도입 (가이드 §3.10), provider 에서 wrap, service 가 `AUTH_OAUTH_FAILED` 변환 | (Day 3 PR) |
+| **Day 3 게이트 1** Suggestion: Email 정규화 부재 | 🟢 | **적용** — Email VO compact constructor 에서 trim + lowercase | (Day 3 PR) |
+| **Day 3 mini 게이트 2** Warning: race catch 광범위 | 🟡 | **적용** — UNIQUE race 만 보정, 그 외 제약 위반(닉네임 등) 은 원본 예외 그대로 throw | (Day 3 PR) |
+| **Day 3 mini 게이트 2** Warning: oauth2 엔드포인트 traceId 통합 검증 부재 | 🟡 | **적용** — `AuthOAuthFlowIT` (TraceIdFilter + X-Trace-Id 헤더 ↔ 본문 traceId 일관성, header relay 검증) | (Day 3 PR) |
+| **Day 3 mini 게이트 2** Suggestion: OAuthProvider javadoc | 🟢 | **적용** — 예외 계약(ExternalApiException + BusinessException) 명시 | (Day 3 PR) |
 
 ---
 
