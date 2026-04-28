@@ -29,20 +29,25 @@ docker compose up -d
 
 > 호스트 포트는 다른 로컬 컨테이너와 충돌 방지를 위해 기본 포트가 아닌 값으로 잡혀 있습니다. 컨테이너 내부 포트는 표준 그대로입니다.
 
-### 2) 환경 변수 (선택, 미설정 시 빈 값)
+### 2) 환경 변수
+
+`.env.example` 을 복사해서 `.env` 만들고 필요한 값 채우기:
 
 ```bash
-export JWT_SECRET="local-dev-secret-please-override-with-64-char-random-string-1234567890"
-export KAKAO_REST_API_KEY=...
-export KAKAO_CLIENT_SECRET=...
-export GOOGLE_CLIENT_ID=...
-export GOOGLE_CLIENT_SECRET=...
-export AWS_ACCESS_KEY=...
-export AWS_SECRET_KEY=...
-export S3_BUCKET=sseulang-bucket
-export TOSS_CLIENT_KEY=...
-export TOSS_SECRET_KEY=...
+cp .env.example .env
+# 편집기로 열어 JWT_SECRET 등 채우기
 ```
+
+`.env` 는 `.gitignore` 처리됨. IntelliJ EnvFile 플러그인 또는 `set -a; source .env; set +a` 로 주입.
+
+| 시점 | 채워야 할 변수 |
+|------|---------------|
+| **현재 (local 개발)** | 채울 것 없음 — `application-local.yml` 의 fallback 으로 시작 가능. `JWT_SECRET` 만 본인 값으로 덮어두면 더 안전. |
+| Day 5+ (이미지 업로드) | `AWS_ACCESS_KEY`, `AWS_SECRET_KEY`, `S3_BUCKET` |
+| Day 7 (결제) | `TOSS_CLIENT_KEY`, `TOSS_SECRET_KEY` |
+| Day 11+ (배포) | prod 의 모든 변수 (`DB_URL`, `COOKIE_DOMAIN`, `MONGO_URI`, `REDIS_HOST`, `JWT_SECRET`, `CORS_ALLOWED_ORIGINS`) |
+
+> `KAKAO_*` / `GOOGLE_*` 는 가이드 §4.4 의 프론트 주도 OAuth 흐름 기준 백엔드 코드에서 직접 사용하지 않습니다 (백엔드는 access_token 만 검증). 향후 백엔드 주도 OAuth 도입 시 채울 것.
 
 ### 3) 애플리케이션 실행
 
