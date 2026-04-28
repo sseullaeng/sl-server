@@ -51,6 +51,7 @@ application-local-secret.yml
 
 # =============== 로그 ===============
 logs/
+.logs/
 *.log
 
 # =============== Docker ===============
