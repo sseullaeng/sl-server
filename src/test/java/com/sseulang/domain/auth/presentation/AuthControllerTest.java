@@ -1,7 +1,11 @@
 package com.sseulang.domain.auth.presentation;
 
+import com.sseulang.domain.auth.application.OAuthLoginService;
 import com.sseulang.domain.auth.application.RefreshTokenRotationService;
 import com.sseulang.domain.auth.application.dto.TokenPair;
+import com.sseulang.domain.user.domain.SocialProvider;
+import com.sseulang.global.exception.BusinessException;
+import com.sseulang.global.exception.ErrorCode;
 import com.sseulang.global.exception.GlobalExceptionHandler;
 import com.sseulang.global.security.CookieUtil;
 import jakarta.servlet.http.Cookie;
@@ -9,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseCookie;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -30,14 +35,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthControllerTest {
 
     private RefreshTokenRotationService rotationService;
+    private OAuthLoginService oauthLoginService;
     private CookieUtil cookieUtil;
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         rotationService = mock(RefreshTokenRotationService.class);
+        oauthLoginService = mock(OAuthLoginService.class);
         cookieUtil = mock(CookieUtil.class);
-        AuthController controller = new AuthController(rotationService, cookieUtil);
+        AuthController controller = new AuthController(rotationService, oauthLoginService, cookieUtil);
         mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -113,5 +120,92 @@ class AuthControllerTest {
 
         // 쿠키 없으면 둘 다 null — service 가 noop 처리
         verify(rotationService, times(1)).logout(org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull());
+    }
+
+    @Test
+    @DisplayName("POST /auth/oauth2/kakao_정상_KAKAO 매핑 + AT/RT 쿠키 응답")
+    void oauth2_kakao_정상() throws Exception {
+        when(oauthLoginService.login(eq(SocialProvider.KAKAO), eq("KAKAO_AT")))
+                .thenReturn(new TokenPair("NEW_AT", "NEW_RT"));
+        when(cookieUtil.accessTokenCookie("NEW_AT"))
+                .thenReturn(ResponseCookie.from("at", "NEW_AT").path("/").httpOnly(true).maxAge(1800).build());
+        when(cookieUtil.refreshTokenCookie("NEW_RT"))
+                .thenReturn(ResponseCookie.from("rt", "NEW_RT").path("/api/v1/auth").httpOnly(true).maxAge(604800).build());
+
+        MvcResult result = mvc.perform(post("/api/v1/auth/oauth2/kakao")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accessToken\":\"KAKAO_AT\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andReturn();
+
+        List<String> setCookies = result.getResponse().getHeaders(HttpHeaders.SET_COOKIE);
+        assertThat(setCookies).hasSize(2);
+        assertThat(setCookies).anyMatch(s -> s.startsWith("at=NEW_AT"));
+        assertThat(setCookies).anyMatch(s -> s.startsWith("rt=NEW_RT"));
+
+        verify(oauthLoginService, times(1)).login(SocialProvider.KAKAO, "KAKAO_AT");
+    }
+
+    @Test
+    @DisplayName("POST /auth/oauth2/google_정상_GOOGLE 매핑")
+    void oauth2_google_정상() throws Exception {
+        when(oauthLoginService.login(eq(SocialProvider.GOOGLE), eq("G_AT")))
+                .thenReturn(new TokenPair("AT", "RT"));
+        when(cookieUtil.accessTokenCookie("AT"))
+                .thenReturn(ResponseCookie.from("at", "AT").path("/").build());
+        when(cookieUtil.refreshTokenCookie("RT"))
+                .thenReturn(ResponseCookie.from("rt", "RT").path("/api/v1/auth").build());
+
+        mvc.perform(post("/api/v1/auth/oauth2/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accessToken\":\"G_AT\"}"))
+                .andExpect(status().isOk());
+
+        verify(oauthLoginService, times(1)).login(SocialProvider.GOOGLE, "G_AT");
+    }
+
+    @Test
+    @DisplayName("POST /auth/oauth2/unknown_path 미지원 provider_AUTH_OAUTH_FAILED + service 호출 X")
+    void oauth2_unknown_provider() throws Exception {
+        mvc.perform(post("/api/v1/auth/oauth2/twitter")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accessToken\":\"T\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value(ErrorCode.AUTH_OAUTH_FAILED.name()));
+
+        verify(oauthLoginService, never()).login(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("POST /auth/oauth2/kakao_provider 검증 실패_AUTH_OAUTH_FAILED 전파")
+    void oauth2_provider_검증실패_전파() throws Exception {
+        when(oauthLoginService.login(eq(SocialProvider.KAKAO), eq("BAD")))
+                .thenThrow(new BusinessException(ErrorCode.AUTH_OAUTH_FAILED));
+
+        mvc.perform(post("/api/v1/auth/oauth2/kakao")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accessToken\":\"BAD\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value(ErrorCode.AUTH_OAUTH_FAILED.name()));
+    }
+
+    @Test
+    @DisplayName("POST /auth/oauth2/KAKAO (대문자)_path 대소문자 무시")
+    void oauth2_path_대소문자() throws Exception {
+        when(oauthLoginService.login(eq(SocialProvider.KAKAO), eq("T")))
+                .thenReturn(new TokenPair("AT", "RT"));
+        when(cookieUtil.accessTokenCookie("AT"))
+                .thenReturn(ResponseCookie.from("at", "AT").path("/").build());
+        when(cookieUtil.refreshTokenCookie("RT"))
+                .thenReturn(ResponseCookie.from("rt", "RT").path("/api/v1/auth").build());
+
+        mvc.perform(post("/api/v1/auth/oauth2/KAKAO")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accessToken\":\"T\"}"))
+                .andExpect(status().isOk());
+
+        verify(oauthLoginService, times(1)).login(SocialProvider.KAKAO, "T");
     }
 }
