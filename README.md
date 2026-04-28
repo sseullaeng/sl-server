@@ -59,3 +59,16 @@ export TOSS_SECRET_KEY=...
 - 브랜치: `main` (배포) ← `dev` (통합) ← `feature/*`
 - 커밋: `feat: ...`, `fix: ...`, `refactor: ...`, `chore: ...`, `docs: ...`, `test: ...`
 - DDL은 `src/main/resources/db/migration/V*.sql` (Flyway)에만 작성. 엔티티 변경 시 마이그레이션 추가.
+
+## Codex 리뷰 운영
+
+이 프로젝트는 Claude Code(작성) + Codex(리뷰) 듀얼 에이전트로 운영합니다.
+
+- **호출 타이밍 룰**: `.claude/CLAUDE.md` §9 "Codex 협업 규칙" — 게이트 1(🔴 즉시) / 2(🟡 PR 전) / 3(🟢 막혔을 때)
+- **실시간 모니터**: 별도 터미널 탭에서 실행
+    - Mac / Linux / WSL: `./scripts/codex-watch.sh`
+    - Windows: `powershell -File ./scripts/codex-watch.ps1`
+- **자세한 사용법**: [docs/CODEX_WATCH.md](docs/CODEX_WATCH.md)
+
+> 보안/결제/포인트 등 게이트 1 영역은 코드 작성 직후 30분 안에 Codex 리뷰 호출이 컨벤션상 의무.
+> 단순 CRUD/DTO/설정 추가는 리뷰 거부 영역 — 무분별 호출 금지.
