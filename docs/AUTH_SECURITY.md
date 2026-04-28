@@ -13,6 +13,7 @@
 
 ### Day 3 (OAuth + User 도메인)
 - 게이트 1 thread: `019dd299-d74b-7ec0-99b5-90d6922df8d4`
+- mini 게이트 2 thread: `019dd2af-c49e-7621-b486-2b541121fe0f`
 
 `.logs/codex-review.log` 참고. 보안 영역 작업 직후엔 비울 것.
 
@@ -30,6 +31,9 @@
 | **Day 3 게이트 1** Warning: Google `email_verified=null` 통과 | 🟡 | **적용** — `!Boolean.TRUE.equals` 로 null/false 모두 거부 | (Day 3 PR) |
 | **Day 3 게이트 1** Warning: 외부 호출 실패 원인 분리 X | 🟡 | **적용** — `ExternalApiException` 도입 (가이드 §3.10), provider 에서 wrap, service 가 `AUTH_OAUTH_FAILED` 변환 | (Day 3 PR) |
 | **Day 3 게이트 1** Suggestion: Email 정규화 부재 | 🟢 | **적용** — Email VO compact constructor 에서 trim + lowercase | (Day 3 PR) |
+| **Day 3 mini 게이트 2** Warning: race catch 광범위 | 🟡 | **적용** — UNIQUE race 만 보정, 그 외 제약 위반(닉네임 등) 은 원본 예외 그대로 throw | (Day 3 PR) |
+| **Day 3 mini 게이트 2** Warning: oauth2 엔드포인트 traceId 통합 검증 부재 | 🟡 | **적용** — `AuthOAuthFlowIT` (TraceIdFilter + X-Trace-Id 헤더 ↔ 본문 traceId 일관성, header relay 검증) | (Day 3 PR) |
+| **Day 3 mini 게이트 2** Suggestion: OAuthProvider javadoc | 🟢 | **적용** — 예외 계약(ExternalApiException + BusinessException) 명시 | (Day 3 PR) |
 
 ---
 

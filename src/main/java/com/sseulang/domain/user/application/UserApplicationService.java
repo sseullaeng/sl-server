@@ -10,6 +10,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+
 @Service
 @Transactional(readOnly = true)
 public class UserApplicationService {
@@ -51,10 +53,25 @@ public class UserApplicationService {
         try {
             return userRepository.save(newUser);
         } catch (DataIntegrityViolationException race) {
-            // 동시 호출 race — DB UNIQUE 제약(email 또는 social_provider+social_id)에 걸림.
-            // race winner 가 같은 (provider, providerId) 면 그것을 반환, 아니면 email 충돌.
-            return userRepository.findBySocial(provider, providerId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_EMAIL_DUPLICATED));
+            // 본 catch 는 UNIQUE 충돌 race 만 보정. 다른 제약(닉네임 길이 등) 은 그대로 던져
+            // 시스템 에러로 처리한다 — 사용자에게 잘못된 USER_EMAIL_DUPLICATED 응답 방지.
+            return resolveRaceOrRethrow(provider, providerId, email, race);
         }
+    }
+
+    private User resolveRaceOrRethrow(
+            SocialProvider provider, String providerId, Email email, DataIntegrityViolationException race
+    ) {
+        // race winner 가 같은 (provider, providerId) 면 그것을 반환
+        Optional<User> raceWinner = userRepository.findBySocial(provider, providerId);
+        if (raceWinner.isPresent()) {
+            return raceWinner.get();
+        }
+        // 다른 user 가 같은 email 로 가입한 경우만 USER_EMAIL_DUPLICATED 로 변환
+        if (userRepository.findByEmail(email).isPresent()) {
+            throw new BusinessException(ErrorCode.USER_EMAIL_DUPLICATED);
+        }
+        // UNIQUE 충돌이 아닌 다른 제약 위반 — 시스템 에러로 그대로 노출
+        throw race;
     }
 }

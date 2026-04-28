@@ -116,17 +116,39 @@ class UserApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("findOrCreateBySocial_save 시 DB UNIQUE 충돌_재조회 실패시 USER_EMAIL_DUPLICATED")
+    @DisplayName("findOrCreateBySocial_save 시 DB UNIQUE 충돌_재조회 후 email 다른 user 가 점유_USER_EMAIL_DUPLICATED")
     void findOrCreateBySocial_race_email충돌() {
-        when(userRepository.findBySocial(SocialProvider.KAKAO, "k-1")).thenReturn(Optional.empty());
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+        User other = User.createSocialUser(SocialProvider.KAKAO, "k-other", EMAIL, "n", null);
+        when(userRepository.findBySocial(SocialProvider.KAKAO, "k-1"))
+                .thenReturn(Optional.empty())   // 첫 호출 — 신규
+                .thenReturn(Optional.empty());  // race 후 재조회 — race winner 도 다른 사용자
+        // save 직전엔 비어있었지만 race winner 가 같은 email 로 먼저 가입함
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(Optional.empty())   // 첫 사전 체크
+                .thenReturn(Optional.of(other)); // race 후 재조회
         when(userRepository.save(any(User.class)))
                 .thenThrow(new DataIntegrityViolationException("UNIQUE 위반"));
 
-        // race winner 가 다른 (provider, providerId) 였거나 아예 다른 사용자 → 재조회 fail
         assertThatThrownBy(() ->
                 service.findOrCreateBySocial(SocialProvider.KAKAO, "k-1", EMAIL, "n", null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.USER_EMAIL_DUPLICATED);
+    }
+
+    @Test
+    @DisplayName("findOrCreateBySocial_UNIQUE 외 다른 제약 위반_원본 예외 그대로 throw")
+    void findOrCreateBySocial_다른제약위반_원본throw() {
+        when(userRepository.findBySocial(SocialProvider.KAKAO, "k-1")).thenReturn(Optional.empty());
+        // 사전 findByEmail 도 비어있음 + race 시점 재조회도 둘 다 비어있음 → 진짜 다른 제약 위반
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+
+        DataIntegrityViolationException nicknameTooLong =
+                new DataIntegrityViolationException("nickname too long");
+        when(userRepository.save(any(User.class))).thenThrow(nicknameTooLong);
+
+        // USER_EMAIL_DUPLICATED 로 오분류되지 않고 원본 예외 그대로 노출되어야 한다
+        assertThatThrownBy(() ->
+                service.findOrCreateBySocial(SocialProvider.KAKAO, "k-1", EMAIL, "n", null))
+                .isSameAs(nicknameTooLong);
     }
 }
