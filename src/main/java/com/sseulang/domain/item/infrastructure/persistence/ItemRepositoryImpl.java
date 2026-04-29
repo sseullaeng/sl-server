@@ -1,0 +1,52 @@
+package com.sseulang.domain.item.infrastructure.persistence;
+
+import com.sseulang.domain.item.application.dto.ItemSearchCriteria;
+import com.sseulang.domain.item.domain.Item;
+import com.sseulang.domain.item.domain.ItemRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public class ItemRepositoryImpl implements ItemRepository {
+
+    private final ItemJpaRepository jpa;
+    private final ItemQuerydslRepository querydsl;
+
+    public ItemRepositoryImpl(ItemJpaRepository jpa, ItemQuerydslRepository querydsl) {
+        this.jpa = jpa;
+        this.querydsl = querydsl;
+    }
+
+    @Override
+    public Optional<Item> findById(Long id) {
+        return jpa.findById(id);
+    }
+
+    @Override
+    public Page<Item> search(ItemSearchCriteria criteria, Pageable pageable) {
+        return querydsl.search(criteria, pageable);
+    }
+
+    @Override
+    public Item save(Item item) {
+        return jpa.save(item);
+    }
+
+    @Override
+    public void delete(Item item) {
+        jpa.delete(item);
+    }
+
+    @Override
+    public int incrementWishlistCount(Long itemId) {
+        return jpa.incrementWishlistCount(itemId);
+    }
+
+    @Override
+    public int decrementWishlistCount(Long itemId) {
+        return jpa.decrementWishlistCount(itemId);
+    }
+}
