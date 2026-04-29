@@ -32,4 +32,12 @@ interface UserJpaRepository extends JpaRepository<User, Long> {
         WHERE id = :userId
     """, nativeQuery = true)
     int recordReviewFor(@Param("userId") Long userId, @Param("rating") int rating);
+
+    /**
+     * 가이드 §4.8 — point_balance 단일 atomic UPDATE 증가. 충전·정산 적립 시 호출.
+     * 동시 충전 / 동시 적립 race 안전 (단일 SQL).
+     */
+    @Modifying
+    @Query("UPDATE User u SET u.pointBalance = u.pointBalance + :amount WHERE u.id = :userId")
+    int creditPointBalance(@Param("userId") Long userId, @Param("amount") long amount);
 }

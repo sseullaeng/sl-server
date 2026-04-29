@@ -49,6 +49,7 @@ public enum ErrorCode {
     PAYMENT_AMOUNT_MISMATCH(HttpStatus.BAD_REQUEST, "결제 금액이 일치하지 않습니다."),
     PAYMENT_DUPLICATED(HttpStatus.CONFLICT, "이미 처리된 결제입니다."),
     PAYMENT_VERIFY_FAILED(HttpStatus.BAD_REQUEST, "결제 검증에 실패했습니다."),
+    PAYMENT_ALREADY_PROCESSED(HttpStatus.CONFLICT, "이미 처리된 결제입니다 (PG 측 상태)."),
     INSUFFICIENT_POINT(HttpStatus.BAD_REQUEST, "포인트가 부족합니다."),
     WITHDRAWAL_NOT_FOUND(HttpStatus.NOT_FOUND, "출금 신청을 찾을 수 없습니다."),
     WITHDRAWAL_NOT_CANCELABLE(HttpStatus.BAD_REQUEST, "취소할 수 없는 상태입니다."),

@@ -56,6 +56,23 @@ public class UserApplicationService {
         userRepository.recordReviewFor(revieweeId, rating);
     }
 
+    /**
+     * 가이드 §4.8 — point_balance atomic 증가. 충전(Day 7) / 거래 정산 적립(Day 8) 호출.
+     * Payment 도메인은 본 메서드만 의존 (UserRepository 직접 호출 금지, CLAUDE.md §3.3).
+     * amount 는 양수 강제. UPDATE 영향 행 0 건 → USER_NOT_FOUND 로 트랜잭션 롤백
+     * (Codex 게이트 1 보강 — 결제 완료 상태로 전이됐는데 포인트 미적립 dangling 차단).
+     */
+    @Transactional
+    public void creditPoint(Long userId, long amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount 는 양수여야 합니다");
+        }
+        int affected = userRepository.creditPointBalance(userId, amount);
+        if (affected != 1) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+    }
+
     private User create(SocialProvider provider, String providerId, Email email, String nickname, String profileImage) {
         userRepository.findByEmail(email).ifPresent(existing -> {
             throw new BusinessException(ErrorCode.USER_EMAIL_DUPLICATED);

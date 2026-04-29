@@ -41,4 +41,9 @@ public class UserRepositoryImpl implements UserRepository {
     public int recordReviewFor(Long revieweeId, int rating) {
         return jpa.recordReviewFor(revieweeId, rating);
     }
+
+    @Override
+    public int creditPointBalance(Long userId, long amount) {
+        return jpa.creditPointBalance(userId, amount);
+    }
 }

@@ -76,6 +76,13 @@ public class User extends BaseEntity {
     private int ratingSum;
 
     /**
+     * 포인트 잔액(원). 가이드 §4.8 충전식 머니 — 충전/사용/적립/환불은 모두 atomic SQL UPDATE.
+     * 본 필드 setter 없음 — UserRepository.creditPointBalance 등 atomic 메서드만이 갱신.
+     */
+    @Column(name = "point_balance", nullable = false)
+    private long pointBalance;
+
+    /**
      * 소셜 가입 흐름의 정적 팩토리. (provider, providerId) 가 비어있을 수 없으며 LOCAL 은 거부.
      * 일반 회원가입 흐름은 별도 팩토리(예: {@code createLocalUser})로 분리.
      */
