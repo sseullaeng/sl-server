@@ -1,5 +1,6 @@
 package com.sseulang.global.config;
 
+import com.sseulang.global.security.CsrfCookieFilter;
 import com.sseulang.global.security.JwtAccessDeniedHandler;
 import com.sseulang.global.security.JwtAuthenticationEntryPoint;
 import com.sseulang.global.security.JwtAuthenticationFilter;
@@ -43,18 +44,39 @@ public class SecurityConfig {
             "/api/v1/auth/**"
     };
 
+    private static final String[] CSRF_IGNORED_ENDPOINTS = {
+            "/api/v1/auth/**",
+            // WebSocket handshake 는 SockJS 폴백 path 까지 포함해 CSRF 면제 — STOMP CONNECT 단계의
+            // 인증·인가는 ChannelInterceptor 가 별도 검증.
+            "/ws-stomp/**"
+    };
+
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final JwtAccessDeniedHandler accessDeniedHandler;
+    private final CsrfCookieFilter csrfCookieFilter;
 
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter,
             JwtAuthenticationEntryPoint authenticationEntryPoint,
-            JwtAccessDeniedHandler accessDeniedHandler
+            JwtAccessDeniedHandler accessDeniedHandler,
+            CsrfCookieFilter csrfCookieFilter
     ) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.accessDeniedHandler = accessDeniedHandler;
+        this.csrfCookieFilter = csrfCookieFilter;
+    }
+
+    /**
+     * CSRF token request handler — SPA / 쿠키 기반 클라이언트 호환 모드.
+     * {@code setCsrfRequestAttributeName(null)} 로 deferred load 비활성 → 매 요청에 토큰 즉시 박힘
+     * → GET 응답에서 토큰 invalidate 회귀 차단. (Spring Security 6.1+ 표준 SPA 패턴)
+     */
+    private static CsrfTokenRequestAttributeHandler eagerCsrfHandler() {
+        CsrfTokenRequestAttributeHandler handler = new CsrfTokenRequestAttributeHandler();
+        handler.setCsrfRequestAttributeName(null);
+        return handler;
     }
 
     @Bean
@@ -64,12 +86,13 @@ public class SecurityConfig {
                 .securityMatcher("/api/v1/admin/**")
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
+                        .csrfTokenRequestHandler(eagerCsrfHandler()))
                 .exceptionHandling(eh -> eh
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth.anyRequest().hasRole("ADMIN"))
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(csrfCookieFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
@@ -77,11 +100,11 @@ public class SecurityConfig {
     @Order(2)
     public SecurityFilterChain userFilterChain(HttpSecurity http) throws Exception {
         applyCommon(http)
-                .securityMatcher("/api/v1/**")
+                .securityMatcher("/api/v1/**", "/ws-stomp/**")
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-                        .ignoringRequestMatchers(AUTH_ENDPOINTS))
+                        .csrfTokenRequestHandler(eagerCsrfHandler())
+                        .ignoringRequestMatchers(CSRF_IGNORED_ENDPOINTS))
                 .exceptionHandling(eh -> eh
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
@@ -90,7 +113,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/items/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
                         .anyRequest().authenticated())
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(csrfCookieFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 

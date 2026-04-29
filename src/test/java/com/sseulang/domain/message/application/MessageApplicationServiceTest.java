@@ -11,8 +11,11 @@ import com.sseulang.domain.item.domain.Item;
 import com.sseulang.domain.item.domain.TradeType;
 import com.sseulang.domain.message.application.dto.MessageResult;
 import com.sseulang.domain.message.application.dto.MessageSendCommand;
+import com.sseulang.domain.notification.application.InMemoryFakeNotificationRepository;
+import com.sseulang.domain.notification.application.NotificationApplicationService;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
+import com.sseulang.global.websocket.FakeRealtimePublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,6 +33,8 @@ class MessageApplicationServiceTest {
 
     private InMemoryFakeMessageRepository msgRepo;
     private InMemoryFakeChatRoomRepository roomRepo;
+    private InMemoryFakeNotificationRepository notifRepo;
+    private FakeRealtimePublisher publisher;
     private MessageApplicationService service;
     private Long roomId;
 
@@ -37,18 +42,21 @@ class MessageApplicationServiceTest {
     void setUp() {
         msgRepo = new InMemoryFakeMessageRepository();
         roomRepo = new InMemoryFakeChatRoomRepository();
+        notifRepo = new InMemoryFakeNotificationRepository();
+        publisher = new FakeRealtimePublisher();
         InMemoryFakeItemRepository itemRepo = new InMemoryFakeItemRepository();
         CategoryApplicationService catSvc = new CategoryApplicationService(new InMemoryFakeCategoryRepository());
         ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc);
         ChatRoomApplicationService roomSvc = new ChatRoomApplicationService(roomRepo, itemSvc);
-        service = new MessageApplicationService(msgRepo, roomSvc);
+        NotificationApplicationService notifSvc = new NotificationApplicationService(notifRepo);
+        service = new MessageApplicationService(msgRepo, roomSvc, notifSvc, publisher);
 
         Item item = itemRepo.save(Item.create(SELLER, null, "물건", "d", 1L, null, null, TradeType.판매, null));
         roomId = roomSvc.openFor(BUYER, item.getId()).id();
     }
 
     @Test
-    @DisplayName("send 텍스트_정상_ChatRoom 메타 갱신")
+    @DisplayName("send 텍스트_정상_ChatRoom 메타 + Notification + broadcast")
     void send_text_정상() {
         MessageResult r = service.send(new MessageSendCommand(roomId, BUYER, "안녕", null));
 
@@ -57,10 +65,16 @@ class MessageApplicationServiceTest {
 
         ChatRoom room = roomRepo.findById(roomId).orElseThrow();
         assertThat(room.getLastMessage()).isEqualTo("안녕");
-        assertThat(room.getLastMessageAt()).isNotNull();
-        // BUYER 가 user2 (BUYER=200 > SELLER=100), SELLER unread+1
-        assertThat(room.getUser1Unread()).isEqualTo(1);  // SELLER 의 unread
-        assertThat(room.getUser2Unread()).isZero();      // BUYER 본인은 0
+        assertThat(room.getUser1Unread()).isEqualTo(1);  // SELLER unread
+        assertThat(room.getUser2Unread()).isZero();      // BUYER 본인
+
+        // 상대방(SELLER) 에게만 Notification 생성 + push
+        assertThat(publisher.notificationPublications).hasSize(1);
+        assertThat(publisher.notificationPublications.get(0).userId()).isEqualTo(SELLER);
+
+        // 채팅방 토픽 broadcast
+        assertThat(publisher.chatRoomPublications).hasSize(1);
+        assertThat(publisher.chatRoomPublications.get(0).roomId()).isEqualTo(roomId);
     }
 
     @Test
@@ -73,15 +87,20 @@ class MessageApplicationServiceTest {
 
         ChatRoom room = roomRepo.findById(roomId).orElseThrow();
         assertThat(room.getLastMessage()).isEqualTo("[사진 2장]");
+
+        assertThat(publisher.notificationPublications).hasSize(1);
     }
 
     @Test
-    @DisplayName("send 외부인_CHAT_FORBIDDEN")
+    @DisplayName("send 외부인_CHAT_FORBIDDEN_broadcast 없음")
     void send_외부인_거부() {
         assertThatThrownBy(() -> service.send(new MessageSendCommand(roomId, OUTSIDER, "x", null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.CHAT_FORBIDDEN);
+
+        assertThat(publisher.chatRoomPublications).isEmpty();
+        assertThat(publisher.notificationPublications).isEmpty();
     }
 
     @Test
@@ -119,12 +138,15 @@ class MessageApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("seller 가 보낸 메시지_buyer unread+1")
+    @DisplayName("seller 가 보낸 메시지_buyer 에게 Notification + buyer unread+1")
     void send_seller_buyer_unread() {
         service.send(new MessageSendCommand(roomId, SELLER, "응", null));
 
         ChatRoom room = roomRepo.findById(roomId).orElseThrow();
         assertThat(room.getUser1Unread()).isZero();      // SELLER 본인
         assertThat(room.getUser2Unread()).isEqualTo(1);  // BUYER unread
+
+        assertThat(publisher.notificationPublications).hasSize(1);
+        assertThat(publisher.notificationPublications.get(0).userId()).isEqualTo(BUYER);
     }
 }
