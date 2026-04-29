@@ -17,11 +17,12 @@ public record ItemUpdateRequest(
         @PositiveOrZero Long deposit,
         RentalUnit rentalUnit,
         @Size(max = 100) String region,
-        List<String> imageUrls
+        List<String> imageUrls,
+        List<String> hashtags
 ) {
     public ItemUpdateCommand toCommand() {
         return new ItemUpdateCommand(
-                categoryId, title, description, price, deposit, rentalUnit, region, imageUrls
+                categoryId, title, description, price, deposit, rentalUnit, region, imageUrls, hashtags
         );
     }
 }

@@ -1,6 +1,7 @@
 package com.sseulang.domain.item.application.dto;
 
 import com.sseulang.domain.item.domain.Item;
+import com.sseulang.domain.item.domain.ItemHashtag;
 import com.sseulang.domain.item.domain.ItemStatus;
 import com.sseulang.domain.item.domain.RentalUnit;
 import com.sseulang.domain.item.domain.TradeType;
@@ -23,6 +24,7 @@ public record ItemDetailResult(
         int viewCount,
         int wishlistCount,
         List<ItemImageResult> images,
+        List<String> hashtags,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
@@ -42,6 +44,7 @@ public record ItemDetailResult(
                 item.getViewCount(),
                 item.getWishlistCount(),
                 item.getImages().stream().map(ItemImageResult::from).toList(),
+                item.getHashtags().stream().map(ItemHashtag::getTag).toList(),
                 item.getCreatedAt(),
                 item.getUpdatedAt()
         );

@@ -187,6 +187,58 @@ class ItemTest {
         assertThat(item.isOwnedBy(null)).isFalse();
     }
 
+    @Test
+    @DisplayName("addHashtag 정상_3개")
+    void addHashtag_정상() {
+        Item item = saleItem();
+        item.addHashtag("아이폰");
+        item.addHashtag("미개봉");
+        item.addHashtag("정품");
+        assertThat(item.getHashtags()).extracting("tag")
+                .containsExactly("아이폰", "미개봉", "정품");
+    }
+
+    @Test
+    @DisplayName("addHashtag 중복_무시")
+    void addHashtag_중복_무시() {
+        Item item = saleItem();
+        item.addHashtag("아이폰");
+        item.addHashtag("아이폰");
+        item.addHashtag("  아이폰  ");  // 공백 정규화 후 동일
+        assertThat(item.getHashtags()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("addHashtag 빈 태그_거부")
+    void addHashtag_빈_거부() {
+        Item item = saleItem();
+        assertThatThrownBy(() -> item.addHashtag(""))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> item.addHashtag(null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> item.addHashtag("   "))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("addHashtag 50자 초과_거부")
+    void addHashtag_길이초과_거부() {
+        Item item = saleItem();
+        String tooLong = "가".repeat(51);
+        assertThatThrownBy(() -> item.addHashtag(tooLong))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("clearHashtags")
+    void clearHashtags() {
+        Item item = saleItem();
+        item.addHashtag("a");
+        item.addHashtag("b");
+        item.clearHashtags();
+        assertThat(item.getHashtags()).isEmpty();
+    }
+
     private static Item saleItem() {
         return Item.create(SELLER, CATEGORY, "t", "d", 10_000L, null, null, TradeType.판매, "서울");
     }

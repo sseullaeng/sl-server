@@ -41,6 +41,7 @@ public class ItemApplicationService {
                 cmd.region()
         );
         applyImages(item, cmd.imageUrls());
+        applyHashtags(item, cmd.hashtags());
         return itemRepository.save(item).getId();
     }
 
@@ -71,6 +72,10 @@ public class ItemApplicationService {
         if (cmd.imageUrls() != null) {
             item.clearImages();
             applyImages(item, cmd.imageUrls());
+        }
+        if (cmd.hashtags() != null) {
+            item.clearHashtags();
+            applyHashtags(item, cmd.hashtags());
         }
     }
 
@@ -110,6 +115,15 @@ public class ItemApplicationService {
         for (String url : imageUrls) {
             order++;
             item.addImage(url, order, order == 1);
+        }
+    }
+
+    private static void applyHashtags(Item item, List<String> hashtags) {
+        if (hashtags == null || hashtags.isEmpty()) {
+            return;
+        }
+        for (String tag : hashtags) {
+            item.addHashtag(tag);
         }
     }
 }

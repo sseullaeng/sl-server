@@ -19,12 +19,13 @@ public record ItemRegisterRequest(
         RentalUnit rentalUnit,
         @NotNull TradeType tradeType,
         @Size(max = 100) String region,
-        List<String> imageUrls
+        List<String> imageUrls,
+        List<String> hashtags
 ) {
     public ItemRegisterCommand toCommand(Long sellerId) {
         return new ItemRegisterCommand(
                 sellerId, categoryId, title, description,
-                price, deposit, rentalUnit, tradeType, region, imageUrls
+                price, deposit, rentalUnit, tradeType, region, imageUrls, hashtags
         );
     }
 }

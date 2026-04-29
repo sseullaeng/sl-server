@@ -20,7 +20,9 @@ import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Item Aggregate Root. V1 스키마 {@code items} 매핑.
@@ -89,6 +91,9 @@ public class Item extends BaseEntity {
     @OrderBy("sortOrder ASC")
     private final List<ItemImage> images = new ArrayList<>();
 
+    @OneToMany(mappedBy = "item", cascade = CascadeType.ALL, orphanRemoval = true)
+    private final List<ItemHashtag> hashtags = new ArrayList<>();
+
     public static Item create(
             Long sellerId,
             Long categoryId,
@@ -144,6 +149,31 @@ public class Item extends BaseEntity {
     /** 외부에 노출되는 이미지 컬렉션은 immutable. 변경은 {@link #addImage} / {@link #clearImages}. */
     public List<ItemImage> getImages() {
         return Collections.unmodifiableList(images);
+    }
+
+    /**
+     * 해시태그 추가. 동일 태그(대소문자/공백 정규화 후)는 중복으로 간주해 무시 — DB UNIQUE(item_id, tag)
+     * 와 정합. 태그 자체 검증(blank, 길이)은 {@link ItemHashtag} 생성자에서 IAE.
+     */
+    public void addHashtag(String tag) {
+        ItemHashtag candidate = new ItemHashtag(this, tag);
+        Set<String> existing = new HashSet<>();
+        for (ItemHashtag h : hashtags) {
+            existing.add(h.getTag());
+        }
+        if (existing.contains(candidate.getTag())) {
+            return;
+        }
+        hashtags.add(candidate);
+    }
+
+    public void clearHashtags() {
+        hashtags.clear();
+    }
+
+    /** 외부에 노출되는 해시태그 컬렉션은 immutable. */
+    public List<ItemHashtag> getHashtags() {
+        return Collections.unmodifiableList(hashtags);
     }
 
     public void updateInfo(

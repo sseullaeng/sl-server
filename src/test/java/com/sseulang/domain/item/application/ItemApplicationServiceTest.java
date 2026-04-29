@@ -38,11 +38,13 @@ class ItemApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("register 정상_id 발급되고 이미지 add")
+    @DisplayName("register 정상_id 발급되고 이미지+해시태그 add")
     void register_정상() {
         Long id = service.register(new ItemRegisterCommand(
                 SELLER, categoryId, "title", "desc", 10_000L, null, null, TradeType.판매,
-                "서울", List.of("https://img/1", "https://img/2")
+                "서울",
+                List.of("https://img/1", "https://img/2"),
+                List.of("아이폰", "미개봉")
         ));
 
         ItemDetailResult result = service.getById(id);
@@ -50,13 +52,14 @@ class ItemApplicationServiceTest {
         assertThat(result.sellerId()).isEqualTo(SELLER);
         assertThat(result.images()).hasSize(2);
         assertThat(result.images().get(0).thumbnail()).isTrue();
+        assertThat(result.hashtags()).containsExactly("아이폰", "미개봉");
     }
 
     @Test
     @DisplayName("register 없는 카테고리_CATEGORY_NOT_FOUND")
     void register_없는_카테고리_거부() {
         assertThatThrownBy(() -> service.register(new ItemRegisterCommand(
-                SELLER, 9999L, "t", "d", 1L, null, null, TradeType.판매, null, null
+                SELLER, 9999L, "t", "d", 1L, null, null, TradeType.판매, null, null, null
         )))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
@@ -67,7 +70,7 @@ class ItemApplicationServiceTest {
     @DisplayName("register null 카테고리_허용")
     void register_null_카테고리_허용() {
         Long id = service.register(new ItemRegisterCommand(
-                SELLER, null, "t", "d", 1L, null, null, TradeType.판매, null, null
+                SELLER, null, "t", "d", 1L, null, null, TradeType.판매, null, null, null
         ));
         assertThat(service.getById(id).categoryId()).isNull();
     }
@@ -98,7 +101,7 @@ class ItemApplicationServiceTest {
         Long id = registerSimple();
 
         service.update(id, SELLER, new ItemUpdateCommand(
-                null, "new title", "new desc", 50_000L, null, null, "부산", null
+                null, "new title", "new desc", 50_000L, null, null, "부산", null, null
         ));
 
         ItemDetailResult r = service.getById(id);
@@ -113,7 +116,7 @@ class ItemApplicationServiceTest {
         Long id = registerSimple();
 
         assertThatThrownBy(() -> service.update(id, OTHER, new ItemUpdateCommand(
-                null, "x", "y", 1L, null, null, null, null
+                null, "x", "y", 1L, null, null, null, null, null
         )))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
@@ -125,16 +128,48 @@ class ItemApplicationServiceTest {
     void update_이미지_전체교체() {
         Long id = service.register(new ItemRegisterCommand(
                 SELLER, categoryId, "t", "d", 1L, null, null, TradeType.판매, null,
-                List.of("https://old/1", "https://old/2")
+                List.of("https://old/1", "https://old/2"), null
         ));
 
         service.update(id, SELLER, new ItemUpdateCommand(
-                null, "t", "d", 1L, null, null, null, List.of("https://new/1")
+                null, "t", "d", 1L, null, null, null, List.of("https://new/1"), null
         ));
 
         ItemDetailResult r = service.getById(id);
         assertThat(r.images()).hasSize(1);
         assertThat(r.images().get(0).imageUrl()).isEqualTo("https://new/1");
+    }
+
+    @Test
+    @DisplayName("update hashtags non-null_전체 교체")
+    void update_해시태그_전체교체() {
+        Long id = service.register(new ItemRegisterCommand(
+                SELLER, categoryId, "t", "d", 1L, null, null, TradeType.판매, null,
+                null, List.of("old1", "old2")
+        ));
+
+        service.update(id, SELLER, new ItemUpdateCommand(
+                null, "t", "d", 1L, null, null, null, null, List.of("new1")
+        ));
+
+        ItemDetailResult r = service.getById(id);
+        assertThat(r.hashtags()).containsExactly("new1");
+    }
+
+    @Test
+    @DisplayName("update hashtags null_변경 없음")
+    void update_해시태그_null_유지() {
+        Long id = service.register(new ItemRegisterCommand(
+                SELLER, categoryId, "t", "d", 1L, null, null, TradeType.판매, null,
+                null, List.of("keep1", "keep2")
+        ));
+
+        service.update(id, SELLER, new ItemUpdateCommand(
+                null, "t", "d", 1L, null, null, null, null, null
+        ));
+
+        ItemDetailResult r = service.getById(id);
+        assertThat(r.hashtags()).containsExactly("keep1", "keep2");
     }
 
     @Test
@@ -144,7 +179,6 @@ class ItemApplicationServiceTest {
 
         service.delete(id, SELLER);
 
-        // 직접 repo 통해 status 검증 (삭제 후에도 row 는 남고 status 만 변경 — soft delete)
         assertThat(itemRepo.findById(id)).isPresent();
         assertThat(itemRepo.findById(id).get().getStatus()).isEqualTo(ItemStatus.삭제);
     }
@@ -164,11 +198,12 @@ class ItemApplicationServiceTest {
     @DisplayName("update 대여_정상_deposit/rentalUnit 박힘")
     void update_대여() {
         Long id = service.register(new ItemRegisterCommand(
-                SELLER, categoryId, "t", "d", 1L, 10_000L, RentalUnit.일, TradeType.대여, null, null
+                SELLER, categoryId, "t", "d", 1L, 10_000L, RentalUnit.일, TradeType.대여, null,
+                null, null
         ));
 
         service.update(id, SELLER, new ItemUpdateCommand(
-                null, "t", "d", 1L, 20_000L, RentalUnit.주, null, null
+                null, "t", "d", 1L, 20_000L, RentalUnit.주, null, null, null
         ));
 
         ItemDetailResult r = service.getById(id);
@@ -178,7 +213,7 @@ class ItemApplicationServiceTest {
 
     private Long registerSimple() {
         return service.register(new ItemRegisterCommand(
-                SELLER, categoryId, "t", "d", 1_000L, null, null, TradeType.판매, null, null
+                SELLER, categoryId, "t", "d", 1_000L, null, null, TradeType.판매, null, null, null
         ));
     }
 }

@@ -15,5 +15,6 @@ public record ItemRegisterCommand(
         RentalUnit rentalUnit,
         TradeType tradeType,
         String region,
-        List<String> imageUrls
+        List<String> imageUrls,
+        List<String> hashtags
 ) { }

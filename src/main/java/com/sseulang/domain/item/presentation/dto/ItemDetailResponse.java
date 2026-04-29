@@ -23,6 +23,7 @@ public record ItemDetailResponse(
         int viewCount,
         int wishlistCount,
         List<ItemImageResponse> images,
+        List<String> hashtags,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
@@ -34,6 +35,7 @@ public record ItemDetailResponse(
                 r.status(), r.region(),
                 r.viewCount(), r.wishlistCount(),
                 r.images().stream().map(ItemImageResponse::from).toList(),
+                r.hashtags(),
                 r.createdAt(), r.updatedAt()
         );
     }
