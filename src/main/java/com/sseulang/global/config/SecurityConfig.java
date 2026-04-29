@@ -43,6 +43,13 @@ public class SecurityConfig {
             "/api/v1/auth/**"
     };
 
+    private static final String[] CSRF_IGNORED_ENDPOINTS = {
+            "/api/v1/auth/**",
+            // WebSocket handshake 는 SockJS 폴백 path 까지 포함해 CSRF 면제 — STOMP CONNECT 단계의
+            // 인증·인가는 ChannelInterceptor 가 별도 검증.
+            "/ws-stomp/**"
+    };
+
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final JwtAccessDeniedHandler accessDeniedHandler;
@@ -77,11 +84,11 @@ public class SecurityConfig {
     @Order(2)
     public SecurityFilterChain userFilterChain(HttpSecurity http) throws Exception {
         applyCommon(http)
-                .securityMatcher("/api/v1/**")
+                .securityMatcher("/api/v1/**", "/ws-stomp/**")
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-                        .ignoringRequestMatchers(AUTH_ENDPOINTS))
+                        .ignoringRequestMatchers(CSRF_IGNORED_ENDPOINTS))
                 .exceptionHandling(eh -> eh
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
