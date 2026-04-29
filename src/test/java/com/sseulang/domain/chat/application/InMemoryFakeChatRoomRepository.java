@@ -55,4 +55,18 @@ public class InMemoryFakeChatRoomRepository implements ChatRoomRepository {
         store.put(chatRoom.getId(), chatRoom);
         return chatRoom;
     }
+
+    @Override
+    public int recordIncomingMessage(Long chatRoomId, Long senderId, String preview) {
+        ChatRoom room = store.get(chatRoomId);
+        if (room == null) return 0;
+        ReflectionTestUtils.setField(room, "lastMessage", preview);
+        ReflectionTestUtils.setField(room, "lastMessageAt", java.time.LocalDateTime.now());
+        if (senderId.equals(room.getUser1Id())) {
+            ReflectionTestUtils.setField(room, "user2Unread", room.getUser2Unread() + 1);
+        } else if (senderId.equals(room.getUser2Id())) {
+            ReflectionTestUtils.setField(room, "user1Unread", room.getUser1Unread() + 1);
+        }
+        return 1;
+    }
 }

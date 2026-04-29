@@ -18,4 +18,10 @@ public interface ChatRoomRepository {
     Page<ChatRoom> findMine(Long userId, Pageable pageable);
 
     ChatRoom save(ChatRoom chatRoom);
+
+    /**
+     * 메시지 발신 시 last_message + last_message_at + 상대방 unread 를 단일 atomic UPDATE 로 갱신.
+     * 가이드 §4.10 — 동시 메시지 발신 race 안전 (마지막 SQL 이 win).
+     */
+    int recordIncomingMessage(Long chatRoomId, Long senderId, String preview);
 }

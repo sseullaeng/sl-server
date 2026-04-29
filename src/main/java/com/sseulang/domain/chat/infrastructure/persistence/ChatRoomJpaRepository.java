@@ -4,9 +4,11 @@ import com.sseulang.domain.chat.domain.ChatRoom;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 interface ChatRoomJpaRepository extends JpaRepository<ChatRoom, Long> {
@@ -32,4 +34,24 @@ interface ChatRoomJpaRepository extends JpaRepository<ChatRoom, Long> {
           c.id DESC
     """)
     Page<ChatRoom> findMine(@Param("userId") Long userId, Pageable pageable);
+
+    /**
+     * 단일 atomic UPDATE — last_message / last_message_at / 상대방 unread 갱신.
+     * 발신자 본인 unread 는 0 으로 (자기가 보낸 메시지는 안 읽음 카운트 X).
+     */
+    @Modifying
+    @Query("""
+        UPDATE ChatRoom c
+        SET c.lastMessage = :preview,
+            c.lastMessageAt = :sentAt,
+            c.user1Unread = CASE WHEN c.user1Id = :senderId THEN c.user1Unread ELSE c.user1Unread + 1 END,
+            c.user2Unread = CASE WHEN c.user2Id = :senderId THEN c.user2Unread ELSE c.user2Unread + 1 END
+        WHERE c.id = :roomId
+    """)
+    int recordIncomingMessage(
+            @Param("roomId") Long roomId,
+            @Param("senderId") Long senderId,
+            @Param("preview") String preview,
+            @Param("sentAt") LocalDateTime sentAt
+    );
 }
