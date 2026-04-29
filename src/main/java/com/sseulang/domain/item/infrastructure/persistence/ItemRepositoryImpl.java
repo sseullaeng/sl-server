@@ -1,5 +1,6 @@
 package com.sseulang.domain.item.infrastructure.persistence;
 
+import com.sseulang.domain.item.application.dto.ItemSearchCriteria;
 import com.sseulang.domain.item.domain.Item;
 import com.sseulang.domain.item.domain.ItemRepository;
 import org.springframework.data.domain.Page;
@@ -12,9 +13,11 @@ import java.util.Optional;
 public class ItemRepositoryImpl implements ItemRepository {
 
     private final ItemJpaRepository jpa;
+    private final ItemQuerydslRepository querydsl;
 
-    public ItemRepositoryImpl(ItemJpaRepository jpa) {
+    public ItemRepositoryImpl(ItemJpaRepository jpa, ItemQuerydslRepository querydsl) {
         this.jpa = jpa;
+        this.querydsl = querydsl;
     }
 
     @Override
@@ -23,8 +26,8 @@ public class ItemRepositoryImpl implements ItemRepository {
     }
 
     @Override
-    public Page<Item> findVisibleLatest(Pageable pageable) {
-        return jpa.findVisibleLatest(pageable);
+    public Page<Item> search(ItemSearchCriteria criteria, Pageable pageable) {
+        return querydsl.search(criteria, pageable);
     }
 
     @Override

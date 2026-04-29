@@ -1,6 +1,8 @@
 package com.sseulang.domain.item.application;
 
+import com.sseulang.domain.item.application.dto.ItemSearchCriteria;
 import com.sseulang.domain.item.domain.Item;
+import com.sseulang.domain.item.domain.ItemHashtag;
 import com.sseulang.domain.item.domain.ItemRepository;
 import com.sseulang.domain.item.domain.ItemStatus;
 import org.springframework.data.domain.Page;
@@ -13,8 +15,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 
-/** 테스트용 인메모리 fake. id 자동 부여 + status != 삭제 인 것만 반환. */
+/**
+ * 테스트용 인메모리 fake. id 자동 부여 + status != 삭제 인 것만 검색에 노출.
+ *
+ * <p>{@code search} 는 prod {@link com.sseulang.domain.item.infrastructure.persistence.ItemQuerydslRepository}
+ * 와 동일한 의미로 동작해야 하므로 같은 필터 의미를 흉내 낸다.</p>
+ */
 public class InMemoryFakeItemRepository implements ItemRepository {
 
     private final Map<Long, Item> store = new HashMap<>();
@@ -26,14 +34,41 @@ public class InMemoryFakeItemRepository implements ItemRepository {
     }
 
     @Override
-    public Page<Item> findVisibleLatest(Pageable pageable) {
-        List<Item> visible = store.values().stream()
-                .filter(i -> i.getStatus() != ItemStatus.삭제)
+    public Page<Item> search(ItemSearchCriteria criteria, Pageable pageable) {
+        Stream<Item> stream = store.values().stream()
+                .filter(i -> i.getStatus() != ItemStatus.삭제);
+
+        if (criteria.q() != null && !criteria.q().isBlank()) {
+            String q = criteria.q().strip().toLowerCase();
+            stream = stream.filter(i ->
+                    i.getTitle().toLowerCase().contains(q)
+                            || i.getDescription().toLowerCase().contains(q));
+        }
+        if (criteria.categoryId() != null) {
+            stream = stream.filter(i -> criteria.categoryId().equals(i.getCategoryId()));
+        }
+        if (criteria.tradeType() != null) {
+            stream = stream.filter(i -> criteria.tradeType() == i.getTradeType());
+        }
+        if (criteria.minPrice() != null) {
+            stream = stream.filter(i -> i.getPrice() >= criteria.minPrice());
+        }
+        if (criteria.maxPrice() != null) {
+            stream = stream.filter(i -> i.getPrice() <= criteria.maxPrice());
+        }
+        if (criteria.tag() != null && !criteria.tag().isBlank()) {
+            String tag = criteria.tag().strip();
+            stream = stream.filter(i -> i.getHashtags().stream()
+                    .map(ItemHashtag::getTag).anyMatch(t -> t.equals(tag)));
+        }
+
+        List<Item> filtered = stream
                 .sorted(Comparator.comparingLong(Item::getId).reversed())
                 .toList();
-        int start = Math.min((int) pageable.getOffset(), visible.size());
-        int end = Math.min(start + pageable.getPageSize(), visible.size());
-        return new PageImpl<>(visible.subList(start, end), pageable, visible.size());
+
+        int start = Math.min((int) pageable.getOffset(), filtered.size());
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        return new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
     }
 
     @Override

@@ -1,6 +1,8 @@
 package com.sseulang.domain.item.presentation;
 
 import com.sseulang.domain.item.application.ItemApplicationService;
+import com.sseulang.domain.item.application.dto.ItemSearchCriteria;
+import com.sseulang.domain.item.domain.TradeType;
 import com.sseulang.domain.item.presentation.dto.ItemDetailResponse;
 import com.sseulang.domain.item.presentation.dto.ItemIdResponse;
 import com.sseulang.domain.item.presentation.dto.ItemRegisterRequest;
@@ -49,14 +51,21 @@ public class ItemController {
 
     @GetMapping
     public ApiResponse<PageResponse<ItemSummaryResponse>> list(
+            @RequestParam(name = "q", required = false) String q,
+            @RequestParam(name = "categoryId", required = false) Long categoryId,
+            @RequestParam(name = "tradeType", required = false) TradeType tradeType,
+            @RequestParam(name = "minPrice", required = false) Long minPrice,
+            @RequestParam(name = "maxPrice", required = false) Long maxPrice,
+            @RequestParam(name = "tag", required = false) String tag,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
         int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
         int safePage = Math.max(page, 0);
         Pageable pageable = PageRequest.of(safePage, safeSize);
+        ItemSearchCriteria criteria = new ItemSearchCriteria(q, categoryId, tradeType, minPrice, maxPrice, tag);
 
-        Page<ItemSummaryResponse> result = itemService.listLatest(pageable)
+        Page<ItemSummaryResponse> result = itemService.search(criteria, pageable)
                 .map(ItemSummaryResponse::from);
         return ApiResponse.ok(PageResponse.from(result));
     }

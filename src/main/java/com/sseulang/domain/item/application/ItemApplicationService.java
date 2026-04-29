@@ -3,6 +3,7 @@ package com.sseulang.domain.item.application;
 import com.sseulang.domain.category.domain.CategoryRepository;
 import com.sseulang.domain.item.application.dto.ItemDetailResult;
 import com.sseulang.domain.item.application.dto.ItemRegisterCommand;
+import com.sseulang.domain.item.application.dto.ItemSearchCriteria;
 import com.sseulang.domain.item.application.dto.ItemSummaryResult;
 import com.sseulang.domain.item.application.dto.ItemUpdateCommand;
 import com.sseulang.domain.item.domain.Item;
@@ -52,8 +53,8 @@ public class ItemApplicationService {
         return ItemDetailResult.from(item);
     }
 
-    public Page<ItemSummaryResult> listLatest(Pageable pageable) {
-        return itemRepository.findVisibleLatest(pageable).map(ItemSummaryResult::from);
+    public Page<ItemSummaryResult> search(ItemSearchCriteria criteria, Pageable pageable) {
+        return itemRepository.search(criteria, pageable).map(ItemSummaryResult::from);
     }
 
     @Transactional
