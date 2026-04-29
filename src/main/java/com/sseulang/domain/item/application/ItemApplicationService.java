@@ -102,6 +102,11 @@ public class ItemApplicationService {
 
     /**
      * {@code wishlist_count} 원자 증가. Wishlist 도메인이 찜 추가 성공 직후 호출.
+     *
+     * <p><b>Stale 주의(bulk update)</b>: JPA bulk update 라 persistence context 가 자동 동기화되지
+     * 않는다. 같은 트랜잭션 안에서 후속으로 동일 {@code Item} 을 다시 읽을 경우 stale 값을 받을 수
+     * 있으므로 그때는 {@code EntityManager.refresh} 또는 {@code flush+clear} 필요. 현재 wishlist
+     * add/remove 흐름은 호출 직후 read 가 없어 안전.</p>
      */
     @Transactional
     public void incrementWishlistCount(Long itemId) {
@@ -110,6 +115,7 @@ public class ItemApplicationService {
 
     /**
      * {@code wishlist_count} 원자 감소. 음수 방지는 Repository 쪽 SQL 가드.
+     * Stale 주의는 {@link #incrementWishlistCount} 와 동일.
      */
     @Transactional
     public void decrementWishlistCount(Long itemId) {

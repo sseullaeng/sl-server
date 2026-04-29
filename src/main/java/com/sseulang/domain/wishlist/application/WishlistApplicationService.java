@@ -62,9 +62,25 @@ public class WishlistApplicationService {
         }
     }
 
+    /**
+     * cause chain 을 끝까지 따라가며 {@code uk_wishlists_user_item} 제약 위반인지 판별.
+     * 단순 {@code violation.getCause()} 만 보면 드물게 wrapper 가 한 겹 더 끼는 경우(예:
+     * {@code DataIntegrityViolationException → JpaSystemException → ConstraintViolationException})
+     * race 가 500 으로 잘못 떨어질 수 있어 traversal 로 보강 (Codex 게이트 2 검증 권고).
+     */
     private static boolean isUniqueUserItemConflict(DataIntegrityViolationException violation) {
-        Throwable cause = violation.getCause();
-        return cause instanceof ConstraintViolationException cve
-                && UNIQUE_USER_ITEM.equalsIgnoreCase(cve.getConstraintName());
+        Throwable cause = violation;
+        while (cause != null) {
+            if (cause instanceof ConstraintViolationException cve
+                    && UNIQUE_USER_ITEM.equalsIgnoreCase(cve.getConstraintName())) {
+                return true;
+            }
+            Throwable next = cause.getCause();
+            if (next == cause) {
+                return false; // 자기참조 방어
+            }
+            cause = next;
+        }
+        return false;
     }
 }
