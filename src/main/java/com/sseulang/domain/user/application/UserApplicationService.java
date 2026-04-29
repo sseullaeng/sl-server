@@ -45,6 +45,17 @@ public class UserApplicationService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     }
 
+    /**
+     * 가이드 §4.7 — Review 작성 시점에 호출. review_count / rating_sum 누적 + trust_score 재계산.
+     * 단일 native UPDATE 라 동시 review 작성 race 안전 (Codex 게이트 2 보강 — 기존 AVG 서브쿼리
+     * 방식의 REPEATABLE_READ stale view 문제 차단). Review 도메인은 본 메서드만 의존
+     * (UserRepository 직접 호출 금지, CLAUDE.md §3.3).
+     */
+    @Transactional
+    public void recordReview(Long revieweeId, int rating) {
+        userRepository.recordReviewFor(revieweeId, rating);
+    }
+
     private User create(SocialProvider provider, String providerId, Email email, String nickname, String profileImage) {
         userRepository.findByEmail(email).ifPresent(existing -> {
             throw new BusinessException(ErrorCode.USER_EMAIL_DUPLICATED);

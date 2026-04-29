@@ -101,6 +101,21 @@ public class ItemApplicationService {
     }
 
     /**
+     * Chat / 거래 시작 등 다른 도메인이 Item 의 seller 를 알아야 할 때.
+     * 삭제: ITEM_NOT_FOUND, 비공개: ITEM_INVALID_STATE. 판매중/예약/거래완료 는 채팅 가능.
+     */
+    public Long findSellerOfActiveItem(Long id) {
+        Item item = findOrThrow(id);
+        if (item.getStatus() == ItemStatus.삭제) {
+            throw new BusinessException(ErrorCode.ITEM_NOT_FOUND);
+        }
+        if (item.getStatus() == ItemStatus.비공개) {
+            throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
+        }
+        return item.getSellerId();
+    }
+
+    /**
      * 거래 도메인이 거래 생성 시 호출. 비관적 락(PESSIMISTIC_WRITE)으로 Item 행을 잠근 뒤 활성(판매중) 검증.
      * 가이드 §5.2 — reserve 와 create 동시 시 락 직렬화로 "예약 직후 새 채팅중 거래 저장" 회귀 차단.
      * Codex 게이트 1 Warning 보강.

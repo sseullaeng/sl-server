@@ -13,6 +13,8 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 /**
  * User Aggregate Root. V1 스키마 {@code users} 매핑.
  *
@@ -56,6 +58,22 @@ public class User extends BaseEntity {
 
     @Column(name = "is_deleted", nullable = false)
     private boolean deleted;
+
+    /**
+     * 신뢰도(거래 후 받은 리뷰 평균). 가이드 §4.7 — 리뷰 작성 시점에 review_count + rating_sum 을
+     * 단일 atomic UPDATE 로 누적해 race 안전 (Codex 게이트 2 보강).
+     * 리뷰 0건이면 null ("신규" 표시용).
+     */
+    @Column(name = "trust_score", precision = 3, scale = 2)
+    private BigDecimal trustScore;
+
+    /** 누적 리뷰 수. trust_score 정합성을 위해 atomic 갱신 (V3 마이그). */
+    @Column(name = "review_count", nullable = false)
+    private int reviewCount;
+
+    /** 누적 별점 합계. trust_score = rating_sum / review_count (review_count > 0). */
+    @Column(name = "rating_sum", nullable = false)
+    private int ratingSum;
 
     /**
      * 소셜 가입 흐름의 정적 팩토리. (provider, providerId) 가 비어있을 수 없으며 LOCAL 은 거부.

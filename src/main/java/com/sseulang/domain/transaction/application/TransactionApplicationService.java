@@ -2,6 +2,7 @@ package com.sseulang.domain.transaction.application;
 
 import com.sseulang.domain.item.application.ItemApplicationService;
 import com.sseulang.domain.item.application.dto.ItemForTransactionResult;
+import com.sseulang.domain.transaction.application.dto.ReviewableTransactionResult;
 import com.sseulang.domain.transaction.application.dto.TransactionCreateCommand;
 import com.sseulang.domain.transaction.application.dto.TransactionResult;
 import com.sseulang.domain.transaction.domain.Transaction;
@@ -111,6 +112,32 @@ public class TransactionApplicationService {
             throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
         }
         return TransactionResult.from(tx);
+    }
+
+    /**
+     * Review 작성 시 호출. 가이드 §4.7:
+     * <ul>
+     *   <li>{@code status == 거래완료} 만 허용</li>
+     *   <li>거래 완료 후 7일 이내</li>
+     *   <li>requester 가 거래 참여자</li>
+     * </ul>
+     * reviewee 는 자동 결정 (seller 가 reviewer 면 buyer, 그 반대도). CLAUDE.md §3.3 — Review 도메인은
+     * 본 메서드만 의존, TransactionRepository 직접 접근 X.
+     */
+    public ReviewableTransactionResult findCompletedForReview(Long transactionId, Long requesterId) {
+        Transaction tx = findOrThrow(transactionId);
+        if (!tx.isParticipant(requesterId)) {
+            throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
+        }
+        if (tx.getStatus() != TransactionStatus.거래완료 || tx.getCompletedAt() == null) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
+        }
+        // 7일 경계 정확 비교 — Duration.toDays() 는 내림이라 7일 23시간도 허용되는 회귀 (Codex 게이트 2).
+        if (LocalDateTime.now().isAfter(tx.getCompletedAt().plusDays(7))) {
+            throw new BusinessException(ErrorCode.REVIEW_PERIOD_EXPIRED);
+        }
+        Long revieweeId = tx.isSeller(requesterId) ? tx.getBuyerId() : tx.getSellerId();
+        return new ReviewableTransactionResult(tx.getId(), requesterId, revieweeId, tx.getCompletedAt());
     }
 
     private Transaction findOrThrow(Long id) {
