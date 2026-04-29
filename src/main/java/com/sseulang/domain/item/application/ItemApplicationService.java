@@ -2,6 +2,7 @@ package com.sseulang.domain.item.application;
 
 import com.sseulang.domain.category.application.CategoryApplicationService;
 import com.sseulang.domain.item.application.dto.ItemDetailResult;
+import com.sseulang.domain.item.application.dto.ItemForTransactionResult;
 import com.sseulang.domain.item.application.dto.ItemRegisterCommand;
 import com.sseulang.domain.item.application.dto.ItemSearchCriteria;
 import com.sseulang.domain.item.application.dto.ItemSummaryResult;
@@ -11,7 +12,6 @@ import com.sseulang.domain.item.domain.ItemRepository;
 import com.sseulang.domain.item.domain.ItemStatus;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -101,7 +101,56 @@ public class ItemApplicationService {
     }
 
     /**
+     * 거래 도메인이 거래 생성 시 호출. 비관적 락(PESSIMISTIC_WRITE)으로 Item 행을 잠근 뒤 활성(판매중) 검증.
+     * 가이드 §5.2 — reserve 와 create 동시 시 락 직렬화로 "예약 직후 새 채팅중 거래 저장" 회귀 차단.
+     * Codex 게이트 1 Warning 보강.
+     */
+    @Transactional
+    public ItemForTransactionResult findActiveForTransaction(Long itemId) {
+        Item item = itemRepository.findByIdForUpdate(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
+        if (item.getStatus() != ItemStatus.판매중) {
+            throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
+        }
+        return new ItemForTransactionResult(
+                item.getId(), item.getSellerId(), item.getTradeType(), item.getPrice(), item.getDeposit()
+        );
+    }
+
+    /**
+     * 거래 도메인이 reserve 시 호출. 비관적 락(PESSIMISTIC_WRITE)으로 Item 행을 잠그고 markAsReserved 호출.
+     * 가이드 §5.2 동시 거래 차단의 핵심 — 같은 트랜잭션 안에서 호출되면 락 유지 + 도메인 invariant 검증.
+     */
+    @Transactional
+    public void markItemAsReserved(Long itemId) {
+        Item item = itemRepository.findByIdForUpdate(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
+        item.markAsReserved();
+    }
+
+    /** 거래 도메인이 complete 시 호출. 비관적 락 + 예약 → 거래완료. */
+    @Transactional
+    public void markItemAsSold(Long itemId) {
+        Item item = itemRepository.findByIdForUpdate(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
+        item.markAsSold();
+    }
+
+    /** 거래 도메인이 cancel 시 호출 (예약 상태였던 거래만). 예약 → 판매중 복원. */
+    @Transactional
+    public void restoreItemFromReserved(Long itemId) {
+        Item item = itemRepository.findByIdForUpdate(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
+        item.restoreFromReserved();
+    }
+
+    /**
      * {@code wishlist_count} 원자 증가. Wishlist 도메인이 찜 추가 성공 직후 호출.
+     *
+     * <p><b>Stale 주의(bulk update)</b>: JPA bulk update 라 persistence context 가 자동 동기화되지
+     * 않는다. 같은 트랜잭션 안에서 후속으로 동일 {@code Item} 을 다시 읽을 경우 stale 값을 받을 수
+     * 있으므로 그때는 {@code EntityManager.refresh} 또는 {@code flush+clear} 필요. 현재 wishlist
+     * add/remove 흐름은 호출 직후 read 가 없어 안전.</p>
      */
     @Transactional
     public void incrementWishlistCount(Long itemId) {
@@ -110,6 +159,7 @@ public class ItemApplicationService {
 
     /**
      * {@code wishlist_count} 원자 감소. 음수 방지는 Repository 쪽 SQL 가드.
+     * Stale 주의는 {@link #incrementWishlistCount} 와 동일.
      */
     @Transactional
     public void decrementWishlistCount(Long itemId) {

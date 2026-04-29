@@ -14,6 +14,13 @@ public interface ItemRepository {
 
     Optional<Item> findById(Long id);
 
+    /**
+     * 비관적 쓰기 락(PESSIMISTIC_WRITE)으로 Item 조회. 가이드 §5.2 동시 거래 차단을 위한 핵심 —
+     * Transaction 도메인이 reserve/complete/cancel 시 Item 행을 잠그고 상태 전이.
+     * 첫 호출이 락 점유 → 후속 호출은 대기 → 락 해제 후 status 보고 적절히 거부 (TRANSACTION_RESERVED_BY_OTHER 등).
+     */
+    Optional<Item> findByIdForUpdate(Long id);
+
     /** 동적 검색·필터 + 최신순 정렬. criteria 의 모든 필드가 null 이면 전체 (status != 삭제) 최신순. */
     Page<Item> search(ItemSearchCriteria criteria, Pageable pageable);
 

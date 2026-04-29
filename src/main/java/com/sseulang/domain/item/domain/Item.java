@@ -225,6 +225,37 @@ public class Item extends BaseEntity {
         this.status = ItemStatus.판매중;
     }
 
+    /**
+     * 거래 도메인이 reserve 시 호출. 가이드 §5.2 동시 거래 차단의 핵심 — 이미 예약된 Item 에
+     * 다른 거래가 reserve 시도 시 {@link ErrorCode#TRANSACTION_RESERVED_BY_OTHER} 로 거부.
+     * 그 외 비활성 상태(거래완료/비공개/삭제)는 {@link ErrorCode#ITEM_INVALID_STATE}.
+     */
+    public void markAsReserved() {
+        if (status == ItemStatus.예약) {
+            throw new BusinessException(ErrorCode.TRANSACTION_RESERVED_BY_OTHER);
+        }
+        if (status != ItemStatus.판매중) {
+            throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
+        }
+        this.status = ItemStatus.예약;
+    }
+
+    /** 거래 도메인이 complete 시 호출. 예약 → 거래완료 만 허용. */
+    public void markAsSold() {
+        if (status != ItemStatus.예약) {
+            throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
+        }
+        this.status = ItemStatus.거래완료;
+    }
+
+    /** 거래 도메인이 cancel 시 호출. 예약 → 판매중 복원. 가이드 §5.2 — 채팅 재활성화 효과. */
+    public void restoreFromReserved() {
+        if (status != ItemStatus.예약) {
+            throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
+        }
+        this.status = ItemStatus.판매중;
+    }
+
     public void incrementViewCount() {
         this.viewCount++;
     }

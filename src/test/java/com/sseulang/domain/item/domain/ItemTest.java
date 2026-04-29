@@ -244,6 +244,81 @@ class ItemTest {
         assertThat(item.getHashtags()).isEmpty();
     }
 
+    @Test
+    @DisplayName("markAsReserved 정상_판매중→예약")
+    void markAsReserved_정상() {
+        Item item = saleItem();
+        item.markAsReserved();
+        assertThat(item.getStatus()).isEqualTo(ItemStatus.예약);
+    }
+
+    @Test
+    @DisplayName("markAsReserved 이미 예약_TRANSACTION_RESERVED_BY_OTHER")
+    void markAsReserved_이미_예약_거부() {
+        Item item = saleItem();
+        item.markAsReserved();
+        assertThatThrownBy(item::markAsReserved)
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.TRANSACTION_RESERVED_BY_OTHER);
+    }
+
+    @Test
+    @DisplayName("markAsReserved 비공개/삭제_ITEM_INVALID_STATE")
+    void markAsReserved_비활성_거부() {
+        Item hidden = saleItem();
+        hidden.markAsHidden();
+        assertThatThrownBy(hidden::markAsReserved)
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
+
+        Item deleted = saleItem();
+        deleted.markAsDeleted();
+        assertThatThrownBy(deleted::markAsReserved)
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("markAsSold 예약→거래완료")
+    void markAsSold_정상() {
+        Item item = saleItem();
+        item.markAsReserved();
+        item.markAsSold();
+        assertThat(item.getStatus()).isEqualTo(ItemStatus.거래완료);
+    }
+
+    @Test
+    @DisplayName("markAsSold 판매중에서 직행_ITEM_INVALID_STATE")
+    void markAsSold_판매중에서_거부() {
+        Item item = saleItem();
+        assertThatThrownBy(item::markAsSold)
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("restoreFromReserved 예약→판매중")
+    void restoreFromReserved_정상() {
+        Item item = saleItem();
+        item.markAsReserved();
+        item.restoreFromReserved();
+        assertThat(item.getStatus()).isEqualTo(ItemStatus.판매중);
+    }
+
+    @Test
+    @DisplayName("restoreFromReserved 판매중에서_ITEM_INVALID_STATE")
+    void restoreFromReserved_거부() {
+        Item item = saleItem();
+        assertThatThrownBy(item::restoreFromReserved)
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
+    }
+
     private static Item saleItem() {
         return Item.create(SELLER, CATEGORY, "t", "d", 10_000L, null, null, TradeType.판매, "서울");
     }

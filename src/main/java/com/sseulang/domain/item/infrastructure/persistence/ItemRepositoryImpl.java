@@ -26,6 +26,11 @@ public class ItemRepositoryImpl implements ItemRepository {
     }
 
     @Override
+    public Optional<Item> findByIdForUpdate(Long id) {
+        return jpa.findByIdForUpdate(id);
+    }
+
+    @Override
     public Page<Item> search(ItemSearchCriteria criteria, Pageable pageable) {
         return querydsl.search(criteria, pageable);
     }
