@@ -1,0 +1,87 @@
+package com.sseulang.domain.file.application;
+
+import com.sseulang.domain.file.application.dto.PresignRequestItem;
+import com.sseulang.domain.file.application.dto.PresignResult;
+import com.sseulang.domain.file.domain.FilePurpose;
+import com.sseulang.domain.file.domain.PresignedUrlGenerator;
+import com.sseulang.domain.file.domain.PresignedUrlResult;
+import com.sseulang.global.exception.BusinessException;
+import com.sseulang.global.exception.ErrorCode;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * 이미지 업로드용 S3 presigned URL 발급. 가이드 §4.5:
+ *
+ * <ul>
+ *   <li>Content-Type: {@code image/*}</li>
+ *   <li>Content-Length: ≤ 5MB</li>
+ *   <li>만료: 5분</li>
+ *   <li>파일명: 백엔드 UUID 강제 (사용자 입력 무시)</li>
+ *   <li>key 패턴: {@code {purpose}/{ownerId}/{uuid}.{ext}}</li>
+ * </ul>
+ */
+@Service
+public class FileApplicationService {
+
+    private static final long MAX_CONTENT_LENGTH = 5L * 1024 * 1024;
+    private static final Duration PRESIGN_EXPIRE = Duration.ofMinutes(5);
+    private static final int MAX_FILES_PER_REQUEST = 10;
+
+    private static final Map<String, String> EXTENSION_BY_CONTENT_TYPE = Map.of(
+            "image/jpeg", "jpg",
+            "image/jpg",  "jpg",
+            "image/png",  "png",
+            "image/webp", "webp",
+            "image/gif",  "gif"
+    );
+
+    private final PresignedUrlGenerator generator;
+
+    public FileApplicationService(PresignedUrlGenerator generator) {
+        this.generator = generator;
+    }
+
+    public List<PresignResult> issue(FilePurpose purpose, Long ownerId, List<PresignRequestItem> files) {
+        if (purpose == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST);
+        }
+        if (ownerId == null || ownerId <= 0) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST);
+        }
+        if (files == null || files.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST);
+        }
+        if (files.size() > MAX_FILES_PER_REQUEST) {
+            throw new BusinessException(ErrorCode.FILE_VALIDATION_FAILED);
+        }
+
+        List<PresignResult> results = new ArrayList<>(files.size());
+        for (PresignRequestItem f : files) {
+            validate(f);
+            String key = buildKey(purpose, ownerId, f.contentType());
+            PresignedUrlResult issued = generator.generate(key, f.contentType(), PRESIGN_EXPIRE);
+            results.add(new PresignResult(issued.presignedUrl(), issued.key()));
+        }
+        return results;
+    }
+
+    private static void validate(PresignRequestItem f) {
+        if (f.contentType() == null || !EXTENSION_BY_CONTENT_TYPE.containsKey(f.contentType().toLowerCase())) {
+            throw new BusinessException(ErrorCode.FILE_VALIDATION_FAILED);
+        }
+        if (f.contentLength() <= 0 || f.contentLength() > MAX_CONTENT_LENGTH) {
+            throw new BusinessException(ErrorCode.FILE_VALIDATION_FAILED);
+        }
+    }
+
+    private static String buildKey(FilePurpose purpose, Long ownerId, String contentType) {
+        String ext = EXTENSION_BY_CONTENT_TYPE.get(contentType.toLowerCase());
+        return purpose.folder() + "/" + ownerId + "/" + UUID.randomUUID() + "." + ext;
+    }
+}
