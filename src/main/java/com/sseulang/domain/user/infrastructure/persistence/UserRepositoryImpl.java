@@ -36,4 +36,9 @@ public class UserRepositoryImpl implements UserRepository {
     public User save(User user) {
         return jpa.save(user);
     }
+
+    @Override
+    public int recordReviewFor(Long revieweeId, int rating) {
+        return jpa.recordReviewFor(revieweeId, rating);
+    }
 }
