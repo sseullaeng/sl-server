@@ -55,4 +55,12 @@ public class InMemoryFakeUserRepository implements UserRepository {
     public int recomputeCallCount() {
         return recomputeCalls.get();
     }
+
+    @Override
+    public int creditPointBalance(Long userId, long amount) {
+        User user = store.get(userId);
+        if (user == null) return 0;
+        ReflectionTestUtils.setField(user, "pointBalance", user.getPointBalance() + amount);
+        return 1;
+    }
 }

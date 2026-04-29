@@ -48,7 +48,9 @@ public class SecurityConfig {
             "/api/v1/auth/**",
             // WebSocket handshake 는 SockJS 폴백 path 까지 포함해 CSRF 면제 — STOMP CONNECT 단계의
             // 인증·인가는 ChannelInterceptor 가 별도 검증.
-            "/ws-stomp/**"
+            "/ws-stomp/**",
+            // 토스 webhook — 외부 PG 가 호출하는 콜백. 시그니처 검증은 webhook 핸들러 책임 (후속).
+            "/api/v1/payments/webhook/**"
     };
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -112,6 +114,7 @@ public class SecurityConfig {
                         .requestMatchers(AUTH_ENDPOINTS).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/items/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(csrfCookieFilter, UsernamePasswordAuthenticationFilter.class);

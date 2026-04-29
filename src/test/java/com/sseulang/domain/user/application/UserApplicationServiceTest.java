@@ -136,6 +136,37 @@ class UserApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("creditPoint_affected=1_정상")
+    void creditPoint_정상() {
+        when(userRepository.creditPointBalance(7L, 50_000L)).thenReturn(1);
+
+        service.creditPoint(7L, 50_000L);
+
+        verify(userRepository, times(1)).creditPointBalance(7L, 50_000L);
+    }
+
+    @Test
+    @DisplayName("creditPoint_affected=0 (미존재 userId)_USER_NOT_FOUND_트랜잭션 롤백")
+    void creditPoint_미존재() {
+        when(userRepository.creditPointBalance(999L, 50_000L)).thenReturn(0);
+
+        assertThatThrownBy(() -> service.creditPoint(999L, 50_000L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.USER_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("creditPoint_amount<=0_IllegalArgumentException_repository 호출 X")
+    void creditPoint_invalid_amount() {
+        assertThatThrownBy(() -> service.creditPoint(7L, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.creditPoint(7L, -1L))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(userRepository, never()).creditPointBalance(any(), org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
     @DisplayName("findOrCreateBySocial_UNIQUE 외 다른 제약 위반_원본 예외 그대로 throw")
     void findOrCreateBySocial_다른제약위반_원본throw() {
         when(userRepository.findBySocial(SocialProvider.KAKAO, "k-1")).thenReturn(Optional.empty());

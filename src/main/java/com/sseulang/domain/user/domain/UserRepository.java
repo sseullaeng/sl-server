@@ -22,4 +22,10 @@ public interface UserRepository {
      * 의 stale read view 회귀를 누적 컬럼으로 차단.
      */
     int recordReviewFor(Long revieweeId, int rating);
+
+    /**
+     * 가이드 §4.8 — 포인트 잔액 atomic 증가 (충전 / 거래 정산 적립). amount 양수 강제.
+     * 단일 SQL UPDATE 라 동시 충전 race 안전. 영향받은 행 수 반환.
+     */
+    int creditPointBalance(Long userId, long amount);
 }

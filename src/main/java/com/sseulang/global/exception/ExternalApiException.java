@@ -19,4 +19,12 @@ public class ExternalApiException extends RuntimeException {
         super("외부 API 호출 실패: " + externalServiceName, cause);
         this.externalServiceName = externalServiceName;
     }
+
+    /**
+     * cause 없는 명시 실패용 — 응답 파싱/필드 검증 실패처럼 Throwable 이 없는 시나리오.
+     */
+    public ExternalApiException(String externalServiceName, String detail) {
+        super("외부 API 호출 실패: " + externalServiceName + " — " + detail);
+        this.externalServiceName = externalServiceName;
+    }
 }
