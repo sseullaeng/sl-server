@@ -185,7 +185,7 @@ public class Item extends BaseEntity {
             String region
     ) {
         if (!status.isEditable()) {
-            throw new IllegalStateException("현재 상태(" + status + ")에서는 수정할 수 없습니다");
+            throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
         }
         validateTitle(title);
         validateDescription(description);
@@ -209,7 +209,7 @@ public class Item extends BaseEntity {
 
     public void markAsHidden() {
         if (status == ItemStatus.삭제) {
-            throw new IllegalStateException("삭제된 물품은 비공개로 전환할 수 없습니다");
+            throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
         }
         this.status = ItemStatus.비공개;
     }
@@ -220,7 +220,7 @@ public class Item extends BaseEntity {
 
     public void restore() {
         if (status != ItemStatus.비공개) {
-            throw new IllegalStateException("비공개 상태에서만 복구할 수 있습니다");
+            throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
         }
         this.status = ItemStatus.판매중;
     }

@@ -33,7 +33,7 @@ public class FileController {
         List<PresignRequestItem> items = request.files().stream()
                 .map(f -> new PresignRequestItem(f.contentType(), f.contentLength()))
                 .toList();
-        List<PresignResult> results = fileService.issue(request.purpose(), userId, items);
+        List<PresignResult> results = fileService.issueForUser(request.purpose(), userId, items);
         return ApiResponse.ok(PresignedUrlResponse.from(results));
     }
 }

@@ -1,5 +1,6 @@
 package com.sseulang.domain.item.application;
 
+import com.sseulang.domain.category.application.CategoryApplicationService;
 import com.sseulang.domain.category.application.InMemoryFakeCategoryRepository;
 import com.sseulang.domain.category.domain.Category;
 import com.sseulang.domain.item.application.dto.ItemDetailResult;
@@ -33,7 +34,8 @@ class ItemApplicationServiceTest {
     void setUp() {
         itemRepo = new InMemoryFakeItemRepository();
         categoryRepo = new InMemoryFakeCategoryRepository();
-        service = new ItemApplicationService(itemRepo, categoryRepo);
+        CategoryApplicationService categoryService = new CategoryApplicationService(categoryRepo);
+        service = new ItemApplicationService(itemRepo, categoryService);
         categoryId = categoryRepo.insert(Category.createRoot("디지털/가전", 1)).getId();
     }
 

@@ -1,6 +1,6 @@
 package com.sseulang.domain.item.application;
 
-import com.sseulang.domain.category.domain.CategoryRepository;
+import com.sseulang.domain.category.application.CategoryApplicationService;
 import com.sseulang.domain.item.application.dto.ItemDetailResult;
 import com.sseulang.domain.item.application.dto.ItemRegisterCommand;
 import com.sseulang.domain.item.application.dto.ItemSearchCriteria;
@@ -8,8 +8,10 @@ import com.sseulang.domain.item.application.dto.ItemSummaryResult;
 import com.sseulang.domain.item.application.dto.ItemUpdateCommand;
 import com.sseulang.domain.item.domain.Item;
 import com.sseulang.domain.item.domain.ItemRepository;
+import com.sseulang.domain.item.domain.ItemStatus;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -22,19 +24,19 @@ import java.util.List;
 public class ItemApplicationService {
 
     private final ItemRepository itemRepository;
-    private final CategoryRepository categoryRepository;
+    private final CategoryApplicationService categoryApplicationService;
 
     public ItemApplicationService(
             ItemRepository itemRepository,
-            CategoryRepository categoryRepository
+            CategoryApplicationService categoryApplicationService
     ) {
         this.itemRepository = itemRepository;
-        this.categoryRepository = categoryRepository;
+        this.categoryApplicationService = categoryApplicationService;
     }
 
     @Transactional
     public Long register(ItemRegisterCommand cmd) {
-        validateCategoryExists(cmd.categoryId());
+        categoryApplicationService.requireExists(cmd.categoryId());
         Item item = Item.create(
                 cmd.sellerId(), cmd.categoryId(),
                 cmd.title(), cmd.description(),
@@ -67,7 +69,7 @@ public class ItemApplicationService {
         );
 
         if (cmd.categoryId() != null) {
-            validateCategoryExists(cmd.categoryId());
+            categoryApplicationService.requireExists(cmd.categoryId());
             item.assignCategory(cmd.categoryId());
         }
         if (cmd.imageUrls() != null) {
@@ -86,6 +88,34 @@ public class ItemApplicationService {
         item.markAsDeleted();
     }
 
+    /**
+     * 다른 도메인 ApplicationService 가 "활성 Item 존재"만 검증할 때 사용 — Wishlist 등.
+     * status=삭제 는 ITEM_NOT_FOUND. CLAUDE.md §3.3 의 다른 도메인 Repository 직접 호출 금지 룰
+     * 정합 — 외부는 본 메서드를 통해서만 Item 검증.
+     */
+    public void requireActiveItem(Long id) {
+        Item item = findOrThrow(id);
+        if (item.getStatus() == ItemStatus.삭제) {
+            throw new BusinessException(ErrorCode.ITEM_NOT_FOUND);
+        }
+    }
+
+    /**
+     * {@code wishlist_count} 원자 증가. Wishlist 도메인이 찜 추가 성공 직후 호출.
+     */
+    @Transactional
+    public void incrementWishlistCount(Long itemId) {
+        itemRepository.incrementWishlistCount(itemId);
+    }
+
+    /**
+     * {@code wishlist_count} 원자 감소. 음수 방지는 Repository 쪽 SQL 가드.
+     */
+    @Transactional
+    public void decrementWishlistCount(Long itemId) {
+        itemRepository.decrementWishlistCount(itemId);
+    }
+
     private Item findOrThrow(Long id) {
         return itemRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
@@ -97,15 +127,6 @@ public class ItemApplicationService {
             throw new BusinessException(ErrorCode.ITEM_FORBIDDEN);
         }
         return item;
-    }
-
-    private void validateCategoryExists(Long categoryId) {
-        if (categoryId == null) {
-            return;
-        }
-        if (categoryRepository.findById(categoryId).isEmpty()) {
-            throw new BusinessException(ErrorCode.CATEGORY_NOT_FOUND);
-        }
     }
 
     private static void applyImages(Item item, List<String> imageUrls) {

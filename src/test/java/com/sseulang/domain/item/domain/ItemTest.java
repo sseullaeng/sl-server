@@ -142,13 +142,15 @@ class ItemTest {
     }
 
     @Test
-    @DisplayName("updateInfo 거래완료_거부")
-    void updateInfo_거래완료_거부() {
+    @DisplayName("updateInfo 삭제 상태_ITEM_INVALID_STATE")
+    void updateInfo_삭제_상태_거부() {
         Item item = saleItem();
         item.markAsDeleted();
         assertThatThrownBy(() ->
                 item.updateInfo("x", "y", 1L, null, null, null))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
     }
 
     @Test
@@ -162,11 +164,14 @@ class ItemTest {
     }
 
     @Test
-    @DisplayName("markAsDeleted 후 restore_거부")
+    @DisplayName("markAsDeleted 후 restore_ITEM_INVALID_STATE")
     void markAsDeleted_후_restore_거부() {
         Item item = saleItem();
         item.markAsDeleted();
-        assertThatThrownBy(item::restore).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(item::restore)
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
     }
 
     @Test

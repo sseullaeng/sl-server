@@ -24,7 +24,7 @@ public class WishlistRepositoryImpl implements WishlistRepository {
     }
 
     @Override
-    public void deleteByUserIdAndItemId(Long userId, Long itemId) {
-        jpa.deleteByUserAndItem(userId, itemId);
+    public int deleteByUserIdAndItemId(Long userId, Long itemId) {
+        return jpa.deleteByUserAndItem(userId, itemId);
     }
 }

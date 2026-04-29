@@ -32,8 +32,8 @@ public class InMemoryFakeWishlistRepository implements WishlistRepository {
     }
 
     @Override
-    public void deleteByUserIdAndItemId(Long userId, Long itemId) {
-        store.remove(key(userId, itemId));
+    public int deleteByUserIdAndItemId(Long userId, Long itemId) {
+        return store.remove(key(userId, itemId)) != null ? 1 : 0;
     }
 
     public int size() {

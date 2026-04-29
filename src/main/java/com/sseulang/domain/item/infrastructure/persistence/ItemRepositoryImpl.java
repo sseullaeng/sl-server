@@ -39,4 +39,14 @@ public class ItemRepositoryImpl implements ItemRepository {
     public void delete(Item item) {
         jpa.delete(item);
     }
+
+    @Override
+    public int incrementWishlistCount(Long itemId) {
+        return jpa.incrementWishlistCount(itemId);
+    }
+
+    @Override
+    public int decrementWishlistCount(Long itemId) {
+        return jpa.decrementWishlistCount(itemId);
+    }
 }

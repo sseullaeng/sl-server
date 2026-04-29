@@ -85,4 +85,20 @@ public class InMemoryFakeItemRepository implements ItemRepository {
     public void delete(Item item) {
         store.remove(item.getId());
     }
+
+    @Override
+    public int incrementWishlistCount(Long itemId) {
+        Item item = store.get(itemId);
+        if (item == null) return 0;
+        ReflectionTestUtils.setField(item, "wishlistCount", item.getWishlistCount() + 1);
+        return 1;
+    }
+
+    @Override
+    public int decrementWishlistCount(Long itemId) {
+        Item item = store.get(itemId);
+        if (item == null || item.getWishlistCount() <= 0) return 0;
+        ReflectionTestUtils.setField(item, "wishlistCount", item.getWishlistCount() - 1);
+        return 1;
+    }
 }

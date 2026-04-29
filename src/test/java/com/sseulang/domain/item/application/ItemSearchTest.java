@@ -34,7 +34,9 @@ class ItemSearchTest {
     void setUp() {
         itemRepo = new InMemoryFakeItemRepository();
         InMemoryFakeCategoryRepository categoryRepo = new InMemoryFakeCategoryRepository();
-        service = new ItemApplicationService(itemRepo, categoryRepo);
+        com.sseulang.domain.category.application.CategoryApplicationService catSvc =
+                new com.sseulang.domain.category.application.CategoryApplicationService(categoryRepo);
+        service = new ItemApplicationService(itemRepo, catSvc);
         catA = categoryRepo.insert(Category.createRoot("A", 1)).getId();
         catB = categoryRepo.insert(Category.createRoot("B", 2)).getId();
     }

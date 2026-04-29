@@ -129,6 +129,35 @@ class FileApplicationServiceTest {
                 .isInstanceOf(BusinessException.class);
     }
 
+    @Test
+    @DisplayName("issueForUser PROFILE/ITEM 만 허용")
+    void issueForUser_화이트리스트() {
+        assertThat(service.issueForUser(FilePurpose.PROFILE, OWNER, List.of(jpeg()))).hasSize(1);
+        assertThat(service.issueForUser(FilePurpose.ITEM, OWNER, List.of(jpeg()))).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("issueForUser NOTICE/BANNER/MESSAGE_FORBIDDEN")
+    void issueForUser_관리자_도메인_거부() {
+        assertThatThrownBy(() -> service.issueForUser(FilePurpose.NOTICE, OWNER, List.of(jpeg())))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FORBIDDEN);
+        assertThatThrownBy(() -> service.issueForUser(FilePurpose.BANNER, OWNER, List.of(jpeg())))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FORBIDDEN);
+        assertThatThrownBy(() -> service.issueForUser(FilePurpose.MESSAGE, OWNER, List.of(jpeg())))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("issueForUser null purpose_INVALID_REQUEST")
+    void issueForUser_null() {
+        assertThatThrownBy(() -> service.issueForUser(null, OWNER, List.of(jpeg())))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
+    }
+
     private static PresignRequestItem jpeg() {
         return new PresignRequestItem("image/jpeg", 1024L);
     }

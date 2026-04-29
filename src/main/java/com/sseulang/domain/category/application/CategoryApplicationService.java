@@ -51,4 +51,18 @@ public class CategoryApplicationService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
         return new CategoryResult(c.getId(), c.getParentId(), c.getName(), c.getSortOrder());
     }
+
+    /**
+     * 다른 도메인 ApplicationService 가 카테고리 존재 검증할 때 사용. {@code id} 가 null 이면
+     * 검증 스킵 (카테고리 미지정 허용 정책). CLAUDE.md §3.3 의 "다른 도메인 Repository 직접 호출 금지"
+     * 룰에 맞춰 외부 도메인이 본 메서드만 의존하게 한다.
+     */
+    public void requireExists(Long id) {
+        if (id == null) {
+            return;
+        }
+        if (categoryRepository.findById(id).isEmpty()) {
+            throw new BusinessException(ErrorCode.CATEGORY_NOT_FOUND);
+        }
+    }
 }
