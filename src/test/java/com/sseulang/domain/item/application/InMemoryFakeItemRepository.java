@@ -34,6 +34,12 @@ public class InMemoryFakeItemRepository implements ItemRepository {
     }
 
     @Override
+    public Optional<Item> findByIdForUpdate(Long id) {
+        // fake — 락 의미 없음. 실제 동시성 검증은 testcontainers IT 에서.
+        return findById(id);
+    }
+
+    @Override
     public Page<Item> search(ItemSearchCriteria criteria, Pageable pageable) {
         Stream<Item> stream = store.values().stream()
                 .filter(i -> i.getStatus() != ItemStatus.삭제);

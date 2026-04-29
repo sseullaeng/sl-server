@@ -2,6 +2,7 @@ package com.sseulang.domain.item.application;
 
 import com.sseulang.domain.category.application.CategoryApplicationService;
 import com.sseulang.domain.item.application.dto.ItemDetailResult;
+import com.sseulang.domain.item.application.dto.ItemForTransactionResult;
 import com.sseulang.domain.item.application.dto.ItemRegisterCommand;
 import com.sseulang.domain.item.application.dto.ItemSearchCriteria;
 import com.sseulang.domain.item.application.dto.ItemSummaryResult;
@@ -11,7 +12,6 @@ import com.sseulang.domain.item.domain.ItemRepository;
 import com.sseulang.domain.item.domain.ItemStatus;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -98,6 +98,50 @@ public class ItemApplicationService {
         if (item.getStatus() == ItemStatus.삭제) {
             throw new BusinessException(ErrorCode.ITEM_NOT_FOUND);
         }
+    }
+
+    /**
+     * 거래 도메인이 거래 생성 시 호출. 비관적 락(PESSIMISTIC_WRITE)으로 Item 행을 잠근 뒤 활성(판매중) 검증.
+     * 가이드 §5.2 — reserve 와 create 동시 시 락 직렬화로 "예약 직후 새 채팅중 거래 저장" 회귀 차단.
+     * Codex 게이트 1 Warning 보강.
+     */
+    @Transactional
+    public ItemForTransactionResult findActiveForTransaction(Long itemId) {
+        Item item = itemRepository.findByIdForUpdate(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
+        if (item.getStatus() != ItemStatus.판매중) {
+            throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
+        }
+        return new ItemForTransactionResult(
+                item.getId(), item.getSellerId(), item.getTradeType(), item.getPrice(), item.getDeposit()
+        );
+    }
+
+    /**
+     * 거래 도메인이 reserve 시 호출. 비관적 락(PESSIMISTIC_WRITE)으로 Item 행을 잠그고 markAsReserved 호출.
+     * 가이드 §5.2 동시 거래 차단의 핵심 — 같은 트랜잭션 안에서 호출되면 락 유지 + 도메인 invariant 검증.
+     */
+    @Transactional
+    public void markItemAsReserved(Long itemId) {
+        Item item = itemRepository.findByIdForUpdate(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
+        item.markAsReserved();
+    }
+
+    /** 거래 도메인이 complete 시 호출. 비관적 락 + 예약 → 거래완료. */
+    @Transactional
+    public void markItemAsSold(Long itemId) {
+        Item item = itemRepository.findByIdForUpdate(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
+        item.markAsSold();
+    }
+
+    /** 거래 도메인이 cancel 시 호출 (예약 상태였던 거래만). 예약 → 판매중 복원. */
+    @Transactional
+    public void restoreItemFromReserved(Long itemId) {
+        Item item = itemRepository.findByIdForUpdate(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
+        item.restoreFromReserved();
     }
 
     /**
