@@ -38,4 +38,9 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepository {
     public ChatRoom save(ChatRoom chatRoom) {
         return jpa.save(chatRoom);
     }
+
+    @Override
+    public int recordIncomingMessage(Long chatRoomId, Long senderId, String preview) {
+        return jpa.recordIncomingMessage(chatRoomId, senderId, preview, java.time.LocalDateTime.now());
+    }
 }

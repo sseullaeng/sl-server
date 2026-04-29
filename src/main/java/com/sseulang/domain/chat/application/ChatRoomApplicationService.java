@@ -59,6 +59,24 @@ public class ChatRoomApplicationService {
         return ChatRoomResult.from(room);
     }
 
+    /** Message 도메인이 메시지 보낼 권한 검증 시 호출. 참여자 아니면 CHAT_FORBIDDEN. */
+    public void requireParticipant(Long chatRoomId, Long userId) {
+        ChatRoom room = chatRoomRepository.findById(chatRoomId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        if (!room.isParticipant(userId)) {
+            throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
+        }
+    }
+
+    /**
+     * 메시지 발신 시 ChatRoom 메타 갱신 — last_message / last_message_at / 상대방 unread 카운트.
+     * 단일 atomic UPDATE. 가이드 §4.10 — MongoDB↔MySQL 트랜잭션 분리 (실패 시 보상 X).
+     */
+    @Transactional
+    public void recordIncomingMessage(Long chatRoomId, Long senderId, String preview) {
+        chatRoomRepository.recordIncomingMessage(chatRoomId, senderId, preview);
+    }
+
     private ChatRoomResult createWithRaceGuard(Long itemId, Long requesterId, Long sellerId) {
         ChatRoom newRoom = ChatRoom.openFor(itemId, requesterId, sellerId);
         try {
