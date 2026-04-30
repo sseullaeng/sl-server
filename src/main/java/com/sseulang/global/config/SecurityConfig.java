@@ -42,12 +42,29 @@ public class SecurityConfig {
             "/actuator/info"
     };
 
-    private static final String[] AUTH_ENDPOINTS = {
-            "/api/v1/auth/**"
+    /**
+     * 인증 없이 호출 가능한 auth endpoint 들. {@code /api/v1/auth/**} 통째로 permitAll 하지 않고
+     * 개별 명시 — {@code /api/v1/auth/resend-verification} 같은 인증 필수 endpoint 가 실수로
+     * permitAll 되는 회귀 차단 (게이트 1 round 2).
+     */
+    private static final String[] PUBLIC_AUTH_ENDPOINTS = {
+            "/api/v1/auth/oauth2/**",
+            "/api/v1/auth/signup",
+            "/api/v1/auth/login",
+            "/api/v1/auth/refresh",
+            "/api/v1/auth/logout",
+            "/api/v1/auth/verify-email"
     };
 
     private static final String[] CSRF_IGNORED_ENDPOINTS = {
-            "/api/v1/auth/**",
+            // 위 PUBLIC_AUTH_ENDPOINTS 와 동일한 정책 — 익명 호출 endpoint 만 CSRF 면제.
+            // resend-verification 은 인증 필수라 면제 X.
+            "/api/v1/auth/oauth2/**",
+            "/api/v1/auth/signup",
+            "/api/v1/auth/login",
+            "/api/v1/auth/refresh",
+            "/api/v1/auth/logout",
+            "/api/v1/auth/verify-email",
             // WebSocket handshake 는 SockJS 폴백 path 까지 포함해 CSRF 면제 — STOMP CONNECT 단계의
             // 인증·인가는 ChannelInterceptor 가 별도 검증.
             "/ws-stomp/**",
@@ -119,7 +136,7 @@ public class SecurityConfig {
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(AUTH_ENDPOINTS).permitAll()
+                        .requestMatchers(PUBLIC_AUTH_ENDPOINTS).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/items/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook/**").permitAll()

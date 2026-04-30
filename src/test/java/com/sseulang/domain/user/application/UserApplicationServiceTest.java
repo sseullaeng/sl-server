@@ -64,8 +64,8 @@ class UserApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("findOrCreateBySocial_신규인데 email 이미 다른 provider 로 가입됨_USER_EMAIL_DUPLICATED")
-    void findOrCreateBySocial_email중복() {
+    @DisplayName("findOrCreateBySocial_email 다른 OAuth provider 점유_AUTH_EMAIL_ALREADY_LINKED_TO_DIFFERENT_PROVIDER (linking 미지원)")
+    void findOrCreateBySocial_email_다른_provider() {
         User other = User.createSocialUser(SocialProvider.KAKAO, "k-other", EMAIL, "n", null);
         when(userRepository.findBySocial(SocialProvider.GOOGLE, "g-1")).thenReturn(Optional.empty());
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(other));
@@ -73,9 +73,27 @@ class UserApplicationServiceTest {
         assertThatThrownBy(() ->
                 service.findOrCreateBySocial(SocialProvider.GOOGLE, "g-1", EMAIL, "n", null))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.USER_EMAIL_DUPLICATED);
+                .extracting("errorCode").isEqualTo(ErrorCode.AUTH_EMAIL_ALREADY_LINKED_TO_DIFFERENT_PROVIDER);
 
         verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("findOrCreateBySocial_email 같은 LOCAL user 발견_takeover (linkSocial + verified=true)")
+    void findOrCreateBySocial_LOCAL_takeover() {
+        // 공격자가 victim@email 로 LOCAL 가입 (verified=false). 진짜 owner 가 OAuth 가입 시도
+        User local = User.createLocalUser(EMAIL, "$2a$10$attackerHash", "attacker");
+        when(userRepository.findBySocial(SocialProvider.KAKAO, "k-1")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(local));
+
+        User result = service.findOrCreateBySocial(SocialProvider.KAKAO, "k-1", EMAIL, "kakaoUser", null);
+
+        // takeover — 같은 user row 에 social 추가, password null, verified true
+        assertThat(result).isSameAs(local);
+        assertThat(result.getSocialProvider()).isEqualTo(SocialProvider.KAKAO);
+        assertThat(result.getSocialId()).isEqualTo("k-1");
+        assertThat(result.getPassword()).as("기존 LOCAL password 무효화 — 공격자 차단").isNull();
+        assertThat(result.isEmailVerified()).isTrue();
     }
 
     @Test
@@ -116,10 +134,10 @@ class UserApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("findOrCreateBySocial_save 시 DB UNIQUE 충돌_재조회 후 email 다른 user 가 점유_USER_EMAIL_DUPLICATED")
+    @DisplayName("findOrCreateBySocial_save 시 DB UNIQUE 충돌_재조회 후 email 다른 OAuth user 가 점유_AUTH_EMAIL_ALREADY_LINKED_TO_DIFFERENT_PROVIDER")
     void findOrCreateBySocial_race_email충돌() {
         User other = User.createSocialUser(SocialProvider.KAKAO, "k-other", EMAIL, "n", null);
-        when(userRepository.findBySocial(SocialProvider.KAKAO, "k-1"))
+        when(userRepository.findBySocial(SocialProvider.GOOGLE, "g-1"))
                 .thenReturn(Optional.empty())   // 첫 호출 — 신규
                 .thenReturn(Optional.empty());  // race 후 재조회 — race winner 도 다른 사용자
         // save 직전엔 비어있었지만 race winner 가 같은 email 로 먼저 가입함
@@ -130,9 +148,9 @@ class UserApplicationServiceTest {
                 .thenThrow(new DataIntegrityViolationException("UNIQUE 위반"));
 
         assertThatThrownBy(() ->
-                service.findOrCreateBySocial(SocialProvider.KAKAO, "k-1", EMAIL, "n", null))
+                service.findOrCreateBySocial(SocialProvider.GOOGLE, "g-1", EMAIL, "n", null))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.USER_EMAIL_DUPLICATED);
+                .extracting("errorCode").isEqualTo(ErrorCode.AUTH_EMAIL_ALREADY_LINKED_TO_DIFFERENT_PROVIDER);
     }
 
     @Test

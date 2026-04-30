@@ -21,6 +21,12 @@ public enum ErrorCode {
     AUTH_TOKEN_REVOKED(HttpStatus.UNAUTHORIZED, "폐기된 토큰입니다."),
     AUTH_REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "유효하지 않은 리프레시 토큰입니다."),
     AUTH_OAUTH_FAILED(HttpStatus.UNAUTHORIZED, "소셜 로그인에 실패했습니다."),
+    AUTH_PASSWORD_INVALID(HttpStatus.BAD_REQUEST, "비밀번호 형식이 올바르지 않습니다."),
+    AUTH_EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN, "이메일 인증이 필요합니다."),
+    AUTH_VERIFICATION_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "유효하지 않은 인증 토큰입니다."),
+    AUTH_VERIFICATION_TOKEN_EXPIRED(HttpStatus.BAD_REQUEST, "만료된 인증 토큰입니다."),
+    AUTH_EMAIL_ALREADY_LINKED_TO_DIFFERENT_PROVIDER(HttpStatus.CONFLICT, "이미 다른 SNS 로 가입된 이메일입니다."),
+    AUTH_VERIFICATION_RESEND_TOO_SOON(HttpStatus.TOO_MANY_REQUESTS, "인증 메일 재발송은 잠시 후 다시 시도해 주세요."),
 
     // 사용자
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),

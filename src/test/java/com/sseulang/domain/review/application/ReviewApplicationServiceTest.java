@@ -46,10 +46,10 @@ class ReviewApplicationServiceTest {
         userRepo = new InMemoryFakeUserRepository();
         InMemoryFakeItemRepository itemRepo = new InMemoryFakeItemRepository();
         CategoryApplicationService catSvc = new CategoryApplicationService(new InMemoryFakeCategoryRepository());
-        ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc);
         UserApplicationService userSvc = new UserApplicationService(userRepo);
+        ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, userSvc);
         PointApplicationService pointSvc = new PointApplicationService(userSvc, new InMemoryFakePointHistoryRepository());
-        TransactionApplicationService txSvc = new TransactionApplicationService(txRepo, itemSvc, pointSvc);
+        TransactionApplicationService txSvc = new TransactionApplicationService(txRepo, itemSvc, pointSvc, userSvc);
         service = new ReviewApplicationService(reviewRepo, txSvc, userSvc);
 
         Item item = itemRepo.save(Item.create(

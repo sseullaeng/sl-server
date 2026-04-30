@@ -26,10 +26,17 @@ public class UserApplicationService {
     }
 
     /**
-     * 소셜 가입 흐름 — (provider, providerId) 로 기존 user 조회, 없으면 신규 가입.
-     *
-     * <p>주의: 같은 email 이 다른 provider 로 이미 가입돼 있으면 {@code USER_EMAIL_DUPLICATED}.
-     * 이 정책은 가이드 §12 의 미결정 영역 — 추후 PM 협의로 "동일 이메일 다중 provider 연결" 허용 시 변경.</p>
+     * 소셜 가입/로그인 흐름 — (provider, providerId) 로 기존 user 조회. 없으면:
+     * <ol>
+     *   <li>같은 email 의 기존 user 가 있으면:
+     *     <ul>
+     *       <li>LOCAL 가입자 → <b>takeover</b>: linkSocial(provider, providerId), 기존 password 무효화 +
+     *           verified=true. 이메일 선점 공격 무력화 (게이트 1).</li>
+     *       <li>다른 provider OAuth 가입자 → AUTH_EMAIL_ALREADY_LINKED_TO_DIFFERENT_PROVIDER 거부</li>
+     *     </ul>
+     *   </li>
+     *   <li>같은 email user 없음 → 신규 OAuth user 생성 (verified=true).</li>
+     * </ol>
      */
     @Transactional
     public User findOrCreateBySocial(
@@ -40,12 +47,41 @@ public class UserApplicationService {
             String profileImage
     ) {
         return userRepository.findBySocial(provider, providerId)
-                .orElseGet(() -> create(provider, providerId, email, nickname, profileImage));
+                .orElseGet(() -> linkOrCreate(provider, providerId, email, nickname, profileImage));
+    }
+
+    /**
+     * 같은 email user 발견 분기 처리 (linking) + 없으면 신규 생성. {@code create} race 처리도 동일.
+     */
+    private User linkOrCreate(SocialProvider provider, String providerId, Email email, String nickname, String profileImage) {
+        Optional<User> sameEmail = userRepository.findByEmail(email);
+        if (sameEmail.isPresent()) {
+            User existing = sameEmail.get();
+            if (existing.getSocialProvider() == SocialProvider.LOCAL) {
+                // LOCAL 가입자 → OAuth takeover. 기존 password 무효화, social 정보 추가.
+                existing.linkSocial(provider, providerId);
+                return existing;
+            }
+            // 다른 OAuth provider — 본 PR scope 에선 multi-provider linking 미지원.
+            throw new BusinessException(ErrorCode.AUTH_EMAIL_ALREADY_LINKED_TO_DIFFERENT_PROVIDER);
+        }
+        return create(provider, providerId, email, nickname, profileImage);
     }
 
     public User getById(Long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    /**
+     * 민감 기능 진입 가드 — 이메일 인증 미완료 시 {@link ErrorCode#AUTH_EMAIL_NOT_VERIFIED} (FORBIDDEN).
+     * 거래 시작 / 결제 / 출금 / Item 등록 등 자금·신뢰 영향 흐름의 첫 진입점에서 호출.
+     */
+    public void requireVerified(Long userId) {
+        User user = getById(userId);
+        if (!user.isEmailVerified()) {
+            throw new BusinessException(ErrorCode.AUTH_EMAIL_NOT_VERIFIED);
+        }
     }
 
     /**
@@ -136,9 +172,6 @@ public class UserApplicationService {
     }
 
     private User create(SocialProvider provider, String providerId, Email email, String nickname, String profileImage) {
-        userRepository.findByEmail(email).ifPresent(existing -> {
-            throw new BusinessException(ErrorCode.USER_EMAIL_DUPLICATED);
-        });
         User newUser = User.createSocialUser(provider, providerId, email, nickname, profileImage);
         try {
             return userRepository.save(newUser);
@@ -157,9 +190,15 @@ public class UserApplicationService {
         if (raceWinner.isPresent()) {
             return raceWinner.get();
         }
-        // 다른 user 가 같은 email 로 가입한 경우만 USER_EMAIL_DUPLICATED 로 변환
-        if (userRepository.findByEmail(email).isPresent()) {
-            throw new BusinessException(ErrorCode.USER_EMAIL_DUPLICATED);
+        // 다른 user 가 같은 email 로 가입했다면 linking 흐름 재진입 (takeover or 거부)
+        Optional<User> sameEmail = userRepository.findByEmail(email);
+        if (sameEmail.isPresent()) {
+            User existing = sameEmail.get();
+            if (existing.getSocialProvider() == SocialProvider.LOCAL) {
+                existing.linkSocial(provider, providerId);
+                return existing;
+            }
+            throw new BusinessException(ErrorCode.AUTH_EMAIL_ALREADY_LINKED_TO_DIFFERENT_PROVIDER);
         }
         // UNIQUE 충돌이 아닌 다른 제약 위반 — 시스템 에러로 그대로 노출
         throw race;

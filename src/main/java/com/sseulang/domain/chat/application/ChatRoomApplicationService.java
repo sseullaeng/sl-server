@@ -22,21 +22,26 @@ public class ChatRoomApplicationService {
 
     private final ChatRoomRepository chatRoomRepository;
     private final ItemApplicationService itemApplicationService;
+    private final com.sseulang.domain.user.application.UserApplicationService userApplicationService;
 
     public ChatRoomApplicationService(
             ChatRoomRepository chatRoomRepository,
-            ItemApplicationService itemApplicationService
+            ItemApplicationService itemApplicationService,
+            com.sseulang.domain.user.application.UserApplicationService userApplicationService
     ) {
         this.chatRoomRepository = chatRoomRepository;
         this.itemApplicationService = itemApplicationService;
+        this.userApplicationService = userApplicationService;
     }
 
     /**
      * 물품 ID 로 채팅방 생성 (가이드 §6.1). 멱등 — 이미 있으면 기존 반환.
      * 본인 물품 거부 (자기 자신과 채팅 X). UNIQUE race 는 좁은 catch 후 재조회.
+     * 미인증 사용자의 채팅 스팸 방지 — verified 가드 (게이트 1 round 2).
      */
     @Transactional
     public ChatRoomResult openFor(Long requesterId, Long itemId) {
+        userApplicationService.requireVerified(requesterId);
         Long sellerId = itemApplicationService.findSellerOfActiveItem(itemId);
         if (sellerId.equals(requesterId)) {
             throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);

@@ -1,8 +1,11 @@
 package com.sseulang.domain.auth.presentation;
 
+import com.sseulang.domain.auth.application.LocalAuthService;
 import com.sseulang.domain.auth.application.OAuthLoginService;
 import com.sseulang.domain.auth.application.RefreshTokenRotationService;
 import com.sseulang.domain.auth.application.dto.TokenPair;
+import com.sseulang.domain.auth.presentation.dto.LocalLoginRequest;
+import com.sseulang.domain.auth.presentation.dto.LocalSignupRequest;
 import com.sseulang.domain.auth.presentation.dto.OAuthLoginRequest;
 import com.sseulang.domain.user.domain.SocialProvider;
 import com.sseulang.global.common.ApiResponse;
@@ -26,16 +29,42 @@ public class AuthController {
 
     private final RefreshTokenRotationService rotationService;
     private final OAuthLoginService oauthLoginService;
+    private final LocalAuthService localAuthService;
     private final CookieUtil cookieUtil;
 
     public AuthController(
             RefreshTokenRotationService rotationService,
             OAuthLoginService oauthLoginService,
+            LocalAuthService localAuthService,
             CookieUtil cookieUtil
     ) {
         this.rotationService = rotationService;
         this.oauthLoginService = oauthLoginService;
+        this.localAuthService = localAuthService;
         this.cookieUtil = cookieUtil;
+    }
+
+    /** LOCAL email/password 가입 — 가입 즉시 자동 로그인 (AT/RT 쿠키 발급). */
+    @PostMapping("/signup")
+    public ResponseEntity<ApiResponse<Void>> signup(@Valid @RequestBody LocalSignupRequest request) {
+        TokenPair pair = localAuthService.signup(request.toEmailVO(), request.password(), request.nickname());
+        return setAuthCookies(pair);
+    }
+
+    /** LOCAL email/password 로그인. 미존재/차단/비밀번호 불일치 모두 동일 응답 (leak 방어). */
+    @PostMapping("/login")
+    public ResponseEntity<ApiResponse<Void>> login(@Valid @RequestBody LocalLoginRequest request) {
+        TokenPair pair = localAuthService.login(request.toEmailVO(), request.password());
+        return setAuthCookies(pair);
+    }
+
+    private ResponseEntity<ApiResponse<Void>> setAuthCookies(TokenPair pair) {
+        ResponseCookie at = cookieUtil.accessTokenCookie(pair.accessToken());
+        ResponseCookie rt = cookieUtil.refreshTokenCookie(pair.refreshToken());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, at.toString())
+                .header(HttpHeaders.SET_COOKIE, rt.toString())
+                .body(ApiResponse.ok());
     }
 
     @PostMapping("/oauth2/{provider}")

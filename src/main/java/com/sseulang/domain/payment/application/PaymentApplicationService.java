@@ -12,6 +12,7 @@ import com.sseulang.domain.payment.domain.PaymentRepository;
 import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.point.domain.PointHistoryType;
 import com.sseulang.domain.point.domain.PointReferenceType;
+import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import com.sseulang.global.infra.payment.TossProperties;
@@ -43,17 +44,20 @@ public class PaymentApplicationService {
     private final PaymentRepository paymentRepository;
     private final PaymentGateway paymentGateway;
     private final PointApplicationService pointApplicationService;
+    private final UserApplicationService userApplicationService;
     private final TossProperties tossProperties;
 
     public PaymentApplicationService(
             PaymentRepository paymentRepository,
             PaymentGateway paymentGateway,
             PointApplicationService pointApplicationService,
+            UserApplicationService userApplicationService,
             TossProperties tossProperties
     ) {
         this.paymentRepository = paymentRepository;
         this.paymentGateway = paymentGateway;
         this.pointApplicationService = pointApplicationService;
+        this.userApplicationService = userApplicationService;
         this.tossProperties = tossProperties;
     }
 
@@ -62,6 +66,8 @@ public class PaymentApplicationService {
         if (cmd.amount() <= 0) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST);
         }
+        // 자금 흐름 진입점 — 이메일 인증 미완료 사용자 차단 (게이트 1).
+        userApplicationService.requireVerified(cmd.userId());
         String merchantUid = generateMerchantUid();
         Payment payment = Payment.startCharge(cmd.userId(), merchantUid, cmd.amount());
         Payment saved = paymentRepository.save(payment);

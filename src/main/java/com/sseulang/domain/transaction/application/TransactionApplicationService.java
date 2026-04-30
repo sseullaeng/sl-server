@@ -4,6 +4,7 @@ import com.sseulang.domain.item.application.ItemApplicationService;
 import com.sseulang.domain.item.application.dto.ItemForTransactionResult;
 import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.point.domain.PointReferenceType;
+import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.domain.transaction.application.dto.ReviewableTransactionResult;
 import com.sseulang.domain.transaction.application.dto.TransactionCreateCommand;
 import com.sseulang.domain.transaction.application.dto.TransactionResult;
@@ -43,19 +44,24 @@ public class TransactionApplicationService {
     private final TransactionRepository transactionRepository;
     private final ItemApplicationService itemApplicationService;
     private final PointApplicationService pointApplicationService;
+    private final UserApplicationService userApplicationService;
 
     public TransactionApplicationService(
             TransactionRepository transactionRepository,
             ItemApplicationService itemApplicationService,
-            PointApplicationService pointApplicationService
+            PointApplicationService pointApplicationService,
+            UserApplicationService userApplicationService
     ) {
         this.transactionRepository = transactionRepository;
         this.itemApplicationService = itemApplicationService;
         this.pointApplicationService = pointApplicationService;
+        this.userApplicationService = userApplicationService;
     }
 
     @Transactional
     public Long create(TransactionCreateCommand cmd) {
+        // 거래 시작은 자금 영향 — 이메일 인증 필수 (게이트 1: 미인증 사용자 차단).
+        userApplicationService.requireVerified(cmd.buyerId());
         ItemForTransactionResult info = itemApplicationService.findActiveForTransaction(cmd.itemId());
         if (info.sellerId().equals(cmd.buyerId())) {
             throw new BusinessException(ErrorCode.TRANSACTION_SELF_NOT_ALLOWED);

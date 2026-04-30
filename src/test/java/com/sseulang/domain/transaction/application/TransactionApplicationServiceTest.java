@@ -46,10 +46,10 @@ class TransactionApplicationServiceTest {
         userRepo = new InMemoryFakeUserRepository();
         pointHistoryRepo = new InMemoryFakePointHistoryRepository();
         CategoryApplicationService catSvc = new CategoryApplicationService(new InMemoryFakeCategoryRepository());
-        itemSvc = new ItemApplicationService(itemRepo, catSvc);
         UserApplicationService userSvc = new UserApplicationService(userRepo);
+        itemSvc = new ItemApplicationService(itemRepo, catSvc, userSvc);
         PointApplicationService pointSvc = new PointApplicationService(userSvc, pointHistoryRepo);
-        service = new TransactionApplicationService(txRepo, itemSvc, pointSvc);
+        service = new TransactionApplicationService(txRepo, itemSvc, pointSvc, userSvc);
 
         SELLER = userRepo.save(User.createSocialUser(
                 SocialProvider.KAKAO, "k-seller", new Email("seller@x.com"), "seller", null
@@ -150,7 +150,10 @@ class TransactionApplicationServiceTest {
     @Test
     @DisplayName("두 buyer 동시 거래_첫 reserve 만 성공_두 번째는 TRANSACTION_RESERVED_BY_OTHER")
     void 동시_reserve_차단() {
-        Long buyer2 = 300L;
+        Long buyer2 = userRepo.save(User.createSocialUser(
+                SocialProvider.KAKAO, "k-buyer2-" + System.nanoTime(),
+                new Email("buyer2-" + System.nanoTime() + "@x.com"), "buyer2", null
+        )).getId();
         Long tx1 = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
         Long tx2 = service.create(new TransactionCreateCommand(itemId, buyer2, null, null));
 
@@ -270,7 +273,10 @@ class TransactionApplicationServiceTest {
     @Test
     @DisplayName("cancel 후 다른 buyer 가 같은 Item 으로 거래 시작 가능")
     void cancel_후_새_거래() {
-        Long buyer2 = 300L;
+        Long buyer2 = userRepo.save(User.createSocialUser(
+                SocialProvider.KAKAO, "k-buyer2-" + System.nanoTime(),
+                new Email("buyer2-" + System.nanoTime() + "@x.com"), "buyer2", null
+        )).getId();
         Long tx1 = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
         service.reserve(tx1, SELLER);
         service.cancel(tx1, SELLER, "재예약 가능");

@@ -23,7 +23,7 @@ class FileApplicationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new FileApplicationService(new FakePresignedUrlGenerator());
+        service = new FileApplicationService(new FakePresignedUrlGenerator(), org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class));
     }
 
     @Test

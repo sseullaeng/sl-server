@@ -44,7 +44,7 @@ class PaymentApplicationServiceTest {
         userService = new UserApplicationService(userRepo);
         PointApplicationService pointSvc = new PointApplicationService(userService, pointHistoryRepo);
         service = new PaymentApplicationService(
-                paymentRepo, gateway, pointSvc,
+                paymentRepo, gateway, pointSvc, userService,
                 new TossProperties(CLIENT_KEY, "test_sk_secret", null)
         );
         userId = userRepo.save(User.createSocialUser(
