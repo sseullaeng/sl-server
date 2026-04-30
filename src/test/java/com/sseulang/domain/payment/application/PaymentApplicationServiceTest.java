@@ -5,6 +5,8 @@ import com.sseulang.domain.payment.application.dto.ChargeStartCommand;
 import com.sseulang.domain.payment.application.dto.ChargeStartResult;
 import com.sseulang.domain.payment.application.dto.PaymentResult;
 import com.sseulang.domain.payment.domain.PaymentStatus;
+import com.sseulang.domain.point.application.InMemoryFakePointHistoryRepository;
+import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.user.application.InMemoryFakeUserRepository;
 import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.domain.user.domain.Email;
@@ -27,6 +29,7 @@ class PaymentApplicationServiceTest {
     private InMemoryFakePaymentRepository paymentRepo;
     private FakePaymentGateway gateway;
     private InMemoryFakeUserRepository userRepo;
+    private InMemoryFakePointHistoryRepository pointHistoryRepo;
     private UserApplicationService userService;
     private PaymentApplicationService service;
     private Long userId;
@@ -37,9 +40,11 @@ class PaymentApplicationServiceTest {
         paymentRepo = new InMemoryFakePaymentRepository();
         gateway = new FakePaymentGateway();
         userRepo = new InMemoryFakeUserRepository();
+        pointHistoryRepo = new InMemoryFakePointHistoryRepository();
         userService = new UserApplicationService(userRepo);
+        PointApplicationService pointSvc = new PointApplicationService(userService, pointHistoryRepo);
         service = new PaymentApplicationService(
-                paymentRepo, gateway, userService,
+                paymentRepo, gateway, pointSvc,
                 new TossProperties(CLIENT_KEY, "test_sk_secret", null)
         );
         userId = userRepo.save(User.createSocialUser(

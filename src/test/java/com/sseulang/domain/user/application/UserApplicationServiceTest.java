@@ -156,6 +156,37 @@ class UserApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("deductPoint_affected=1_정상")
+    void deductPoint_정상() {
+        when(userRepository.deductPointBalance(7L, 30_000L)).thenReturn(1);
+
+        service.deductPoint(7L, 30_000L);
+
+        verify(userRepository, times(1)).deductPointBalance(7L, 30_000L);
+    }
+
+    @Test
+    @DisplayName("deductPoint_affected=0 (잔액 부족 또는 미존재)_INSUFFICIENT_POINT")
+    void deductPoint_잔액부족() {
+        when(userRepository.deductPointBalance(7L, 30_000L)).thenReturn(0);
+
+        assertThatThrownBy(() -> service.deductPoint(7L, 30_000L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INSUFFICIENT_POINT);
+    }
+
+    @Test
+    @DisplayName("deductPoint_amount<=0_IllegalArgumentException_repository 호출 X")
+    void deductPoint_invalid_amount() {
+        assertThatThrownBy(() -> service.deductPoint(7L, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.deductPoint(7L, -1L))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(userRepository, never()).deductPointBalance(any(), org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
     @DisplayName("creditPoint_amount<=0_IllegalArgumentException_repository 호출 X")
     void creditPoint_invalid_amount() {
         assertThatThrownBy(() -> service.creditPoint(7L, 0L))

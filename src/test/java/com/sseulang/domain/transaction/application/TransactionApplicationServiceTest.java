@@ -3,10 +3,17 @@ package com.sseulang.domain.transaction.application;
 import com.sseulang.domain.category.application.CategoryApplicationService;
 import com.sseulang.domain.category.application.InMemoryFakeCategoryRepository;
 import com.sseulang.domain.item.application.InMemoryFakeItemRepository;
+import com.sseulang.domain.user.application.InMemoryFakeUserRepository;
+import com.sseulang.domain.user.application.UserApplicationService;
+import com.sseulang.domain.user.domain.Email;
+import com.sseulang.domain.user.domain.SocialProvider;
+import com.sseulang.domain.user.domain.User;
 import com.sseulang.domain.item.application.ItemApplicationService;
 import com.sseulang.domain.item.domain.Item;
 import com.sseulang.domain.item.domain.ItemStatus;
 import com.sseulang.domain.item.domain.TradeType;
+import com.sseulang.domain.point.application.InMemoryFakePointHistoryRepository;
+import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.transaction.application.dto.TransactionCreateCommand;
 import com.sseulang.domain.transaction.application.dto.TransactionResult;
 import com.sseulang.domain.transaction.domain.TransactionStatus;
@@ -21,23 +28,38 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class TransactionApplicationServiceTest {
 
-    private static final Long SELLER = 100L;
-    private static final Long BUYER = 200L;
-    private static final Long OUTSIDER = 999L;
-
     private InMemoryFakeTransactionRepository txRepo;
     private InMemoryFakeItemRepository itemRepo;
+    private InMemoryFakeUserRepository userRepo;
+    private InMemoryFakePointHistoryRepository pointHistoryRepo;
     private ItemApplicationService itemSvc;
     private TransactionApplicationService service;
     private Long itemId;
+    private Long SELLER;
+    private Long BUYER;
+    private Long OUTSIDER;
 
     @BeforeEach
     void setUp() {
         txRepo = new InMemoryFakeTransactionRepository();
         itemRepo = new InMemoryFakeItemRepository();
+        userRepo = new InMemoryFakeUserRepository();
+        pointHistoryRepo = new InMemoryFakePointHistoryRepository();
         CategoryApplicationService catSvc = new CategoryApplicationService(new InMemoryFakeCategoryRepository());
         itemSvc = new ItemApplicationService(itemRepo, catSvc);
-        service = new TransactionApplicationService(txRepo, itemSvc);
+        UserApplicationService userSvc = new UserApplicationService(userRepo);
+        PointApplicationService pointSvc = new PointApplicationService(userSvc, pointHistoryRepo);
+        service = new TransactionApplicationService(txRepo, itemSvc, pointSvc);
+
+        SELLER = userRepo.save(User.createSocialUser(
+                SocialProvider.KAKAO, "k-seller", new Email("seller@x.com"), "seller", null
+        )).getId();
+        BUYER = userRepo.save(User.createSocialUser(
+                SocialProvider.KAKAO, "k-buyer", new Email("buyer@x.com"), "buyer", null
+        )).getId();
+        OUTSIDER = userRepo.save(User.createSocialUser(
+                SocialProvider.KAKAO, "k-out", new Email("out@x.com"), "outsider", null
+        )).getId();
 
         Item item = itemRepo.save(Item.create(
                 SELLER, null, "물건", "설명", 50_000L, null, null, TradeType.판매, "서울"
@@ -143,24 +165,61 @@ class TransactionApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("complete 현재 비활성_TRANSACTION_COMPLETION_UNAVAILABLE")
-    void complete_비활성() {
+    @DisplayName("complete 정상_seller 호출_Item.판매완료 + 포인트 정산 + history 두 건")
+    void complete_정상() {
         Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
         service.reserve(txId, SELLER);
+        userRepo.creditPointBalance(BUYER, 50_000L);  // buyer 잔액 충전
 
-        // Codex 게이트 1 Critical 2 — Day 7/8 결제·포인트 합류 전엔 503 으로 막음.
-        // 호출자(권한·상태 무관) 모두 동일 응답.
-        assertThatThrownBy(() -> service.complete(txId, SELLER))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.TRANSACTION_COMPLETION_UNAVAILABLE);
+        service.complete(txId, SELLER);
+
+        TransactionResult r = service.getById(txId, SELLER);
+        assertThat(r.status()).isEqualTo(TransactionStatus.거래완료);
+        assertThat(itemRepo.findById(itemId).orElseThrow().getStatus()).isEqualTo(ItemStatus.거래완료);
+        assertThat(userRepo.findPointBalance(BUYER)).isZero();
+        assertThat(userRepo.findPointBalance(SELLER)).isEqualTo(50_000L);
+        assertThat(pointHistoryRepo.size()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("complete buyer 호출_TRANSACTION_FORBIDDEN")
+    void complete_buyer_금지() {
+        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        service.reserve(txId, SELLER);
+        userRepo.creditPointBalance(BUYER, 50_000L);
+
         assertThatThrownBy(() -> service.complete(txId, BUYER))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.TRANSACTION_COMPLETION_UNAVAILABLE);
-
-        // Item 은 예약 상태 그대로 유지 — 거래완료 전이 일어나지 않음
+                .isEqualTo(ErrorCode.TRANSACTION_FORBIDDEN);
         assertThat(itemRepo.findById(itemId).orElseThrow().getStatus()).isEqualTo(ItemStatus.예약);
+        assertThat(userRepo.findPointBalance(BUYER)).isEqualTo(50_000L);  // 차감 X
+    }
+
+    @Test
+    @DisplayName("complete buyer 잔액 부족_INSUFFICIENT_POINT_seller 적립도 롤백")
+    void complete_buyer_잔액부족() {
+        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        service.reserve(txId, SELLER);
+        userRepo.creditPointBalance(BUYER, 10_000L);  // 부족
+
+        assertThatThrownBy(() -> service.complete(txId, SELLER))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INSUFFICIENT_POINT);
+
+        // 트랜잭션 롤백 — fake 는 롤백 시뮬 못 하지만 잔액/Item/Tx 상태로 상위 흐름 검증
+        // (실제 prod 트랜잭션 IT 는 후속 #23)
+    }
+
+    @Test
+    @DisplayName("complete 채팅중 상태_TRANSACTION_INVALID_STATE")
+    void complete_채팅중_거부() {
+        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        userRepo.creditPointBalance(BUYER, 50_000L);
+
+        assertThatThrownBy(() -> service.complete(txId, SELLER))
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test

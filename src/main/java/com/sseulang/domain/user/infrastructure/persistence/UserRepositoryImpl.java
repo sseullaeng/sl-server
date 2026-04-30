@@ -46,4 +46,14 @@ public class UserRepositoryImpl implements UserRepository {
     public int creditPointBalance(Long userId, long amount) {
         return jpa.creditPointBalance(userId, amount);
     }
+
+    @Override
+    public int deductPointBalance(Long userId, long amount) {
+        return jpa.deductPointBalance(userId, amount);
+    }
+
+    @Override
+    public Long findPointBalance(Long userId) {
+        return jpa.findPointBalanceById(userId);
+    }
 }

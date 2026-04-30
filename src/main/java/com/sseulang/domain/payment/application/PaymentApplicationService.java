@@ -8,7 +8,9 @@ import com.sseulang.domain.payment.domain.Payment;
 import com.sseulang.domain.payment.domain.PaymentConfirmResult;
 import com.sseulang.domain.payment.domain.PaymentGateway;
 import com.sseulang.domain.payment.domain.PaymentRepository;
-import com.sseulang.domain.user.application.UserApplicationService;
+import com.sseulang.domain.point.application.PointApplicationService;
+import com.sseulang.domain.point.domain.PointHistoryType;
+import com.sseulang.domain.point.domain.PointReferenceType;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import com.sseulang.global.infra.payment.TossProperties;
@@ -39,18 +41,18 @@ public class PaymentApplicationService {
 
     private final PaymentRepository paymentRepository;
     private final PaymentGateway paymentGateway;
-    private final UserApplicationService userApplicationService;
+    private final PointApplicationService pointApplicationService;
     private final TossProperties tossProperties;
 
     public PaymentApplicationService(
             PaymentRepository paymentRepository,
             PaymentGateway paymentGateway,
-            UserApplicationService userApplicationService,
+            PointApplicationService pointApplicationService,
             TossProperties tossProperties
     ) {
         this.paymentRepository = paymentRepository;
         this.paymentGateway = paymentGateway;
-        this.userApplicationService = userApplicationService;
+        this.pointApplicationService = pointApplicationService;
         this.tossProperties = tossProperties;
     }
 
@@ -114,8 +116,15 @@ public class PaymentApplicationService {
         );
 
         if (newlyPaid) {
-            // 가이드 §4.8 — 충전 성공 시 atomic point_balance 증가.
-            userApplicationService.creditPoint(payment.getUserId(), payment.getAmount());
+            // 가이드 §4.8 — 충전 성공 시 atomic point_balance 증가 + history 적재 (Day 8 PointApplicationService 도입).
+            pointApplicationService.credit(
+                    payment.getUserId(),
+                    payment.getAmount(),
+                    PointHistoryType.충전,
+                    PointReferenceType.PAYMENT,
+                    payment.getId(),
+                    "토스 충전"
+            );
         }
 
         return PaymentResult.from(payment);
