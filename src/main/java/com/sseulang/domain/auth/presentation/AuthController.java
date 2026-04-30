@@ -12,6 +12,7 @@ import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import com.sseulang.global.security.CookieUtil;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "Auth", description = "회원가입 / 로그인 (LOCAL·OAuth) / 토큰 / 로그아웃")
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {

@@ -10,6 +10,7 @@ import com.sseulang.domain.item.presentation.dto.ItemSummaryResponse;
 import com.sseulang.domain.item.presentation.dto.ItemUpdateRequest;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "Item", description = "물품 등록·검색·수정·삭제·예약 상태 조회")
 @RestController
 @RequestMapping("/api/v1/items")
 public class ItemController {

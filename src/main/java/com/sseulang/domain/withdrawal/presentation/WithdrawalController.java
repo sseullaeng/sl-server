@@ -5,6 +5,7 @@ import com.sseulang.domain.withdrawal.presentation.dto.WithdrawalRequest;
 import com.sseulang.domain.withdrawal.presentation.dto.WithdrawalResponse;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "Withdrawal", description = "포인트 출금 신청 — 신청 시 즉시 잔액 차감 + 관리자 승인 후 외부 이체.")
 @RestController
 @RequestMapping("/api/v1/withdrawals")
 public class WithdrawalController {

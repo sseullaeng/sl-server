@@ -6,6 +6,7 @@ import com.sseulang.domain.delivery.presentation.dto.DeliveryCreateRequest;
 import com.sseulang.domain.delivery.presentation.dto.DeliveryResponse;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "Delivery", description = "배달대행 — 모집중→수락→배송중→배송완료→정산완료 (또는 취소).")
 @RestController
 @RequestMapping("/api/v1/deliveries")
 public class DeliveryController {
