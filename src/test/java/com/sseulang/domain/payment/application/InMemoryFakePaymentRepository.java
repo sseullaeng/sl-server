@@ -2,6 +2,7 @@ package com.sseulang.domain.payment.application;
 
 import com.sseulang.domain.payment.domain.Payment;
 import com.sseulang.domain.payment.domain.PaymentRepository;
+import com.sseulang.domain.payment.domain.PaymentStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.HashMap;
@@ -38,5 +39,18 @@ public class InMemoryFakePaymentRepository implements PaymentRepository {
         }
         store.put(payment.getId(), payment);
         return payment;
+    }
+
+    @Override
+    public long sumPaidAmount() {
+        return store.values().stream()
+                .filter(p -> p.getStatus() == PaymentStatus.완료)
+                .mapToLong(Payment::getAmount)
+                .sum();
+    }
+
+    @Override
+    public long countPaid() {
+        return store.values().stream().filter(p -> p.getStatus() == PaymentStatus.완료).count();
     }
 }

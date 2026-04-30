@@ -46,4 +46,21 @@ public interface UserRepository {
      * 잔액 단건 scalar 조회. atomic UPDATE 직후 balance_after 적재용 — 영속성 컨텍스트 stale 우회.
      */
     Long findPointBalance(Long userId);
+
+    // ───────── 관리자 통계 ─────────
+
+    /** 전체 사용자 수 (차단/삭제 포함). */
+    long countAll();
+
+    /** is_blocked=true 사용자 수. */
+    long countBlocked();
+
+    /** is_deleted=true 사용자 수. */
+    long countDeleted();
+
+    /**
+     * 정상(차단 X, 삭제 X) 사용자 수. blocked && deleted 동시 true 인 사용자가 있어도 정확.
+     * 게이트 2 보강 — total - blocked - deleted 의 이중 차감 회피.
+     */
+    long countActive();
 }

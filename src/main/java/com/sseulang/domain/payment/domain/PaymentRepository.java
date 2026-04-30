@@ -12,4 +12,12 @@ public interface PaymentRepository {
     Optional<Payment> findByMerchantUidForUpdate(String merchantUid);
 
     Payment save(Payment payment);
+
+    // ───────── 관리자 통계 ─────────
+
+    /** status=완료 결제의 paid_amount 합계. 미완료 결제는 제외. */
+    long sumPaidAmount();
+
+    /** status=완료 결제 건수. */
+    long countPaid();
 }

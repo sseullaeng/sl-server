@@ -3,6 +3,7 @@ package com.sseulang.domain.withdrawal.application;
 import com.sseulang.domain.withdrawal.domain.Withdrawal;
 import com.sseulang.domain.withdrawal.domain.WithdrawalRepository;
 import com.sseulang.domain.withdrawal.domain.WithdrawalStatus;
+import com.sseulang.domain.withdrawal.domain.WithdrawalStatusCount;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -68,5 +69,22 @@ public class InMemoryFakeWithdrawalRepository implements WithdrawalRepository {
                 .sorted(Comparator.comparing(Withdrawal::getId).reversed())
                 .toList();
         return new PageImpl<>(filtered, pageable, filtered.size());
+    }
+
+    @Override
+    public List<WithdrawalStatusCount> countGroupByStatus() {
+        return store.values().stream()
+                .collect(java.util.stream.Collectors.groupingBy(Withdrawal::getStatus, java.util.stream.Collectors.counting()))
+                .entrySet().stream()
+                .map(e -> new WithdrawalStatusCount(e.getKey(), e.getValue()))
+                .toList();
+    }
+
+    @Override
+    public long sumCompletedAmount() {
+        return store.values().stream()
+                .filter(w -> w.getStatus() == WithdrawalStatus.완료)
+                .mapToLong(Withdrawal::getAmount)
+                .sum();
     }
 }

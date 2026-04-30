@@ -2,8 +2,10 @@ package com.sseulang.domain.transaction.infrastructure.persistence;
 
 import com.sseulang.domain.transaction.domain.Transaction;
 import com.sseulang.domain.transaction.domain.TransactionRepository;
+import com.sseulang.domain.transaction.domain.TransactionStatusCount;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -28,5 +30,10 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     @Override
     public Transaction save(Transaction transaction) {
         return jpa.save(transaction);
+    }
+
+    @Override
+    public List<TransactionStatusCount> countGroupByStatus() {
+        return jpa.countGroupByStatusJpql();
     }
 }

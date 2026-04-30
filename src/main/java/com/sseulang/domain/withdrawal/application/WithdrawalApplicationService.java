@@ -5,9 +5,11 @@ import com.sseulang.domain.point.domain.PointHistoryType;
 import com.sseulang.domain.point.domain.PointReferenceType;
 import com.sseulang.domain.withdrawal.application.dto.WithdrawalRequestCommand;
 import com.sseulang.domain.withdrawal.application.dto.WithdrawalResult;
+import com.sseulang.domain.withdrawal.application.dto.WithdrawalStatsResult;
 import com.sseulang.domain.withdrawal.domain.Withdrawal;
 import com.sseulang.domain.withdrawal.domain.WithdrawalRepository;
 import com.sseulang.domain.withdrawal.domain.WithdrawalStatus;
+import com.sseulang.domain.withdrawal.domain.WithdrawalStatusCount;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import org.slf4j.Logger;
@@ -23,6 +25,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.EnumMap;
+import java.util.Map;
 
 /**
  * 가이드 §4.8 출금 흐름:
@@ -206,6 +210,21 @@ public class WithdrawalApplicationService {
 
     public Page<WithdrawalResult> adminFindByStatus(WithdrawalStatus status, Pageable pageable) {
         return withdrawalRepository.findByStatus(status, pageable).map(WithdrawalResult::from);
+    }
+
+    /** 관리자 출금 통계 — total + byStatus + 완료된 출금 누적 금액. 단일 GROUP BY + 단일 SUM. */
+    public WithdrawalStatsResult adminGetStats() {
+        Map<WithdrawalStatus, Long> byStatus = new EnumMap<>(WithdrawalStatus.class);
+        for (WithdrawalStatus s : WithdrawalStatus.values()) {
+            byStatus.put(s, 0L);
+        }
+        long total = 0;
+        for (WithdrawalStatusCount row : withdrawalRepository.countGroupByStatus()) {
+            byStatus.put(row.status(), row.count());
+            total += row.count();
+        }
+        long completedAmount = withdrawalRepository.sumCompletedAmount();
+        return new WithdrawalStatsResult(total, byStatus, completedAmount);
     }
 
     private void refund(Withdrawal w, String description) {

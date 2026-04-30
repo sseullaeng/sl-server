@@ -213,4 +213,36 @@ class UserApplicationServiceTest {
                 service.findOrCreateBySocial(SocialProvider.KAKAO, "k-1", EMAIL, "n", null))
                 .isSameAs(nicknameTooLong);
     }
+
+    // ───────── 관리자 통계 ─────────
+
+    @Test
+    @DisplayName("adminGetStats_total/blocked/deleted/active 모두 직접 집계")
+    void adminGetStats_정상() {
+        when(userRepository.countAll()).thenReturn(100L);
+        when(userRepository.countBlocked()).thenReturn(5L);
+        when(userRepository.countDeleted()).thenReturn(2L);
+        when(userRepository.countActive()).thenReturn(93L);
+
+        var stats = service.adminGetStats();
+        assertThat(stats.total()).isEqualTo(100L);
+        assertThat(stats.blocked()).isEqualTo(5L);
+        assertThat(stats.deleted()).isEqualTo(2L);
+        assertThat(stats.active()).isEqualTo(93L);
+    }
+
+    @Test
+    @DisplayName("adminGetStats_blocked && deleted 동시 사용자_active 별도 집계라 정확 (이중 차감 회귀 방지)")
+    void adminGetStats_이중_차감_없음() {
+        // 시나리오: 10명 중 blocked=7, deleted=7, blocked&&deleted=5. 정확한 active = 10 - (7 + 7 - 5) = 1
+        when(userRepository.countAll()).thenReturn(10L);
+        when(userRepository.countBlocked()).thenReturn(7L);
+        when(userRepository.countDeleted()).thenReturn(7L);
+        when(userRepository.countActive()).thenReturn(1L);
+
+        var stats = service.adminGetStats();
+        assertThat(stats.active())
+                .as("countActive 별도 쿼리라 이중 차감 없음 — 이전 (total - blocked - deleted) 방식이면 -4 였을 케이스")
+                .isEqualTo(1L);
+    }
 }

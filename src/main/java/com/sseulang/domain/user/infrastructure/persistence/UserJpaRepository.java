@@ -59,4 +59,17 @@ interface UserJpaRepository extends JpaRepository<User, Long> {
     Long findPointBalanceById(@Param("userId") Long userId);
 
     Page<User> findAllByOrderByIdDesc(Pageable pageable);
+
+    @Query("SELECT COUNT(u) FROM User u WHERE u.blocked = true")
+    long countBlocked();
+
+    @Query("SELECT COUNT(u) FROM User u WHERE u.deleted = true")
+    long countDeleted();
+
+    /**
+     * 정상 사용자 수 — blocked && deleted 동시 true 도 active 에서 제외. 복합 인덱스
+     * users(is_blocked, is_deleted) 사용 (V5 마이그레이션).
+     */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.blocked = false AND u.deleted = false")
+    long countActive();
 }

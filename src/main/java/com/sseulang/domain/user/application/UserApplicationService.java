@@ -1,5 +1,6 @@
 package com.sseulang.domain.user.application;
 
+import com.sseulang.domain.user.application.dto.UserStatsResult;
 import com.sseulang.domain.user.domain.Email;
 import com.sseulang.domain.user.domain.SocialProvider;
 import com.sseulang.domain.user.domain.User;
@@ -118,6 +119,20 @@ public class UserApplicationService {
     public void adminSetBlocked(Long userId, boolean blocked) {
         User u = getById(userId);
         if (blocked) u.block(); else u.unblock();
+    }
+
+    /**
+     * 관리자 회원 통계 — total / blocked / deleted / active 모두 직접 집계.
+     * active 는 별도 쿼리(`WHERE blocked=false AND deleted=false`) 로 정확 — 이중 차감(blocked &&
+     * deleted) 시나리오에서도 정확 (게이트 2 보강).
+     * stats 도메인이 본 메서드만 의존하도록 하여 UserRepository 직접 호출 차단 (CLAUDE.md §3.3).
+     */
+    public UserStatsResult adminGetStats() {
+        long total = userRepository.countAll();
+        long blocked = userRepository.countBlocked();
+        long deleted = userRepository.countDeleted();
+        long active = userRepository.countActive();
+        return new UserStatsResult(total, blocked, deleted, active);
     }
 
     private User create(SocialProvider provider, String providerId, Email email, String nickname, String profileImage) {

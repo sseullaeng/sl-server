@@ -34,4 +34,14 @@ public class PaymentRepositoryImpl implements PaymentRepository {
     public Payment save(Payment payment) {
         return jpa.save(payment);
     }
+
+    @Override
+    public long sumPaidAmount() {
+        return jpa.sumPaidAmount();
+    }
+
+    @Override
+    public long countPaid() {
+        return jpa.countPaid();
+    }
 }
