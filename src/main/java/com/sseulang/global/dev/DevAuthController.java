@@ -75,7 +75,8 @@ public class DevAuthController {
         );
         String role = "USER";
         String at = jwtProvider.issueAccessToken(user.getId(), role);
-        String rt = jwtProvider.issueRefreshToken(user.getId(), role);
+        // dev 우회 — RefreshTokenStore 등록 없이 발급. tv=0 으로 박지만 어차피 rotate 는 store 미등록으로 실패함.
+        String rt = jwtProvider.issueRefreshToken(user.getId(), role, 0L);
 
         // CSRF 토큰을 응답 쿠키로 강제 박기 — Spring Security 6 deferred load 회피.
         // 후속 POST/PATCH 요청에서 X-XSRF-TOKEN 헤더로 echo 가능하도록.

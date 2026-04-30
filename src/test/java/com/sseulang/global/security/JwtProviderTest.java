@@ -45,15 +45,25 @@ class JwtProviderTest {
     }
 
     @Test
-    @DisplayName("RefreshToken 발급_정상_userId/role/jti 포함되고 7일 뒤 만료")
+    @DisplayName("RefreshToken 발급_정상_userId/role/jti/tv 포함되고 7일 뒤 만료")
     void issueRefreshToken_정상_payload포함_7일만료() {
-        String token = provider.issueRefreshToken(42L, "USER");
+        String token = provider.issueRefreshToken(42L, "USER", 3L);
 
         JwtClaims claims = provider.parse(token);
         assertThat(claims.userId()).isEqualTo(42L);
         assertThat(claims.role()).isEqualTo("USER");
         assertThat(claims.jti()).isNotBlank();
+        assertThat(claims.tokenVersion()).isEqualTo(3L);
         assertThat(claims.expiresAt()).isEqualTo(FIXED_NOW.plusSeconds(RT_VALIDITY));
+    }
+
+    @Test
+    @DisplayName("AccessToken parse 결과_tokenVersion은 null (RT 전용 claim)")
+    void accessToken_tokenVersion_null() {
+        String token = provider.issueAccessToken(42L, "USER");
+
+        JwtClaims claims = provider.parse(token);
+        assertThat(claims.tokenVersion()).isNull();
     }
 
     @Test

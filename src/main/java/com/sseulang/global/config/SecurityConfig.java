@@ -13,6 +13,8 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
@@ -81,6 +83,12 @@ public class SecurityConfig {
         return handler;
     }
 
+    /** 관리자 비밀번호 BCrypt 인코더. AdminLoginService 가 password 검증에 사용. */
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
     @Bean
     @Order(1)
     public SecurityFilterChain adminFilterChain(HttpSecurity http) throws Exception {
@@ -115,7 +123,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/items/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook/**").permitAll()
-                        .anyRequest().authenticated())
+                        // ROLE_USER 강제 — ADMIN AT 가 user 영역(특히 출금/결제) 진입하지 못하도록 차단.
+                        // adminId 와 userId 가 동일 숫자면 본인 검사도 통과해버리는 격리 누수 방지 (게이트 1).
+                        .anyRequest().hasRole("USER"))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(csrfCookieFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

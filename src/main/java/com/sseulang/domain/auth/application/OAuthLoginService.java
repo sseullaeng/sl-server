@@ -87,9 +87,11 @@ public class OAuthLoginService {
         }
 
         String at = jwtProvider.issueAccessToken(user.getId(), DEFAULT_ROLE);
-        String rt = jwtProvider.issueRefreshToken(user.getId(), DEFAULT_ROLE);
+        // tv: store 의 현재 버전을 RT claim 에 박는다. 이후 revokeAll → INCR 시 본 RT 는 mismatch 로 거부됨.
+        long tv = refreshTokenStore.currentTokenVersion(DEFAULT_ROLE, user.getId());
+        String rt = jwtProvider.issueRefreshToken(user.getId(), DEFAULT_ROLE, tv);
         String rtJti = jwtProvider.parse(rt).jti();
-        refreshTokenStore.save(user.getId(), rtJti, refreshTokenTtl);
+        refreshTokenStore.save(DEFAULT_ROLE, user.getId(), rtJti, refreshTokenTtl);
 
         return new TokenPair(at, rt);
     }

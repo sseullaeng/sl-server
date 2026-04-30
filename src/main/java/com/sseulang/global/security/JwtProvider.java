@@ -22,6 +22,7 @@ import java.util.UUID;
 public class JwtProvider {
 
     private static final String CLAIM_ROLE = "role";
+    private static final String CLAIM_TOKEN_VERSION = "tv";
 
     private final JwtProperties props;
     private final Clock clock;
@@ -51,12 +52,18 @@ public class JwtProvider {
                 .compact();
     }
 
-    public String issueRefreshToken(Long userId, String role) {
+    /**
+     * RT 발급. {@code tokenVersion} 은 호출 직전에 {@code RefreshTokenStore.currentTokenVersion}
+     * 으로 조회한 값. (role,userId) 의 revokeAll 시 store 측 tv 가 INCR 되어, 이 RT 의
+     * claim.tv 와 mismatch → 다음 rotate 에서 거부된다.
+     */
+    public String issueRefreshToken(Long userId, String role, long tokenVersion) {
         Instant now = clock.instant();
         Instant exp = now.plusSeconds(props.refreshTokenValiditySeconds());
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim(CLAIM_ROLE, role)
+                .claim(CLAIM_TOKEN_VERSION, tokenVersion)
                 .id(UUID.randomUUID().toString())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(exp))
@@ -75,6 +82,7 @@ public class JwtProvider {
                     Long.valueOf(c.getSubject()),
                     c.get(CLAIM_ROLE, String.class),
                     c.getId(),
+                    extractTokenVersion(c),
                     c.getIssuedAt().toInstant(),
                     c.getExpiration().toInstant()
             );
@@ -83,5 +91,20 @@ public class JwtProvider {
         } catch (JwtException | IllegalArgumentException e) {
             throw new BusinessException(ErrorCode.AUTH_TOKEN_INVALID);
         }
+    }
+
+    /**
+     * tv claim 추출 — RT 에는 항상 존재, AT 에는 없음 (null). 정수형이면 Number 로,
+     * 누락이면 null 반환. 호출자(RotationService) 가 null 인 RT 를 INVALID 로 처리한다.
+     */
+    private static Long extractTokenVersion(Claims c) {
+        Object v = c.get(CLAIM_TOKEN_VERSION);
+        if (v == null) {
+            return null;
+        }
+        if (v instanceof Number n) {
+            return n.longValue();
+        }
+        return null;
     }
 }

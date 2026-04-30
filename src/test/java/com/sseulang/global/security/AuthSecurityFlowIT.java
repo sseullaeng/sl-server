@@ -76,7 +76,7 @@ class AuthSecurityFlowIT {
     @Test
     @DisplayName("유효한 AT 쿠키_보호된 엔드포인트 200")
     void 유효AT_보호된엔드포인트_200() throws Exception {
-        JwtClaims claims = new JwtClaims(1L, "USER", "jti-1",
+        JwtClaims claims = new JwtClaims(1L, "USER", "jti-1", null,
                 Instant.parse("2026-04-28T03:00:00Z"),
                 Instant.parse("2026-04-28T03:30:00Z"));
         when(jwtProvider.parse(any())).thenReturn(claims);
@@ -90,6 +90,42 @@ class AuthSecurityFlowIT {
                         }))
                 .andExpect(status().isOk())
                 .andExpect(header().exists(TraceIdFilter.HEADER));
+    }
+
+    @Test
+    @DisplayName("ADMIN AT_user 영역 접근_403 (권한 격리: hasRole(\"USER\") 강제)")
+    void adminAT_user엔드포인트_403() throws Exception {
+        // 시나리오: adminId=1 인 ADMIN AT 가 /api/v1/test/protected (user chain) 접근 시도.
+        // 이전 .authenticated() 정책에선 인증만 됐다고 통과 — 본인 검사가 숫자 id 충돌하면 사용자 자원 접근 가능.
+        // 게이트 1 보강: hasRole("USER") 강제로 ADMIN AT 는 차단된다.
+        JwtClaims adminClaims = new JwtClaims(1L, "ADMIN", "admin-jti", null,
+                Instant.parse("2026-04-28T03:00:00Z"),
+                Instant.parse("2026-04-28T03:30:00Z"));
+        when(jwtProvider.parse(any())).thenReturn(adminClaims);
+        when(accessTokenBlacklist.isBlacklisted("admin-jti")).thenReturn(false);
+
+        mvc.perform(get("/api/v1/test/protected")
+                        .cookie(new Cookie(CookieUtil.ACCESS_TOKEN_COOKIE, "ADMIN_AT")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value(ErrorCode.FORBIDDEN.name()));
+    }
+
+    @Test
+    @DisplayName("role 누락 AT_user 영역 접근_403 (변조 / 구버전 토큰 방어)")
+    void roleMissingAT_user엔드포인트_403() throws Exception {
+        // role=null 로 발급된 토큰은 어떤 역할도 받지 못해 ROLE_null 부여 → hasRole("USER") fail.
+        // 명시적으로 권한 결과 검증해서 회귀 시 즉시 실패하도록.
+        JwtClaims noRoleClaims = new JwtClaims(1L, null, "jti-x", null,
+                Instant.parse("2026-04-28T03:00:00Z"),
+                Instant.parse("2026-04-28T03:30:00Z"));
+        when(jwtProvider.parse(any())).thenReturn(noRoleClaims);
+        when(accessTokenBlacklist.isBlacklisted("jti-x")).thenReturn(false);
+
+        mvc.perform(get("/api/v1/test/protected")
+                        .cookie(new Cookie(CookieUtil.ACCESS_TOKEN_COOKIE, "NOROLE_AT")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value(ErrorCode.FORBIDDEN.name()));
     }
 
     @Test
