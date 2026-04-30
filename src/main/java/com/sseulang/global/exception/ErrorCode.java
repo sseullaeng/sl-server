@@ -81,7 +81,14 @@ public enum ErrorCode {
 
     // 파일
     FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "파일 업로드에 실패했습니다."),
-    FILE_VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "파일 검증에 실패했습니다.");
+    FILE_VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "파일 검증에 실패했습니다."),
+
+    // 배달대행
+    DELIVERY_NOT_FOUND(HttpStatus.NOT_FOUND, "배달 요청을 찾을 수 없습니다."),
+    DELIVERY_FORBIDDEN(HttpStatus.FORBIDDEN, "배달 요청에 대한 권한이 없습니다."),
+    DELIVERY_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서 수행할 수 없는 동작입니다."),
+    DELIVERY_ALREADY_ACCEPTED(HttpStatus.CONFLICT, "이미 다른 라이더가 수락한 요청입니다."),
+    DELIVERY_SELF_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "본인이 등록한 요청은 수락할 수 없습니다.");
 
     private final HttpStatus status;
     private final String defaultMessage;
