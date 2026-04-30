@@ -44,7 +44,7 @@ class WithdrawalApplicationServiceTest {
         PointApplicationService pointSvc = new PointApplicationService(userSvc, historyRepo);
         // self 는 REQUIRES_NEW proxy 용 — 단위 테스트엔 Spring 컨텍스트 없으니 자기 자신을 주입.
         // 단위 테스트의 InMemoryFake 는 deadlock/duplicate 던지지 않으므로 catch 경로 미진입.
-        service = new WithdrawalApplicationService(withdrawalRepo, pointSvc, null);
+        service = new WithdrawalApplicationService(withdrawalRepo, pointSvc, userSvc, null);
         ReflectionTestUtils.setField(service, "self", service);
 
         userId = userRepo.save(User.createSocialUser(

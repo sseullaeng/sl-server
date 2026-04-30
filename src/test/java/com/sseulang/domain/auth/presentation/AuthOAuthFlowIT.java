@@ -44,7 +44,11 @@ class AuthOAuthFlowIT {
         oauthLoginService = mock(OAuthLoginService.class);
         rotationService = mock(RefreshTokenRotationService.class);
         cookieUtil = mock(CookieUtil.class);
-        AuthController controller = new AuthController(rotationService, oauthLoginService, cookieUtil);
+        AuthController controller = new AuthController(
+                rotationService, oauthLoginService,
+                mock(com.sseulang.domain.auth.application.LocalAuthService.class),
+                cookieUtil
+        );
 
         mvc = MockMvcBuilders.standaloneSetup(controller)
                 .addFilter(new TraceIdFilter())

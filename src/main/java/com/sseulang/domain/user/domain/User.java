@@ -9,6 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -53,6 +54,22 @@ public class User extends BaseEntity {
     @Column(name = "social_id", length = 100)
     private String socialId;
 
+    /**
+     * BCrypt 해싱된 비밀번호. LOCAL 가입 사용자에게만 채워짐 (소셜 가입은 null).
+     * 평문 비밀번호 검증/해싱은 application layer 의 {@code LocalAuthService} 책임 — 도메인 layer 는
+     * Spring Security 의존 X (CLAUDE.md §3.3).
+     */
+    @Column(name = "password", length = 255)
+    private String password;
+
+    /**
+     * 이메일 소유 검증 여부. OAuth 가입자는 provider 가 검증한 이메일이라 자동 true,
+     * LOCAL 가입자는 인증 메일 클릭 후 true. 민감 기능 (거래/결제/출금/Item 등록) 가드의 기준.
+     * V6 마이그레이션에서 컬럼 추가 + OAuth 사용자 backfill.
+     */
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
     @Column(name = "is_blocked", nullable = false)
     private boolean blocked;
 
@@ -83,6 +100,15 @@ public class User extends BaseEntity {
     private long pointBalance;
 
     /**
+     * JPA optimistic lock — V7 마이그레이션. LOCAL takeover 처럼 read-modify-write 흐름에서 두
+     * 트랜잭션이 같은 user 를 동시 변경하면 OptimisticLockException 으로 한 쪽이 실패한다 (게이트 1).
+     * 단순 atomic UPDATE (point_balance 등) 는 본 컬럼을 갱신하지 않는다 — JPA dirty-check 시점에만 동작.
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
+
+    /**
      * 소셜 가입 흐름의 정적 팩토리. (provider, providerId) 가 비어있을 수 없으며 LOCAL 은 거부.
      * 일반 회원가입 흐름은 별도 팩토리(예: {@code createLocalUser})로 분리.
      */
@@ -109,9 +135,68 @@ public class User extends BaseEntity {
         u.profileImage = profileImage;
         u.socialProvider = provider;
         u.socialId = providerId;
+        u.emailVerified = true;  // OAuth provider 가 이메일 소유 검증 — 자동 verified
         u.blocked = false;
         u.deleted = false;
         return u;
+    }
+
+    /**
+     * LOCAL 가입 정적 팩토리. 비밀번호는 호출자(LocalAuthService) 가 BCrypt 해싱한 결과만 받음 —
+     * 도메인 layer 가 평문/해싱 전환 책임지지 않음 (Spring Security 의존성 회피, CLAUDE.md §3.3).
+     */
+    public static User createLocalUser(Email email, String hashedPassword, String nickname) {
+        if (email == null) {
+            throw new IllegalArgumentException("email 은 필수입니다");
+        }
+        if (hashedPassword == null || hashedPassword.isBlank()) {
+            throw new IllegalArgumentException("hashedPassword 는 필수입니다");
+        }
+        if (nickname == null || nickname.isBlank()) {
+            throw new IllegalArgumentException("nickname 은 필수입니다");
+        }
+
+        User u = new User();
+        u.email = email.value();
+        u.nickname = nickname;
+        u.socialProvider = SocialProvider.LOCAL;
+        u.socialId = null;
+        u.password = hashedPassword;
+        u.emailVerified = false;  // LOCAL 가입은 인증 메일 클릭 전까지 false
+        u.blocked = false;
+        u.deleted = false;
+        return u;
+    }
+
+    /** LOCAL 가입 사용자만 비밀번호 보유. 소셜 가입은 null 반환. */
+    public boolean hasPassword() {
+        return password != null && !password.isBlank();
+    }
+
+    /** 이메일 인증 완료. 멱등 호출 가능. */
+    public void markEmailVerified() {
+        this.emailVerified = true;
+    }
+
+    /**
+     * OAuth takeover — 기존 LOCAL user 가 점유한 email 에 진짜 owner 가 OAuth 로 가입 시도.
+     * 기존 user 의 password 무효화 + social 정보 추가 + verified=true. 공격자(LOCAL 가입자)는
+     * 더 이상 비밀번호로 로그인 불가. 게이트 1: 이메일 선점 공격 무력화.
+     *
+     * <p>호출 전제: 같은 user 가 다른 OAuth provider 와 연결되지 않은 상태 — 호출자가 검증.</p>
+     */
+    public void linkSocial(SocialProvider provider, String socialId) {
+        if (provider == null || provider == SocialProvider.LOCAL) {
+            throw new IllegalArgumentException("소셜 provider 는 LOCAL 외여야 합니다");
+        }
+        if (socialId == null || socialId.isBlank()) {
+            throw new IllegalArgumentException("socialId 는 필수입니다");
+        }
+        this.socialProvider = provider;
+        this.socialId = socialId;
+        // takeover — 기존 LOCAL 비밀번호 무효화 (공격자 차단)
+        this.password = null;
+        this.emailVerified = true;
     }
 
     /** 도메인 layer 외부에서 raw String 대신 VO 로 다루도록 의미적 wrapper. */

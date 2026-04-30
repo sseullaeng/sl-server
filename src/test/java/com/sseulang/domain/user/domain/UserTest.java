@@ -62,4 +62,39 @@ class UserTest {
                 User.createSocialUser(SocialProvider.GOOGLE, "id", EMAIL, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("createLocalUser 정상_provider=LOCAL + hashedPassword 저장 + hasPassword=true")
+    void createLocalUser_정상() {
+        User u = User.createLocalUser(EMAIL, "$2a$10$hashed", "로컬");
+
+        assertThat(u.getEmail()).isEqualTo(EMAIL.value());
+        assertThat(u.getNickname()).isEqualTo("로컬");
+        assertThat(u.getSocialProvider()).isEqualTo(SocialProvider.LOCAL);
+        assertThat(u.getSocialId()).isNull();
+        assertThat(u.getPassword()).isEqualTo("$2a$10$hashed");
+        assertThat(u.hasPassword()).isTrue();
+        assertThat(u.isBlocked()).isFalse();
+        assertThat(u.isDeleted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("createLocalUser invalid 인자 거부")
+    void createLocalUser_invalid() {
+        assertThatThrownBy(() -> User.createLocalUser(null, "$2a$10$h", "n"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> User.createLocalUser(EMAIL, "", "n"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> User.createLocalUser(EMAIL, null, "n"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> User.createLocalUser(EMAIL, "$2a$10$h", ""))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("hasPassword_소셜 가입자는 false")
+    void hasPassword_소셜() {
+        User social = User.createSocialUser(SocialProvider.KAKAO, "k-1", EMAIL, "kakao", null);
+        assertThat(social.hasPassword()).isFalse();
+    }
 }

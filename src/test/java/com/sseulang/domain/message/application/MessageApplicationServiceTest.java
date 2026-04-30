@@ -46,8 +46,8 @@ class MessageApplicationServiceTest {
         publisher = new FakeRealtimePublisher();
         InMemoryFakeItemRepository itemRepo = new InMemoryFakeItemRepository();
         CategoryApplicationService catSvc = new CategoryApplicationService(new InMemoryFakeCategoryRepository());
-        ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc);
-        ChatRoomApplicationService roomSvc = new ChatRoomApplicationService(roomRepo, itemSvc);
+        ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class));
+        ChatRoomApplicationService roomSvc = new ChatRoomApplicationService(roomRepo, itemSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class));
         NotificationApplicationService notifSvc = new NotificationApplicationService(notifRepo);
         service = new MessageApplicationService(msgRepo, roomSvc, notifSvc, publisher);
 

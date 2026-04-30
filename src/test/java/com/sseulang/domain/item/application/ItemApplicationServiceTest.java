@@ -35,7 +35,8 @@ class ItemApplicationServiceTest {
         itemRepo = new InMemoryFakeItemRepository();
         categoryRepo = new InMemoryFakeCategoryRepository();
         CategoryApplicationService categoryService = new CategoryApplicationService(categoryRepo);
-        service = new ItemApplicationService(itemRepo, categoryService);
+        // requireVerified 가드는 기본 통과 (mock void no-op) — 단위 테스트는 비즈니스 로직 검증.
+        service = new ItemApplicationService(itemRepo, categoryService, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class));
         categoryId = categoryRepo.insert(Category.createRoot("디지털/가전", 1)).getId();
     }
 

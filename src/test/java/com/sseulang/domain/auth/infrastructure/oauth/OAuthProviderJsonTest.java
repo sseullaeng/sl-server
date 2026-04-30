@@ -19,13 +19,15 @@ class OAuthProviderJsonTest {
     private ObjectMapper om;
 
     @Test
-    @DisplayName("Kakao /v2/user/me 응답 파싱_id/email/nickname/profile_image_url")
+    @DisplayName("Kakao /v2/user/me 응답 파싱_id/email/verified flags/nickname/profile_image_url")
     void kakao_응답_파싱() throws Exception {
         String json = """
                 {
                   "id": 1234567890,
                   "kakao_account": {
                     "email": "user@kakao.com",
+                    "is_email_valid": true,
+                    "is_email_verified": true,
                     "profile": {
                       "nickname": "쓸랭이",
                       "profile_image_url": "https://img.kakao/u.png"
@@ -39,8 +41,52 @@ class OAuthProviderJsonTest {
 
         assertThat(res.id()).isEqualTo(1234567890L);
         assertThat(res.kakaoAccount().email()).isEqualTo("user@kakao.com");
+        assertThat(res.kakaoAccount().isEmailValid()).isTrue();
+        assertThat(res.kakaoAccount().isEmailVerified()).isTrue();
         assertThat(res.kakaoAccount().profile().nickname()).isEqualTo("쓸랭이");
         assertThat(res.kakaoAccount().profile().profileImageUrl()).isEqualTo("https://img.kakao/u.png");
+    }
+
+    @Test
+    @DisplayName("Kakao 응답_verified flags 부재(null)_매핑 (provider 거부 회귀 보호)")
+    void kakao_응답_verified_flags_null() throws Exception {
+        String json = """
+                {
+                  "id": 1,
+                  "kakao_account": {
+                    "email": "x@y.com",
+                    "profile": { "nickname": "n", "profile_image_url": null }
+                  }
+                }
+                """;
+
+        KakaoOAuthProvider.KakaoUserResponse res =
+                om.readValue(json, KakaoOAuthProvider.KakaoUserResponse.class);
+
+        assertThat(res.kakaoAccount().isEmailValid()).as("flag 부재 → null").isNull();
+        assertThat(res.kakaoAccount().isEmailVerified()).as("flag 부재 → null").isNull();
+    }
+
+    @Test
+    @DisplayName("Kakao 응답_is_email_verified=false_파싱 (provider 단계에서 OAuth 거부 회귀 보호)")
+    void kakao_응답_email_verified_false() throws Exception {
+        String json = """
+                {
+                  "id": 1,
+                  "kakao_account": {
+                    "email": "x@y.com",
+                    "is_email_valid": true,
+                    "is_email_verified": false,
+                    "profile": { "nickname": "n", "profile_image_url": null }
+                  }
+                }
+                """;
+
+        KakaoOAuthProvider.KakaoUserResponse res =
+                om.readValue(json, KakaoOAuthProvider.KakaoUserResponse.class);
+
+        assertThat(res.kakaoAccount().isEmailValid()).isTrue();
+        assertThat(res.kakaoAccount().isEmailVerified()).isFalse();
     }
 
     @Test

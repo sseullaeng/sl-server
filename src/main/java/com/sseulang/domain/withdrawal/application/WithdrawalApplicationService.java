@@ -3,6 +3,7 @@ package com.sseulang.domain.withdrawal.application;
 import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.point.domain.PointHistoryType;
 import com.sseulang.domain.point.domain.PointReferenceType;
+import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.domain.withdrawal.application.dto.WithdrawalRequestCommand;
 import com.sseulang.domain.withdrawal.application.dto.WithdrawalResult;
 import com.sseulang.domain.withdrawal.application.dto.WithdrawalStatsResult;
@@ -50,6 +51,7 @@ public class WithdrawalApplicationService {
 
     private final WithdrawalRepository withdrawalRepository;
     private final PointApplicationService pointApplicationService;
+    private final UserApplicationService userApplicationService;
     /**
      * 자기 자신 proxy — {@link #request} 가 {@link #insertWithDeduct} 를 별도 트랜잭션으로 호출하기 위해
      * 사용한다. 직접 {@code this.insertWithDeduct(...)} 로 호출하면 Spring AOP 가 가로채지 못해
@@ -61,10 +63,12 @@ public class WithdrawalApplicationService {
     public WithdrawalApplicationService(
             WithdrawalRepository withdrawalRepository,
             PointApplicationService pointApplicationService,
+            UserApplicationService userApplicationService,
             @Lazy WithdrawalApplicationService self
     ) {
         this.withdrawalRepository = withdrawalRepository;
         this.pointApplicationService = pointApplicationService;
+        this.userApplicationService = userApplicationService;
         this.self = self;
     }
 
@@ -87,6 +91,8 @@ public class WithdrawalApplicationService {
         if (cmd.amount() <= 0) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST);
         }
+        // 자금 인출 — 이메일 인증 필수 (게이트 1).
+        userApplicationService.requireVerified(cmd.userId());
 
         // 1) Fast path — 기존 신청 dedup. payload 가 다르면 클라이언트 버그 시그널 → 명시 거부.
         var existing = withdrawalRepository.findByUserIdAndIdempotencyKey(cmd.userId(), cmd.idempotencyKey());

@@ -1,6 +1,7 @@
 package com.sseulang.domain.item.application;
 
 import com.sseulang.domain.category.application.CategoryApplicationService;
+import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.domain.item.application.dto.ItemDetailResult;
 import com.sseulang.domain.item.application.dto.ItemForTransactionResult;
 import com.sseulang.domain.item.application.dto.ItemRegisterCommand;
@@ -25,17 +26,22 @@ public class ItemApplicationService {
 
     private final ItemRepository itemRepository;
     private final CategoryApplicationService categoryApplicationService;
+    private final UserApplicationService userApplicationService;
 
     public ItemApplicationService(
             ItemRepository itemRepository,
-            CategoryApplicationService categoryApplicationService
+            CategoryApplicationService categoryApplicationService,
+            UserApplicationService userApplicationService
     ) {
         this.itemRepository = itemRepository;
         this.categoryApplicationService = categoryApplicationService;
+        this.userApplicationService = userApplicationService;
     }
 
     @Transactional
     public Long register(ItemRegisterCommand cmd) {
+        // Item 등록 — 사기 방지 위해 이메일 인증 필수 (게이트 1).
+        userApplicationService.requireVerified(cmd.sellerId());
         categoryApplicationService.requireExists(cmd.categoryId());
         Item item = Item.create(
                 cmd.sellerId(), cmd.categoryId(),

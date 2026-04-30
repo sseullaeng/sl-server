@@ -30,7 +30,7 @@ class UserReportApplicationServiceTest {
     void setUp() {
         repo = new InMemoryFakeUserReportRepository();
         Clock clock = Clock.fixed(NOW.atZone(KST).toInstant(), KST);
-        service = new UserReportApplicationService(repo, clock);
+        service = new UserReportApplicationService(repo, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class), clock);
     }
 
     @Test

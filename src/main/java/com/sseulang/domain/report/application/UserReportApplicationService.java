@@ -18,22 +18,33 @@ import java.time.LocalDateTime;
 public class UserReportApplicationService {
 
     private final UserReportRepository repository;
+    private final com.sseulang.domain.user.application.UserApplicationService userService;
     private final Clock clock;
 
-    public UserReportApplicationService(UserReportRepository repository, Clock clock) {
+    public UserReportApplicationService(
+            UserReportRepository repository,
+            com.sseulang.domain.user.application.UserApplicationService userService,
+            Clock clock
+    ) {
         this.repository = repository;
+        this.userService = userService;
         this.clock = clock;
     }
 
-    /** 사용자 신고. 자기 신고 거부는 도메인 invariant 에서. */
+    /**
+     * 사용자 신고. 자기 신고 거부는 도메인 invariant 에서.
+     * 미인증 사용자의 무차별 신고 스팸 방지 — verified 가드 (게이트 1 round 2).
+     */
     @Transactional
     public Long reportUser(Long reporterId, Long reportedUserId, String reason, String detail) {
+        userService.requireVerified(reporterId);
         return repository.save(UserReport.reportUser(reporterId, reportedUserId, reason, detail)).getId();
     }
 
     /** 물품 신고. Item 존재 여부는 FK 가 잡음 (RESTRICT/CASCADE) — 별도 검증 생략. */
     @Transactional
     public Long reportItem(Long reporterId, Long itemId, String reason, String detail) {
+        userService.requireVerified(reporterId);
         return repository.save(UserReport.reportItem(reporterId, itemId, reason, detail)).getId();
     }
 

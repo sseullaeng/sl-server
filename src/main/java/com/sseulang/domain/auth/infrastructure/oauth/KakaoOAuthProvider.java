@@ -59,13 +59,20 @@ public class KakaoOAuthProvider implements OAuthProvider {
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }
 
-        String email = res.kakaoAccount() != null ? res.kakaoAccount().email() : null;
-        KakaoProfile profile = res.kakaoAccount() != null ? res.kakaoAccount().profile() : null;
+        KakaoAccount account = res.kakaoAccount();
+        String email = account != null ? account.email() : null;
+        KakaoProfile profile = account != null ? account.profile() : null;
         String nickname = profile != null ? profile.nickname() : null;
         String profileImage = profile != null ? profile.profileImageUrl() : null;
 
         if (email == null || nickname == null) {
             // 동의 항목 누락 — 사용자가 약관에서 거부했거나 개발자 콘솔 권한 미설정
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+        }
+        // 게이트 1 round 2 — 카카오 응답에 미인증 이메일이 포함될 수 있어 takeover/auto-verified 의
+        // 전제("provider 가 검증한 이메일") 가 깨질 수 있다. is_email_valid + is_email_verified 둘 다
+        // true 인 이메일만 허용 — 둘 중 하나라도 false/null 이면 OAuth 거부.
+        if (!Boolean.TRUE.equals(account.isEmailValid()) || !Boolean.TRUE.equals(account.isEmailVerified())) {
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }
 
@@ -88,7 +95,12 @@ public class KakaoOAuthProvider implements OAuthProvider {
             @JsonProperty("kakao_account") KakaoAccount kakaoAccount
     ) {}
 
-    record KakaoAccount(String email, KakaoProfile profile) {}
+    record KakaoAccount(
+            String email,
+            @JsonProperty("is_email_valid") Boolean isEmailValid,
+            @JsonProperty("is_email_verified") Boolean isEmailVerified,
+            KakaoProfile profile
+    ) {}
 
     record KakaoProfile(
             String nickname,

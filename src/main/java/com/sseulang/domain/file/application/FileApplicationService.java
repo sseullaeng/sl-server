@@ -59,13 +59,19 @@ public class FileApplicationService {
     );
 
     private final PresignedUrlGenerator generator;
+    private final com.sseulang.domain.user.application.UserApplicationService userService;
 
-    public FileApplicationService(PresignedUrlGenerator generator) {
+    public FileApplicationService(
+            PresignedUrlGenerator generator,
+            com.sseulang.domain.user.application.UserApplicationService userService
+    ) {
         this.generator = generator;
+        this.userService = userService;
     }
 
     /**
      * 일반 사용자 진입점. {@link #USER_ALLOWED_PURPOSES} 외 purpose 는 거부한다.
+     * 미인증 이메일 사용자가 비용 큰 S3 업로드를 남용하지 못하도록 verified 가드 (게이트 1 round 2).
      */
     public List<PresignResult> issueForUser(FilePurpose purpose, Long ownerId, List<PresignRequestItem> files) {
         if (purpose == null) {
@@ -74,6 +80,7 @@ public class FileApplicationService {
         if (!USER_ALLOWED_PURPOSES.contains(purpose)) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
+        userService.requireVerified(ownerId);
         return issue(purpose, ownerId, files);
     }
 

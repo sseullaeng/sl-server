@@ -34,8 +34,8 @@ class ChatRoomApplicationServiceTest {
         roomRepo = new InMemoryFakeChatRoomRepository();
         itemRepo = new InMemoryFakeItemRepository();
         CategoryApplicationService catSvc = new CategoryApplicationService(new InMemoryFakeCategoryRepository());
-        ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc);
-        service = new ChatRoomApplicationService(roomRepo, itemSvc);
+        ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class));
+        service = new ChatRoomApplicationService(roomRepo, itemSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class));
 
         Item item = itemRepo.save(Item.create(
                 SELLER, null, "물건", "설명", 50_000L, null, null, TradeType.판매, null
