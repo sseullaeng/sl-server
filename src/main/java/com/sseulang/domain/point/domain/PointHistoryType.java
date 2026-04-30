@@ -9,6 +9,8 @@ package com.sseulang.domain.point.domain;
  *   <li>{@link #판매정산} — 거래 결제 시 판매자 잔액 적립 (Day 8)</li>
  *   <li>{@link #출금} — 출금 신청 시 잔액 차감 (Day 8)</li>
  *   <li>{@link #환불} — 거래 취소 시 양쪽 잔액 원복 (Day 8)</li>
+ *   <li>{@link #배달결제} — 배달 정산 시 요청자 잔액 차감 (Day 9)</li>
+ *   <li>{@link #배달정산} — 배달 정산 시 라이더 잔액 적립 (Day 9)</li>
  * </ul>
  */
 public enum PointHistoryType {
@@ -16,5 +18,7 @@ public enum PointHistoryType {
     결제,
     판매정산,
     출금,
-    환불
+    환불,
+    배달결제,
+    배달정산
 }
