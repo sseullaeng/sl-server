@@ -34,5 +34,14 @@ CREATE TABLE deliveries (
     PRIMARY KEY (id),
     KEY idx_deliveries_status_requested (status, requested_at DESC),
     KEY idx_deliveries_requester (requester_id, requested_at DESC),
-    KEY idx_deliveries_rider (rider_id, requested_at DESC)
+    KEY idx_deliveries_rider (rider_id, requested_at DESC),
+    -- 정산 도메인 방어선 — 거래/출금 컨벤션 동일 (게이트 1 W-V8).
+    -- FK: 운영상 user 는 soft-delete 패턴이라 실제 row 삭제 X. RESTRICT 로 두면 dangling 차단 +
+    -- MySQL 8 제약(CHECK 에 ON DELETE SET NULL 컬럼 사용 불가, Err 3823) 회피.
+    CONSTRAINT fk_deliveries_requester FOREIGN KEY (requester_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_deliveries_rider     FOREIGN KEY (rider_id)     REFERENCES users(id) ON DELETE RESTRICT,
+    -- fee 양수 + 본인 거래 차단 + status 화이트리스트.
+    CONSTRAINT chk_deliveries_fee_positive   CHECK (fee > 0),
+    CONSTRAINT chk_deliveries_not_self       CHECK (rider_id IS NULL OR rider_id <> requester_id),
+    CONSTRAINT chk_deliveries_status_allowed CHECK (status IN ('모집중','수락','배송중','배송완료','정산완료','취소'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

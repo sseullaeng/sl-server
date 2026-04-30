@@ -133,6 +133,10 @@ public class PointApplicationService {
         if (amount <= 0) {
             throw new IllegalArgumentException("amount 는 양수여야 합니다");
         }
+        // 정산 추적 키. point service 진입점에서 막아 history dangling 회귀 차단 (게이트 1 Suggestion).
+        if (deliveryId == null || deliveryId <= 0) {
+            throw new IllegalArgumentException("deliveryId 는 양수여야 합니다");
+        }
         if (requesterId < riderId) {
             deduct(requesterId, amount, PointHistoryType.배달결제, PointReferenceType.DELIVERY, deliveryId, description);
             credit(riderId, amount, PointHistoryType.배달정산, PointReferenceType.DELIVERY, deliveryId, description);

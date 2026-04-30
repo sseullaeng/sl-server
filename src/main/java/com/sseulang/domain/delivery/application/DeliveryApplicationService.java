@@ -91,12 +91,11 @@ public class DeliveryApplicationService {
         LocalDateTime now = LocalDateTime.now();
         int affected = deliveryRepository.acceptIfStillOpen(deliveryId, riderId, now);
         if (affected == 0) {
-            // race 패배 또는 취소된 요청 — 현재 상태로 메시지 분기
-            DeliveryRequest current = findOrThrow(deliveryId);
-            if (current.getStatus().canAccept()) {
-                // 정상적으론 도달 불가 — DB 일관성 깨진 상태
-                throw new BusinessException(ErrorCode.DELIVERY_INVALID_STATE);
-            }
+            // 본인 거래는 위에서 사전 검증으로 차단 — affected=0 의 원인은 (a) row 없음 또는
+            // (b) status != 모집중 (race 패배 / 취소). NOT_FOUND 만 분기하고 나머지는
+            // ALREADY_ACCEPTED 로 통일 — REPEATABLE_READ snapshot 으로 인해 같은 트랜잭션의
+            // findById 가 race 우승자의 commit 을 못 보는 케이스 회피 (게이트 1 round 1).
+            findOrThrow(deliveryId);
             throw new BusinessException(ErrorCode.DELIVERY_ALREADY_ACCEPTED);
         }
         return DeliveryResult.from(findOrThrow(deliveryId));
@@ -127,19 +126,24 @@ public class DeliveryApplicationService {
     /**
      * 요청자 정산 확인 → 포인트 이동 + 상태 전이.
      *
+     * <p>게이트 1 round 1 — Critical 1: {@link DeliveryRepository#findByIdForUpdate} 로 row 락을
+     * 먼저 획득해 동시 complete 2건이 모두 정산 진입하는 race 차단. 락 획득 후 상태 검증 →
+     * {@code transferForDelivery} → {@code markSettled} 순서. 한 트랜잭션 안에서 잔액 변동 실패 시
+     * 상태 전이도 함께 롤백.</p>
+     *
      * <p>요청자 잔액 부족 시 INSUFFICIENT_POINT — 라이더의 선행 적립 (id-asc 순서에 따라 먼저
      * 처리될 수 있음) 도 같은 트랜잭션 안이라 함께 롤백. 상태 전이도 롤백되므로 재시도 가능.</p>
      */
     @Transactional
     public DeliveryResult complete(Long deliveryId, Long requesterId) {
-        DeliveryRequest d = findOrThrow(deliveryId);
+        DeliveryRequest d = deliveryRepository.findByIdForUpdate(deliveryId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.DELIVERY_NOT_FOUND));
         if (!d.isRequester(requesterId)) {
             throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
         }
         if (!d.getStatus().canSettle()) {
             throw new BusinessException(ErrorCode.DELIVERY_INVALID_STATE);
         }
-        // 잔액 변동 먼저, 상태 전이 마지막 — 정산 실패 시 상태 전이도 롤백 (대칭).
         pointApplicationService.transferForDelivery(
                 d.getRequesterId(),
                 d.getRiderId(),
@@ -151,15 +155,30 @@ public class DeliveryApplicationService {
         return DeliveryResult.from(d);
     }
 
-    /** 요청자 취소 — 모집중 한정. 잔액 이동 없음 (등록 시 escrow 안 했음). */
+    /**
+     * 요청자 취소 — 모집중 한정. 잔액 이동 없음 (등록 시 escrow 안 했음).
+     *
+     * <p>게이트 1 round 1 — Critical 2: {@link DeliveryRepository#cancelIfStillOpen} 조건부
+     * UPDATE 로 accept vs cancel race 차단. 영향 행 0 이면 본인 자원 아니거나 이미 수락/취소된 상태.
+     * 사유 분기를 위해 후처리 조회로 메시지 결정.</p>
+     */
     @Transactional
     public DeliveryResult cancel(Long deliveryId, Long requesterId, String reason) {
-        DeliveryRequest d = findOrThrow(deliveryId);
-        if (!d.isRequester(requesterId)) {
-            throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
+        if (reason != null && reason.length() > 255) {
+            throw new IllegalArgumentException("cancelReason 은 255자 이하여야 합니다");
         }
-        d.cancelByRequester(LocalDateTime.now(), reason);
-        return DeliveryResult.from(d);
+        int affected = deliveryRepository.cancelIfStillOpen(
+                deliveryId, requesterId, LocalDateTime.now(), reason
+        );
+        if (affected == 0) {
+            DeliveryRequest current = findOrThrow(deliveryId);
+            if (!current.isRequester(requesterId)) {
+                throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
+            }
+            // 이미 수락된 / 취소된 / 그 이후 단계 — 모집중 아님.
+            throw new BusinessException(ErrorCode.DELIVERY_INVALID_STATE);
+        }
+        return DeliveryResult.from(findOrThrow(deliveryId));
     }
 
     public DeliveryResult getById(Long deliveryId, Long requesterId) {

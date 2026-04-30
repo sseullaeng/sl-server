@@ -35,11 +35,28 @@ public class InMemoryFakeDeliveryRepository implements DeliveryRepository {
     }
 
     @Override
+    public Optional<DeliveryRequest> findByIdForUpdate(Long id) {
+        // fake — 락 의미 X. prod 동시성 IT 에서 실제 PESSIMISTIC_WRITE 검증.
+        return findById(id);
+    }
+
+    @Override
     public synchronized int acceptIfStillOpen(Long deliveryId, Long riderId, LocalDateTime acceptedAt) {
         DeliveryRequest d = store.get(deliveryId);
         if (d == null) return 0;
         if (d.getStatus() != DeliveryStatus.모집중) return 0;
+        if (riderId == null || riderId.equals(d.getRequesterId())) return 0;
         d.acceptBy(riderId, acceptedAt);
+        return 1;
+    }
+
+    @Override
+    public synchronized int cancelIfStillOpen(Long deliveryId, Long requesterId, LocalDateTime canceledAt, String reason) {
+        DeliveryRequest d = store.get(deliveryId);
+        if (d == null) return 0;
+        if (!requesterId.equals(d.getRequesterId())) return 0;
+        if (d.getStatus() != DeliveryStatus.모집중) return 0;
+        d.cancelByRequester(canceledAt, reason);
         return 1;
     }
 

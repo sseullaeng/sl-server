@@ -30,8 +30,18 @@ public class DeliveryRepositoryImpl implements DeliveryRepository {
     }
 
     @Override
+    public Optional<DeliveryRequest> findByIdForUpdate(Long id) {
+        return jpa.findByIdForUpdate(id);
+    }
+
+    @Override
     public int acceptIfStillOpen(Long deliveryId, Long riderId, LocalDateTime acceptedAt) {
         return jpa.acceptIfStillOpen(deliveryId, riderId, acceptedAt);
+    }
+
+    @Override
+    public int cancelIfStillOpen(Long deliveryId, Long requesterId, LocalDateTime canceledAt, String reason) {
+        return jpa.cancelIfStillOpen(deliveryId, requesterId, canceledAt, reason);
     }
 
     @Override
