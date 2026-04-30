@@ -8,6 +8,7 @@ import com.sseulang.domain.transaction.presentation.dto.TransactionResponse;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "Transaction", description = "거래 — 채팅중→예약→거래완료 (또는 취소). 정산은 거래완료 시점에 buyer→seller 포인트 이동.")
 @RestController
 @RequestMapping("/api/v1/transactions")
 public class TransactionController {

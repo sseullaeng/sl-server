@@ -6,6 +6,7 @@ import com.sseulang.domain.payment.presentation.dto.ChargeStartRequest;
 import com.sseulang.domain.payment.presentation.dto.ChargeStartResponse;
 import com.sseulang.domain.payment.presentation.dto.PaymentResponse;
 import com.sseulang.global.common.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "Payment", description = "토스 페이먼츠 충전 — startCharge → 토스 SDK 결제 → confirmCharge.")
 @RestController
 @RequestMapping("/api/v1/payments")
 public class PaymentController {
