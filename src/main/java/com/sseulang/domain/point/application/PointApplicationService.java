@@ -110,6 +110,39 @@ public class PointApplicationService {
     }
 
     /**
+     * 배달 정산 — 요청자 차감 → 라이더 적립. 거래 정산({@link #transfer})과 동일하게 id-asc 순서로 락
+     * 획득 (deadlock 방지). type 은 {@link PointHistoryType#배달결제}/{@link PointHistoryType#배달정산},
+     * referenceType 은 {@link PointReferenceType#DELIVERY} 고정.
+     *
+     * <p>요청자 잔액 부족 시 INSUFFICIENT_POINT — 라이더의 선행 적립도 같은 트랜잭션 안이라 함께 롤백.</p>
+     */
+    @Transactional
+    public void transferForDelivery(
+            Long requesterId,
+            Long riderId,
+            long amount,
+            Long deliveryId,
+            String description
+    ) {
+        if (requesterId == null || riderId == null) {
+            throw new IllegalArgumentException("requesterId / riderId 는 필수입니다");
+        }
+        if (requesterId.equals(riderId)) {
+            throw new IllegalArgumentException("requester 와 rider 는 같을 수 없습니다");
+        }
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount 는 양수여야 합니다");
+        }
+        if (requesterId < riderId) {
+            deduct(requesterId, amount, PointHistoryType.배달결제, PointReferenceType.DELIVERY, deliveryId, description);
+            credit(riderId, amount, PointHistoryType.배달정산, PointReferenceType.DELIVERY, deliveryId, description);
+        } else {
+            credit(riderId, amount, PointHistoryType.배달정산, PointReferenceType.DELIVERY, deliveryId, description);
+            deduct(requesterId, amount, PointHistoryType.배달결제, PointReferenceType.DELIVERY, deliveryId, description);
+        }
+    }
+
+    /**
      * 거래 환불 — 거래완료 상태였던 거래가 취소되는 케이스. 양쪽 잔액 원복 + 환불 history 두 건 적재.
      * id-asc 락 순서 유지 — buyer 적립 / seller 차감.
      * <p>seller 가 이미 사용/출금 등으로 잔액이 amount 미만이면 INSUFFICIENT_POINT — 운영 이슈로 escalation

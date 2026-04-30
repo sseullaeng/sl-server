@@ -6,6 +6,11 @@
 -- 수락 race 차단은 ApplicationService 가 conditional UPDATE 로 처리 (Item 예약 패턴 동일).
 -- =====================================================
 
+-- point_histories.point_type ENUM 확장 — 배달 정산을 위한 새 type 추가.
+-- 기존 V1 ENUM('충전','결제','판매정산','출금','환불') 에 '배달결제','배달정산' 추가.
+ALTER TABLE point_histories
+    MODIFY COLUMN point_type ENUM('충전','결제','판매정산','출금','환불','배달결제','배달정산') NOT NULL;
+
 CREATE TABLE deliveries (
     id                  BIGINT       NOT NULL AUTO_INCREMENT,
     requester_id        BIGINT       NOT NULL,
