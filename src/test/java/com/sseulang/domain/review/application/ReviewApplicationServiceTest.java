@@ -4,6 +4,8 @@ import com.sseulang.domain.category.application.CategoryApplicationService;
 import com.sseulang.domain.category.application.InMemoryFakeCategoryRepository;
 import com.sseulang.domain.item.application.InMemoryFakeItemRepository;
 import com.sseulang.domain.item.application.ItemApplicationService;
+import com.sseulang.domain.point.application.InMemoryFakePointHistoryRepository;
+import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.item.domain.Item;
 import com.sseulang.domain.item.domain.TradeType;
 import com.sseulang.domain.review.application.dto.ReviewWriteCommand;
@@ -45,8 +47,9 @@ class ReviewApplicationServiceTest {
         InMemoryFakeItemRepository itemRepo = new InMemoryFakeItemRepository();
         CategoryApplicationService catSvc = new CategoryApplicationService(new InMemoryFakeCategoryRepository());
         ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc);
-        TransactionApplicationService txSvc = new TransactionApplicationService(txRepo, itemSvc);
         UserApplicationService userSvc = new UserApplicationService(userRepo);
+        PointApplicationService pointSvc = new PointApplicationService(userSvc, new InMemoryFakePointHistoryRepository());
+        TransactionApplicationService txSvc = new TransactionApplicationService(txRepo, itemSvc, pointSvc);
         service = new ReviewApplicationService(reviewRepo, txSvc, userSvc);
 
         Item item = itemRepo.save(Item.create(

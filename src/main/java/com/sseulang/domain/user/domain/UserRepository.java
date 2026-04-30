@@ -28,4 +28,16 @@ public interface UserRepository {
      * 단일 SQL UPDATE 라 동시 충전 race 안전. 영향받은 행 수 반환.
      */
     int creditPointBalance(Long userId, long amount);
+
+    /**
+     * 가이드 §4.8 / §5.3 — 포인트 잔액 atomic 차감 (거래 결제 / 출금 신청). amount 양수 강제.
+     * 잔액 부족 시 affected=0 (음수 방지 가드 — WHERE point_balance >= :amount).
+     * 단일 SQL UPDATE + 행 락 직렬화로 동시 차감 race 안전.
+     */
+    int deductPointBalance(Long userId, long amount);
+
+    /**
+     * 잔액 단건 scalar 조회. atomic UPDATE 직후 balance_after 적재용 — 영속성 컨텍스트 stale 우회.
+     */
+    Long findPointBalance(Long userId);
 }

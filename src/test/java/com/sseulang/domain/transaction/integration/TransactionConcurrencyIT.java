@@ -16,6 +16,9 @@ import com.sseulang.domain.transaction.infrastructure.persistence.TransactionRep
 import com.sseulang.domain.user.domain.Email;
 import com.sseulang.domain.user.domain.SocialProvider;
 import com.sseulang.domain.user.domain.User;
+import com.sseulang.domain.point.application.PointApplicationService;
+import com.sseulang.domain.point.infrastructure.persistence.PointHistoryRepositoryImpl;
+import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.domain.user.infrastructure.persistence.UserRepositoryImpl;
 import com.sseulang.global.config.JpaAuditingConfig;
 import com.sseulang.global.config.QuerydslConfig;
@@ -64,6 +67,9 @@ import static org.assertj.core.api.Assertions.assertThat;
         CategoryRepositoryImpl.class,
         CategoryApplicationService.class,
         UserRepositoryImpl.class,
+        UserApplicationService.class,
+        PointHistoryRepositoryImpl.class,
+        PointApplicationService.class,
         TransactionRepositoryImpl.class,
         TransactionApplicationService.class
 })

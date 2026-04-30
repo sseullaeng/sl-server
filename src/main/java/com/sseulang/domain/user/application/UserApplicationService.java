@@ -73,6 +73,34 @@ public class UserApplicationService {
         }
     }
 
+    /**
+     * 가이드 §4.8 / §5.3 — point_balance atomic 차감. 거래 결제 (구매자) / 출금 신청에서 호출.
+     * 잔액 부족 시 affected=0 → INSUFFICIENT_POINT 로 트랜잭션 롤백 (음수 방지 가드).
+     * Point 도메인은 본 메서드만 의존 (UserRepository 직접 호출 금지, CLAUDE.md §3.3).
+     */
+    @Transactional
+    public void deductPoint(Long userId, long amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount 는 양수여야 합니다");
+        }
+        int affected = userRepository.deductPointBalance(userId, amount);
+        if (affected != 1) {
+            throw new BusinessException(ErrorCode.INSUFFICIENT_POINT);
+        }
+    }
+
+    /**
+     * 잔액 단건 조회 — atomic UPDATE 직후 balance_after 적재용. native scalar 라 영속성 컨텍스트
+     * stale 우회. 미존재 userId 시 USER_NOT_FOUND.
+     */
+    public long getPointBalance(Long userId) {
+        Long balance = userRepository.findPointBalance(userId);
+        if (balance == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+        return balance;
+    }
+
     private User create(SocialProvider provider, String providerId, Email email, String nickname, String profileImage) {
         userRepository.findByEmail(email).ifPresent(existing -> {
             throw new BusinessException(ErrorCode.USER_EMAIL_DUPLICATED);

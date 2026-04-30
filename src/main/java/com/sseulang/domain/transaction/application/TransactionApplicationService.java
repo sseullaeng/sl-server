@@ -2,6 +2,8 @@ package com.sseulang.domain.transaction.application;
 
 import com.sseulang.domain.item.application.ItemApplicationService;
 import com.sseulang.domain.item.application.dto.ItemForTransactionResult;
+import com.sseulang.domain.point.application.PointApplicationService;
+import com.sseulang.domain.point.domain.PointReferenceType;
 import com.sseulang.domain.transaction.application.dto.ReviewableTransactionResult;
 import com.sseulang.domain.transaction.application.dto.TransactionCreateCommand;
 import com.sseulang.domain.transaction.application.dto.TransactionResult;
@@ -24,8 +26,9 @@ import java.time.LocalDateTime;
  *   <li>reserve: seller 가 호출. <b>락 순서 Transaction → Item</b>.
  *       같은 거래에 대한 reserve vs cancel race 도 Transaction 락이 직렬화 (Codex 게이트 1 Critical 1 보강).
  *       다른 거래의 reserve 와는 Item 락이 직렬화 → status=예약 보고 거부.</li>
- *   <li>complete: <b>현재 비활성</b> — 결제·포인트 도메인 (Day 7/8) 합류 전 활성화 시 금전 정합성 결함.
- *       호출 시 {@link ErrorCode#TRANSACTION_COMPLETION_UNAVAILABLE} 503 (Codex 게이트 1 Critical 2 보강).</li>
+ *   <li>complete: seller 가 호출. <b>Item 락 → markAsSold</b> 후 PointApplicationService.transfer 로
+ *       buyer 차감 → seller 적립 (id-asc 락 순서, 가이드 §5.3) + history 두 건. 정산 실패 시 트랜잭션
+ *       롤백으로 Item / Tx / 잔액 / history 모두 원복 (Day 8 합류, SettlementRollbackIT 가드).</li>
  *   <li>cancel: 양쪽 참여자 모두 호출 가능. Transaction 락 → 예약 상태였으면 Item 복원 (예약 → 판매중).</li>
  * </ul>
  */
@@ -35,13 +38,16 @@ public class TransactionApplicationService {
 
     private final TransactionRepository transactionRepository;
     private final ItemApplicationService itemApplicationService;
+    private final PointApplicationService pointApplicationService;
 
     public TransactionApplicationService(
             TransactionRepository transactionRepository,
-            ItemApplicationService itemApplicationService
+            ItemApplicationService itemApplicationService,
+            PointApplicationService pointApplicationService
     ) {
         this.transactionRepository = transactionRepository;
         this.itemApplicationService = itemApplicationService;
+        this.pointApplicationService = pointApplicationService;
     }
 
     @Transactional
@@ -75,21 +81,37 @@ public class TransactionApplicationService {
     }
 
     /**
-     * 거래 완료 — <b>현재 비활성</b>. 결제·포인트 도메인 (Day 7/8) 합류 후 활성화.
-     *
-     * <p>활성화 시 흐름:
+     * 거래 완료 — Day 8 활성화. 흐름:
      * <ol>
-     *   <li>Transaction 락 → seller 권한 검증</li>
-     *   <li>Item 락 → markAsSold</li>
-     *   <li>buyer 포인트 차감 → seller 포인트 적립 (atomic + id-asc 락 순서, 가이드 §4.8 §5.3)</li>
+     *   <li>Transaction 비관적 락 → seller 권한 검증 + 상태 검증 (예약 상태에서만 완료 가능)</li>
+     *   <li>Item 락 → markAsSold (락 순서 Transaction → Item 고정, deadlock 방지)</li>
+     *   <li>PointApplicationService.transfer — buyer 차감 → seller 적립 (id-asc 락 순서, 가이드 §5.3) + history 두 건 적재</li>
      *   <li>Transaction.markAsCompleted</li>
      * </ol>
+     *
+     * <p>buyer 잔액 부족 → INSUFFICIENT_POINT 트랜잭션 롤백 → seller 의 선행 적립도 함께 원복 (정합성 보장).</p>
+     * <p>현재 PR 범위는 price 정산만. 대여 보증금 처리는 가이드 §4.13 — 관리자 수동 (Day 9 영역).</p>
      */
     @Transactional
     public void complete(Long transactionId, Long requesterId) {
-        // Codex 게이트 1 Critical 2 — 포인트 이동 stub 인 채로 머지하면 거래완료가 되어도 돈이 안 움직임.
-        // Day 7/8 결제·포인트 도메인 합류 후 본 가드를 제거하고 정식 흐름으로 교체.
-        throw new BusinessException(ErrorCode.TRANSACTION_COMPLETION_UNAVAILABLE);
+        Transaction tx = findOrThrowForUpdate(transactionId);
+        if (!tx.isSeller(requesterId)) {
+            throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
+        }
+        // Item 락 + 상태 전이 — 락 순서 Transaction → Item 고정 (deadlock 회피, reserve/cancel 와 동일)
+        itemApplicationService.markItemAsSold(tx.getItemId());
+        // 포인트 정산 — price > 0 인 거래만 (나눔 거래는 0 일 수 있음, 가이드 §4.11)
+        if (tx.getPrice() > 0) {
+            pointApplicationService.transfer(
+                    tx.getBuyerId(),
+                    tx.getSellerId(),
+                    tx.getPrice(),
+                    PointReferenceType.TRANSACTION,
+                    tx.getId(),
+                    "거래 결제: tx#" + tx.getId()
+            );
+        }
+        tx.markAsCompleted(LocalDateTime.now());
     }
 
     @Transactional

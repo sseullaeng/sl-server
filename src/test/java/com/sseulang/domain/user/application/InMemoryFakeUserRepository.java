@@ -63,4 +63,19 @@ public class InMemoryFakeUserRepository implements UserRepository {
         ReflectionTestUtils.setField(user, "pointBalance", user.getPointBalance() + amount);
         return 1;
     }
+
+    @Override
+    public int deductPointBalance(Long userId, long amount) {
+        User user = store.get(userId);
+        if (user == null) return 0;
+        if (user.getPointBalance() < amount) return 0;  // 잔액 부족 시 affected=0
+        ReflectionTestUtils.setField(user, "pointBalance", user.getPointBalance() - amount);
+        return 1;
+    }
+
+    @Override
+    public Long findPointBalance(Long userId) {
+        User user = store.get(userId);
+        return user == null ? null : user.getPointBalance();
+    }
 }
