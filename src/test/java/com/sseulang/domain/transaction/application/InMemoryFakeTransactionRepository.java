@@ -2,11 +2,14 @@ package com.sseulang.domain.transaction.application;
 
 import com.sseulang.domain.transaction.domain.Transaction;
 import com.sseulang.domain.transaction.domain.TransactionRepository;
+import com.sseulang.domain.transaction.domain.TransactionStatusCount;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class InMemoryFakeTransactionRepository implements TransactionRepository {
 
@@ -31,5 +34,14 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
         }
         store.put(transaction.getId(), transaction);
         return transaction;
+    }
+
+    @Override
+    public List<TransactionStatusCount> countGroupByStatus() {
+        return store.values().stream()
+                .collect(Collectors.groupingBy(Transaction::getStatus, Collectors.counting()))
+                .entrySet().stream()
+                .map(e -> new TransactionStatusCount(e.getKey(), e.getValue()))
+                .toList();
     }
 }

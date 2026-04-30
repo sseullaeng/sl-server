@@ -63,4 +63,24 @@ public class UserRepositoryImpl implements UserRepository {
     public Long findPointBalance(Long userId) {
         return jpa.findPointBalanceById(userId);
     }
+
+    @Override
+    public long countAll() {
+        return jpa.count();
+    }
+
+    @Override
+    public long countBlocked() {
+        return jpa.countBlocked();
+    }
+
+    @Override
+    public long countDeleted() {
+        return jpa.countDeleted();
+    }
+
+    @Override
+    public long countActive() {
+        return jpa.countActive();
+    }
 }

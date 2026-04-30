@@ -1,5 +1,6 @@
 package com.sseulang.domain.transaction.domain;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -19,4 +20,9 @@ public interface TransactionRepository {
     Optional<Transaction> findByIdForUpdate(Long id);
 
     Transaction save(Transaction transaction);
+
+    // ───────── 관리자 통계 ─────────
+
+    /** 단일 GROUP BY 집계 — (status, count) 행 리스트 (가능한 모든 status 행 포함, 0 인 status 는 없음). */
+    List<TransactionStatusCount> countGroupByStatus();
 }

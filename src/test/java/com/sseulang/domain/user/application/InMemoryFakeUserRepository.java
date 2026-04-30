@@ -91,4 +91,24 @@ public class InMemoryFakeUserRepository implements UserRepository {
                 .toList();
         return new PageImpl<>(all, pageable, all.size());
     }
+
+    @Override
+    public long countAll() {
+        return store.size();
+    }
+
+    @Override
+    public long countBlocked() {
+        return store.values().stream().filter(User::isBlocked).count();
+    }
+
+    @Override
+    public long countDeleted() {
+        return store.values().stream().filter(User::isDeleted).count();
+    }
+
+    @Override
+    public long countActive() {
+        return store.values().stream().filter(u -> !u.isBlocked() && !u.isDeleted()).count();
+    }
 }

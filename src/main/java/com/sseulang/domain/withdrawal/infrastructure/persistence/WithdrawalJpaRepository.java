@@ -2,6 +2,7 @@ package com.sseulang.domain.withdrawal.infrastructure.persistence;
 
 import com.sseulang.domain.withdrawal.domain.Withdrawal;
 import com.sseulang.domain.withdrawal.domain.WithdrawalStatus;
+import com.sseulang.domain.withdrawal.domain.WithdrawalStatusCount;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -10,6 +11,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 /** Spring Data JPA — {@link WithdrawalRepositoryImpl} 가 wrapping. 외부 직접 import 금지. */
@@ -34,4 +36,17 @@ interface WithdrawalJpaRepository extends JpaRepository<Withdrawal, Long> {
     Page<Withdrawal> findByStatusOrderByCreatedAtDesc(WithdrawalStatus status, Pageable pageable);
 
     Page<Withdrawal> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    /**
+     * status 별 출금 건수 집계. 단일 쿼리. withdrawals.status 인덱스 사용 (V1 idx_withdrawals_status).
+     */
+    @Query("""
+            SELECT new com.sseulang.domain.withdrawal.domain.WithdrawalStatusCount(w.status, COUNT(w))
+              FROM Withdrawal w
+             GROUP BY w.status
+            """)
+    List<WithdrawalStatusCount> countGroupByStatusJpql();
+
+    @Query("SELECT COALESCE(SUM(w.amount), 0) FROM Withdrawal w WHERE w.status = com.sseulang.domain.withdrawal.domain.WithdrawalStatus.완료")
+    long sumCompletedAmount();
 }

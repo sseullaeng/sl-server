@@ -3,6 +3,7 @@ package com.sseulang.domain.withdrawal.domain;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -36,4 +37,11 @@ public interface WithdrawalRepository {
 
     /** 관리자 — 상태별 페이징 (status null 이면 전체). */
     Page<Withdrawal> findByStatus(WithdrawalStatus status, Pageable pageable);
+
+    // ───────── 관리자 통계 ─────────
+
+    List<WithdrawalStatusCount> countGroupByStatus();
+
+    /** status=완료 출금의 amount 합계 (실제 외부 이체된 금액). */
+    long sumCompletedAmount();
 }

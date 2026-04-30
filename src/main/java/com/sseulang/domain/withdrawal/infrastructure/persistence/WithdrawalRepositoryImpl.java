@@ -3,10 +3,12 @@ package com.sseulang.domain.withdrawal.infrastructure.persistence;
 import com.sseulang.domain.withdrawal.domain.Withdrawal;
 import com.sseulang.domain.withdrawal.domain.WithdrawalRepository;
 import com.sseulang.domain.withdrawal.domain.WithdrawalStatus;
+import com.sseulang.domain.withdrawal.domain.WithdrawalStatusCount;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -53,5 +55,15 @@ public class WithdrawalRepositoryImpl implements WithdrawalRepository {
         return status == null
                 ? jpa.findAllByOrderByCreatedAtDesc(pageable)
                 : jpa.findByStatusOrderByCreatedAtDesc(status, pageable);
+    }
+
+    @Override
+    public List<WithdrawalStatusCount> countGroupByStatus() {
+        return jpa.countGroupByStatusJpql();
+    }
+
+    @Override
+    public long sumCompletedAmount() {
+        return jpa.sumCompletedAmount();
     }
 }

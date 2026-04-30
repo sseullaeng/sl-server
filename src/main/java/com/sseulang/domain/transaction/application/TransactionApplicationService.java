@@ -7,15 +7,19 @@ import com.sseulang.domain.point.domain.PointReferenceType;
 import com.sseulang.domain.transaction.application.dto.ReviewableTransactionResult;
 import com.sseulang.domain.transaction.application.dto.TransactionCreateCommand;
 import com.sseulang.domain.transaction.application.dto.TransactionResult;
+import com.sseulang.domain.transaction.application.dto.TransactionStatsResult;
 import com.sseulang.domain.transaction.domain.Transaction;
 import com.sseulang.domain.transaction.domain.TransactionRepository;
 import com.sseulang.domain.transaction.domain.TransactionStatus;
+import com.sseulang.domain.transaction.domain.TransactionStatusCount;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.EnumMap;
+import java.util.Map;
 
 /**
  * Transaction 거래 흐름. 가이드 §5.1 / §5.2 정합:
@@ -160,6 +164,23 @@ public class TransactionApplicationService {
         }
         Long revieweeId = tx.isSeller(requesterId) ? tx.getBuyerId() : tx.getSellerId();
         return new ReviewableTransactionResult(tx.getId(), requesterId, revieweeId, tx.getCompletedAt());
+    }
+
+    /**
+     * 관리자 거래 통계 — total + status 별 카운트. byStatus 는 enum 모든 값 포함 (없는 status 는 0L).
+     * 단일 GROUP BY 쿼리 — N+1 없음.
+     */
+    public TransactionStatsResult adminGetStats() {
+        Map<TransactionStatus, Long> byStatus = new EnumMap<>(TransactionStatus.class);
+        for (TransactionStatus s : TransactionStatus.values()) {
+            byStatus.put(s, 0L);  // default 0
+        }
+        long total = 0;
+        for (TransactionStatusCount row : transactionRepository.countGroupByStatus()) {
+            byStatus.put(row.status(), row.count());
+            total += row.count();
+        }
+        return new TransactionStatsResult(total, byStatus);
     }
 
     private Transaction findOrThrow(Long id) {

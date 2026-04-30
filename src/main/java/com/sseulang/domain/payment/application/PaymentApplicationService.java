@@ -4,6 +4,7 @@ import com.sseulang.domain.payment.application.dto.ChargeConfirmCommand;
 import com.sseulang.domain.payment.application.dto.ChargeStartCommand;
 import com.sseulang.domain.payment.application.dto.ChargeStartResult;
 import com.sseulang.domain.payment.application.dto.PaymentResult;
+import com.sseulang.domain.payment.application.dto.PaymentStatsResult;
 import com.sseulang.domain.payment.domain.Payment;
 import com.sseulang.domain.payment.domain.PaymentConfirmResult;
 import com.sseulang.domain.payment.domain.PaymentGateway;
@@ -154,6 +155,11 @@ public class PaymentApplicationService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
         return PaymentResult.from(payment);
+    }
+
+    /** 관리자 결제 통계 — 완료 건수 + 누적 금액. 단일 SUM/COUNT 쿼리. */
+    public PaymentStatsResult adminGetStats() {
+        return new PaymentStatsResult(paymentRepository.countPaid(), paymentRepository.sumPaidAmount());
     }
 
     private static String generateMerchantUid() {
