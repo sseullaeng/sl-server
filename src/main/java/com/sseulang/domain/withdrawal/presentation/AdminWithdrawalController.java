@@ -1,0 +1,57 @@
+package com.sseulang.domain.withdrawal.presentation;
+
+import com.sseulang.domain.withdrawal.application.WithdrawalApplicationService;
+import com.sseulang.domain.withdrawal.domain.WithdrawalStatus;
+import com.sseulang.domain.withdrawal.presentation.dto.AdminWithdrawalDecisionRequest;
+import com.sseulang.domain.withdrawal.presentation.dto.WithdrawalResponse;
+import com.sseulang.global.common.ApiResponse;
+import com.sseulang.global.common.PageResponse;
+import jakarta.validation.Valid;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * 관리자 출금 처리 — SecurityConfig 의 admin chain 이 ROLE_ADMIN 강제. AuthenticationPrincipal 은
+ * adminId (현재 SecurityFilter 정책 그대로 사용).
+ */
+@RestController
+@RequestMapping("/api/v1/admin/withdrawals")
+public class AdminWithdrawalController {
+
+    private final WithdrawalApplicationService withdrawalService;
+
+    public AdminWithdrawalController(WithdrawalApplicationService withdrawalService) {
+        this.withdrawalService = withdrawalService;
+    }
+
+    @GetMapping
+    public ApiResponse<PageResponse<WithdrawalResponse>> list(
+            @RequestParam(value = "status", required = false) WithdrawalStatus status,
+            Pageable pageable
+    ) {
+        return ApiResponse.ok(PageResponse.from(
+                withdrawalService.adminFindByStatus(status, pageable).map(WithdrawalResponse::from)
+        ));
+    }
+
+    @PatchMapping("/{id}")
+    public ApiResponse<Void> decide(
+            @AuthenticationPrincipal Long adminId,
+            @PathVariable("id") Long id,
+            @Valid @RequestBody AdminWithdrawalDecisionRequest request
+    ) {
+        switch (request.action()) {
+            case APPROVE -> withdrawalService.adminApprove(id, adminId, request.memo());
+            case REJECT -> withdrawalService.adminReject(id, adminId, request.memo());
+            case COMPLETE -> withdrawalService.adminComplete(id, adminId);
+        }
+        return ApiResponse.ok();
+    }
+}

@@ -103,7 +103,7 @@ class OAuthLoginServiceTest {
 
         // RT jti 가 store 에 저장됨
         String rtJti = jwtProvider.parse(pair.refreshToken()).jti();
-        assertThat(store.contains(USER_ID, rtJti)).isTrue();
+        assertThat(store.contains("USER", USER_ID, rtJti)).isTrue();
 
         // 다른 provider 호출 X
         verify(googleProvider, never()).verifyAndFetch(any());
@@ -188,8 +188,8 @@ class OAuthLoginServiceTest {
         String j1 = jwtProvider.parse(p1.refreshToken()).jti();
         String j2 = jwtProvider.parse(p2.refreshToken()).jti();
         assertThat(j1).isNotEqualTo(j2);
-        assertThat(store.contains(USER_ID, j1)).isTrue();
-        assertThat(store.contains(USER_ID, j2)).isTrue();
+        assertThat(store.contains("USER", USER_ID, j1)).isTrue();
+        assertThat(store.contains("USER", USER_ID, j2)).isTrue();
 
         verify(userService, times(2)).findOrCreateBySocial(any(), any(), any(), any(), any());
     }

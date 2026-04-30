@@ -44,10 +44,11 @@ class RefreshTokenRotationServiceTest {
         service = new RefreshTokenRotationService(jwt, store, blacklist, fixedClock, props);
     }
 
-    /** login 시점 시뮬레이션: 토큰 발급 + store 등록. */
+    /** login 시점 시뮬레이션: tv 조회 → 토큰 발급 + store 등록. */
     private String issueAndRegister(Long userId, String role) {
-        String rt = jwt.issueRefreshToken(userId, role);
-        store.save(userId, jwt.parse(rt).jti(), Duration.ofSeconds(RT_VALIDITY));
+        long tv = store.currentTokenVersion(role, userId);
+        String rt = jwt.issueRefreshToken(userId, role, tv);
+        store.save(role, userId, jwt.parse(rt).jti(), Duration.ofSeconds(RT_VALIDITY));
         return rt;
     }
 
@@ -65,10 +66,10 @@ class RefreshTokenRotationServiceTest {
                 .isNotEqualTo(oldRt);
 
         // old jti 무효화
-        assertThat(store.contains(USER_ID, oldJti)).isFalse();
+        assertThat(store.contains("USER", USER_ID, oldJti)).isFalse();
         // 새 jti 등록
         JwtClaims newClaims = jwt.parse(pair.refreshToken());
-        assertThat(store.contains(USER_ID, newClaims.jti())).isTrue();
+        assertThat(store.contains("USER", USER_ID, newClaims.jti())).isTrue();
         assertThat(newClaims.role()).isEqualTo("USER");
     }
 
@@ -83,27 +84,32 @@ class RefreshTokenRotationServiceTest {
     }
 
     @Test
-    @DisplayName("rotate_재사용 탐지_AUTH_REFRESH_TOKEN_INVALID + 해당 사용자 전체 폐기")
+    @DisplayName("rotate_재사용 탐지_AUTH_REFRESH_TOKEN_INVALID + 해당 사용자 RT 전체 무효화")
     void rotate_재사용탐지() {
         // 정상 발급 + store 등록 후 한 번 사용해서 폐기된 상태 가정
         String reusedRt = issueAndRegister(USER_ID, "USER");
         TokenPair first = service.rotate(reusedRt);  // 정상 회전 — old 폐기
         // 다른 디바이스에서도 토큰 등록되어 있다고 가정 (동일 사용자)
         String otherDeviceRt = issueAndRegister(USER_ID, "USER");
-        String otherJti = jwt.parse(otherDeviceRt).jti();
         // first 후 새 RT 도 store 에 있음
-        String firstNewJti = jwt.parse(first.refreshToken()).jti();
-        assertThat(store.contains(USER_ID, firstNewJti)).isTrue();
-        assertThat(store.contains(USER_ID, otherJti)).isTrue();
+        assertThat(store.contains("USER", USER_ID, jwt.parse(first.refreshToken()).jti())).isTrue();
+        assertThat(store.contains("USER", USER_ID, jwt.parse(otherDeviceRt).jti())).isTrue();
 
-        // 이미 폐기된 reusedRt 를 다시 들고 옴 → 탈취 의심 → 전체 폐기
+        // 이미 폐기된 reusedRt 를 다시 들고 옴 → 탈취 의심 → revokeAll (INCR tv)
         assertThatThrownBy(() -> service.rotate(reusedRt))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.AUTH_REFRESH_TOKEN_INVALID);
 
-        // 해당 사용자의 모든 jti 가 사라져야 함
-        assertThat(store.contains(USER_ID, firstNewJti)).isFalse();
-        assertThat(store.contains(USER_ID, otherJti)).isFalse();
+        // tokenVersion 시맨틱: revokeAll 은 INCR 한 방. jti 키는 TTL 만료까지 잔존하지만 의미상 무효.
+        // 무효화 검증은 "rotate 시도 시 거부" 로 — 해당 사용자의 어떤 RT 든 더이상 rotate 불가.
+        assertThatThrownBy(() -> service.rotate(first.refreshToken()))
+                .as("first 의 새 RT 도 무효화되어야 함")
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.AUTH_REFRESH_TOKEN_INVALID);
+        assertThatThrownBy(() -> service.rotate(otherDeviceRt))
+                .as("다른 디바이스 RT 도 무효화되어야 함")
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.AUTH_REFRESH_TOKEN_INVALID);
     }
 
     @Test
@@ -135,11 +141,11 @@ class RefreshTokenRotationServiceTest {
     void revoke_정상() {
         String rt = issueAndRegister(USER_ID, "USER");
         String jti = jwt.parse(rt).jti();
-        assertThat(store.contains(USER_ID, jti)).isTrue();
+        assertThat(store.contains("USER", USER_ID, jti)).isTrue();
 
         service.revoke(rt);
 
-        assertThat(store.contains(USER_ID, jti)).isFalse();
+        assertThat(store.contains("USER", USER_ID, jti)).isFalse();
     }
 
     @Test
@@ -174,7 +180,7 @@ class RefreshTokenRotationServiceTest {
         service.logout(at, rt);
 
         assertThat(blacklist.isBlacklisted(atJti)).isTrue();
-        assertThat(store.contains(USER_ID, rtJti)).isFalse();
+        assertThat(store.contains("USER", USER_ID, rtJti)).isFalse();
     }
 
     @Test
@@ -205,7 +211,7 @@ class RefreshTokenRotationServiceTest {
 
         assertThat(blacklist.size()).isZero();
         // RT 는 정상이라 폐기됨
-        assertThat(store.contains(USER_ID, rtJti)).isFalse();
+        assertThat(store.contains("USER", USER_ID, rtJti)).isFalse();
     }
 
     @Test

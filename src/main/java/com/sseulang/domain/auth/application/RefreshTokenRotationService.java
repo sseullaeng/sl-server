@@ -52,18 +52,24 @@ public class RefreshTokenRotationService {
         Long userId = claims.userId();
         String role = claims.role();
         String oldJti = claims.jti();
+        Long claimTv = claims.tokenVersion();
+        if (role == null || role.isBlank() || claimTv == null) {
+            // RT 에 role / tv 누락 — 토큰 변조 또는 구버전 토큰. 보수적으로 INVALID 응답.
+            throw new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_INVALID);
+        }
 
-        // atomic: 동시 rotate 요청 중 단 하나만 true 를 받는다.
-        // false = (a) 처음부터 없는 jti 또는 (b) 이미 누가 사용함 → 탈취 의심
-        if (!refreshTokenStore.consume(userId, oldJti)) {
-            refreshTokenStore.revokeAll(userId);
+        // atomic Lua: (1) claimTv == currentTv 검증, (2) jti DEL.
+        // false = (a) 버전 mismatch (revokeAll 이후) 또는 (b) 이미 사용된 jti → 탈취 의심.
+        if (!refreshTokenStore.consume(role, userId, oldJti, claimTv)) {
+            refreshTokenStore.revokeAll(role, userId);
             throw new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_INVALID);
         }
 
         String newAccessToken = jwtProvider.issueAccessToken(userId, role);
-        String newRefreshToken = jwtProvider.issueRefreshToken(userId, role);
+        long newTv = refreshTokenStore.currentTokenVersion(role, userId);
+        String newRefreshToken = jwtProvider.issueRefreshToken(userId, role, newTv);
         String newJti = jwtProvider.parse(newRefreshToken).jti();
-        refreshTokenStore.save(userId, newJti, refreshTokenTtl);
+        refreshTokenStore.save(role, userId, newJti, refreshTokenTtl);
 
         return new TokenPair(newAccessToken, newRefreshToken);
     }
@@ -79,7 +85,11 @@ public class RefreshTokenRotationService {
         }
         try {
             JwtClaims claims = jwtProvider.parse(refreshToken);
-            refreshTokenStore.revoke(claims.userId(), claims.jti());
+            String role = claims.role();
+            if (role == null || role.isBlank()) {
+                return;  // role 누락 토큰은 어차피 rotate 거부됨
+            }
+            refreshTokenStore.revoke(role, claims.userId(), claims.jti());
         } catch (BusinessException ignored) {
             // 만료/변조 토큰은 어차피 사용 불가 — 조용히 흘려보냄
         }

@@ -53,6 +53,9 @@ public enum ErrorCode {
     INSUFFICIENT_POINT(HttpStatus.BAD_REQUEST, "포인트가 부족합니다."),
     WITHDRAWAL_NOT_FOUND(HttpStatus.NOT_FOUND, "출금 신청을 찾을 수 없습니다."),
     WITHDRAWAL_NOT_CANCELABLE(HttpStatus.BAD_REQUEST, "취소할 수 없는 상태입니다."),
+    WITHDRAWAL_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서 수행할 수 없는 동작입니다."),
+    WITHDRAWAL_FORBIDDEN(HttpStatus.FORBIDDEN, "출금 신청에 대한 권한이 없습니다."),
+    WITHDRAWAL_IDEMPOTENCY_MISMATCH(HttpStatus.CONFLICT, "동일 idempotencyKey 로 다른 내용의 신청이 들어왔습니다."),
 
     // 채팅 / 알림
     CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "채팅방을 찾을 수 없습니다."),
