@@ -51,6 +51,7 @@ public class SecurityConfig {
             "/api/v1/auth/oauth2/**",
             "/api/v1/auth/signup",
             "/api/v1/auth/login",
+            "/api/v1/auth/admin/login",
             "/api/v1/auth/refresh",
             "/api/v1/auth/logout",
             "/api/v1/auth/verify-email"
@@ -62,6 +63,7 @@ public class SecurityConfig {
             "/api/v1/auth/oauth2/**",
             "/api/v1/auth/signup",
             "/api/v1/auth/login",
+            "/api/v1/auth/admin/login",
             "/api/v1/auth/refresh",
             "/api/v1/auth/logout",
             "/api/v1/auth/verify-email",
