@@ -118,4 +118,14 @@ public class User extends BaseEntity {
     public Email email() {
         return new Email(email);
     }
+
+    /** 관리자 차단 — 이미 차단/삭제된 계정도 멱등 호출 가능 (true 보장). */
+    public void block() {
+        this.blocked = true;
+    }
+
+    /** 관리자 차단 해제 — 멱등 호출. */
+    public void unblock() {
+        this.blocked = false;
+    }
 }

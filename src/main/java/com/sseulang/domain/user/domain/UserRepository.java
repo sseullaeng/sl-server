@@ -1,5 +1,8 @@
 package com.sseulang.domain.user.domain;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import java.util.Optional;
 
 /**
@@ -15,6 +18,9 @@ public interface UserRepository {
     Optional<User> findByEmail(Email email);
 
     User save(User user);
+
+    /** 관리자 회원 목록 페이징. 차단/삭제 상태 필터는 후속, 일단 전체 노출. created_at DESC. */
+    Page<User> findAllForAdmin(Pageable pageable);
 
     /**
      * 가이드 §4.7 — 리뷰 작성 시점에 review_count / rating_sum 을 단일 원자 UPDATE 로 누적하고

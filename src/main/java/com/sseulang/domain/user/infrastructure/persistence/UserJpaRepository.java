@@ -2,6 +2,8 @@ package com.sseulang.domain.user.infrastructure.persistence;
 
 import com.sseulang.domain.user.domain.SocialProvider;
 import com.sseulang.domain.user.domain.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -55,4 +57,6 @@ interface UserJpaRepository extends JpaRepository<User, Long> {
      */
     @Query("SELECT u.pointBalance FROM User u WHERE u.id = :userId")
     Long findPointBalanceById(@Param("userId") Long userId);
+
+    Page<User> findAllByOrderByIdDesc(Pageable pageable);
 }
