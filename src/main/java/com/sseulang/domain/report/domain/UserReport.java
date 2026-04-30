@@ -1,6 +1,8 @@
 package com.sseulang.domain.report.domain;
 
 import com.sseulang.global.common.BaseEntity;
+import com.sseulang.global.exception.BusinessException;
+import com.sseulang.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -97,5 +99,53 @@ public class UserReport extends BaseEntity {
         r.detail = detail;
         r.status = ReportStatus.접수;
         return r;
+    }
+
+    /**
+     * 관리자 처리 시작. 접수 → 처리중. processedAt 은 처리 시작 시점에 기록 (terminal 일 때
+     * 다시 갱신 가능).
+     */
+    public void markInProgress(Long adminId, String memo, LocalDateTime now) {
+        validateAdminAndNow(adminId, now);
+        if (status != ReportStatus.접수) {
+            throw new BusinessException(ErrorCode.REPORT_INVALID_STATE);
+        }
+        this.status = ReportStatus.처리중;
+        this.adminId = adminId;
+        this.adminMemo = memo;
+        this.processedAt = now;
+    }
+
+    /** 처리 완료 — 처리중 단계에서만 가능. */
+    public void complete(Long adminId, String memo, LocalDateTime now) {
+        validateAdminAndNow(adminId, now);
+        if (status != ReportStatus.처리중) {
+            throw new BusinessException(ErrorCode.REPORT_INVALID_STATE);
+        }
+        this.status = ReportStatus.처리완료;
+        this.adminId = adminId;
+        this.adminMemo = memo;
+        this.processedAt = now;
+    }
+
+    /** 반려 — 접수 또는 처리중에서만 가능 (terminal 상태 전이는 거부). */
+    public void reject(Long adminId, String memo, LocalDateTime now) {
+        validateAdminAndNow(adminId, now);
+        if (status.isTerminal()) {
+            throw new BusinessException(ErrorCode.REPORT_INVALID_STATE);
+        }
+        this.status = ReportStatus.반려;
+        this.adminId = adminId;
+        this.adminMemo = memo;
+        this.processedAt = now;
+    }
+
+    private static void validateAdminAndNow(Long adminId, LocalDateTime now) {
+        if (adminId == null || adminId <= 0) {
+            throw new IllegalArgumentException("adminId 는 양수여야 합니다");
+        }
+        if (now == null) {
+            throw new IllegalArgumentException("now 는 필수입니다");
+        }
     }
 }

@@ -4,9 +4,14 @@ import com.sseulang.domain.user.domain.Email;
 import com.sseulang.domain.user.domain.SocialProvider;
 import com.sseulang.domain.user.domain.User;
 import com.sseulang.domain.user.domain.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -77,5 +82,13 @@ public class InMemoryFakeUserRepository implements UserRepository {
     public Long findPointBalance(Long userId) {
         User user = store.get(userId);
         return user == null ? null : user.getPointBalance();
+    }
+
+    @Override
+    public Page<User> findAllForAdmin(Pageable pageable) {
+        List<User> all = store.values().stream()
+                .sorted(Comparator.comparing(User::getId).reversed())
+                .toList();
+        return new PageImpl<>(all, pageable, all.size());
     }
 }

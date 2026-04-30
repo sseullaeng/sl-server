@@ -1,8 +1,13 @@
 package com.sseulang.domain.report.infrastructure.persistence;
 
+import com.sseulang.domain.report.domain.ReportStatus;
 import com.sseulang.domain.report.domain.UserReport;
 import com.sseulang.domain.report.domain.UserReportRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
 
 @Repository
 public class UserReportRepositoryImpl implements UserReportRepository {
@@ -16,5 +21,15 @@ public class UserReportRepositoryImpl implements UserReportRepository {
     @Override
     public UserReport save(UserReport report) {
         return jpa.save(report);
+    }
+
+    @Override
+    public Optional<UserReport> findById(Long id) {
+        return jpa.findById(id);
+    }
+
+    @Override
+    public Page<UserReport> findByStatus(ReportStatus status, Pageable pageable) {
+        return jpa.findByStatusFilter(status, pageable);
     }
 }

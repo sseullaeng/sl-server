@@ -7,6 +7,8 @@ import com.sseulang.domain.user.domain.UserRepository;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -99,6 +101,23 @@ public class UserApplicationService {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
         return balance;
+    }
+
+    /**
+     * 관리자 회원 목록 — created_at DESC 페이징. 차단/삭제 상태 모두 포함.
+     */
+    public Page<User> adminFindAll(Pageable pageable) {
+        return userRepository.findAllForAdmin(pageable);
+    }
+
+    /**
+     * 관리자 차단/해제 — Aggregate {@code block()/unblock()} 위임. 미존재 userId → USER_NOT_FOUND.
+     * 멱등 (이미 차단된 사용자를 또 차단해도 OK).
+     */
+    @Transactional
+    public void adminSetBlocked(Long userId, boolean blocked) {
+        User u = getById(userId);
+        if (blocked) u.block(); else u.unblock();
     }
 
     private User create(SocialProvider provider, String providerId, Email email, String nickname, String profileImage) {

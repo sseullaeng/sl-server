@@ -4,6 +4,8 @@ import com.sseulang.domain.user.domain.Email;
 import com.sseulang.domain.user.domain.SocialProvider;
 import com.sseulang.domain.user.domain.User;
 import com.sseulang.domain.user.domain.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -35,6 +37,11 @@ public class UserRepositoryImpl implements UserRepository {
     @Override
     public User save(User user) {
         return jpa.save(user);
+    }
+
+    @Override
+    public Page<User> findAllForAdmin(Pageable pageable) {
+        return jpa.findAllByOrderByIdDesc(pageable);
     }
 
     @Override

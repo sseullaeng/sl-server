@@ -1,0 +1,10 @@
+package com.sseulang.domain.notice.domain;
+
+/**
+ * V1 schema notices.type ENUM 매핑. 한글 enum 이름은 DB ENUM 값과 동일해야 한다 (Hibernate
+ * EnumType.STRING 으로 그대로 매핑).
+ */
+public enum NoticeType {
+    공지,
+    이벤트
+}
