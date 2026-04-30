@@ -88,13 +88,20 @@ public class DeliveryApplicationService {
         if (d.isRequester(riderId)) {
             throw new BusinessException(ErrorCode.DELIVERY_SELF_NOT_ALLOWED);
         }
+        // 사전 조회에서 이미 취소/종료 상태면 ALREADY_ACCEPTED 가 아닌 INVALID_STATE 가 더 정확.
+        // (게이트 1 round 2 — Warning) update 이후 race 패배는 아래 분기에서 통일 처리.
+        if (d.getStatus() != com.sseulang.domain.delivery.domain.DeliveryStatus.모집중) {
+            if (d.getStatus() == com.sseulang.domain.delivery.domain.DeliveryStatus.수락) {
+                throw new BusinessException(ErrorCode.DELIVERY_ALREADY_ACCEPTED);
+            }
+            throw new BusinessException(ErrorCode.DELIVERY_INVALID_STATE);
+        }
         LocalDateTime now = LocalDateTime.now();
         int affected = deliveryRepository.acceptIfStillOpen(deliveryId, riderId, now);
         if (affected == 0) {
-            // 본인 거래는 위에서 사전 검증으로 차단 — affected=0 의 원인은 (a) row 없음 또는
-            // (b) status != 모집중 (race 패배 / 취소). NOT_FOUND 만 분기하고 나머지는
-            // ALREADY_ACCEPTED 로 통일 — REPEATABLE_READ snapshot 으로 인해 같은 트랜잭션의
-            // findById 가 race 우승자의 commit 을 못 보는 케이스 회피 (게이트 1 round 1).
+            // 본인 거래/취소는 위에서 사전 검증으로 차단 — 여기 도달하는 affected=0 은
+            // 실제 동시 accept race 패배 케이스. REPEATABLE_READ snapshot 으로 인해 같은 트랜잭션의
+            // findById 가 race 우승자 commit 을 못 보는 케이스 회피 위해 ALREADY_ACCEPTED 로 통일.
             findOrThrow(deliveryId);
             throw new BusinessException(ErrorCode.DELIVERY_ALREADY_ACCEPTED);
         }

@@ -43,6 +43,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -131,6 +132,7 @@ class DeliveryConcurrencyIT {
         CountDownLatch done = new CountDownLatch(2);
         AtomicInteger okCount = new AtomicInteger();
         AtomicInteger stateErr = new AtomicInteger();
+        AtomicReference<Throwable> otherError = new AtomicReference<>();
 
         Runnable complete = () -> {
             try {
@@ -141,7 +143,8 @@ class DeliveryConcurrencyIT {
                 if (e.getErrorCode() == ErrorCode.DELIVERY_INVALID_STATE) {
                     stateErr.incrementAndGet();
                 }
-            } catch (Exception ignore) {
+            } catch (Exception e) {
+                otherError.compareAndSet(null, e);
             } finally {
                 done.countDown();
             }
@@ -153,6 +156,7 @@ class DeliveryConcurrencyIT {
         exec.shutdown();
 
         assertThat(finished).as("두 complete 모두 15초 안에 완료").isTrue();
+        assertThat(otherError.get()).as("BusinessException 외 예외 없음").isNull();
         assertThat(okCount.get()).as("정확히 1건만 성공").isEqualTo(1);
         assertThat(stateErr.get()).as("나머지 1건은 상태 가드로 거부").isEqualTo(1);
 
@@ -186,6 +190,7 @@ class DeliveryConcurrencyIT {
         CountDownLatch done = new CountDownLatch(2);
         AtomicInteger okCount = new AtomicInteger();
         AtomicInteger conflictCount = new AtomicInteger();
+        AtomicReference<Throwable> otherError = new AtomicReference<>();
 
         java.util.function.Function<Long, Runnable> acceptFor = (Long rId) -> () -> {
             try {
@@ -196,7 +201,8 @@ class DeliveryConcurrencyIT {
                 if (e.getErrorCode() == ErrorCode.DELIVERY_ALREADY_ACCEPTED) {
                     conflictCount.incrementAndGet();
                 }
-            } catch (Exception ignore) {
+            } catch (Exception e) {
+                otherError.compareAndSet(null, e);
             } finally {
                 done.countDown();
             }
@@ -208,6 +214,7 @@ class DeliveryConcurrencyIT {
         exec.shutdown();
 
         assertThat(finished).as("두 accept 모두 10초 안에 완료").isTrue();
+        assertThat(otherError.get()).as("BusinessException 외 예외 없음").isNull();
         assertThat(okCount.get()).as("정확히 1건만 성공").isEqualTo(1);
         assertThat(conflictCount.get()).as("나머지 1건은 ALREADY_ACCEPTED").isEqualTo(1);
 
@@ -229,6 +236,7 @@ class DeliveryConcurrencyIT {
         AtomicInteger acceptOk = new AtomicInteger();
         AtomicInteger cancelOk = new AtomicInteger();
         AtomicInteger stateErr = new AtomicInteger();
+        AtomicReference<Throwable> otherError = new AtomicReference<>();
 
         exec.submit(() -> {
             try {
@@ -240,7 +248,8 @@ class DeliveryConcurrencyIT {
                         || e.getErrorCode() == ErrorCode.DELIVERY_INVALID_STATE) {
                     stateErr.incrementAndGet();
                 }
-            } catch (Exception ignore) {
+            } catch (Exception e) {
+                otherError.compareAndSet(null, e);
             } finally {
                 done.countDown();
             }
@@ -254,7 +263,8 @@ class DeliveryConcurrencyIT {
                 if (e.getErrorCode() == ErrorCode.DELIVERY_INVALID_STATE) {
                     stateErr.incrementAndGet();
                 }
-            } catch (Exception ignore) {
+            } catch (Exception e) {
+                otherError.compareAndSet(null, e);
             } finally {
                 done.countDown();
             }
@@ -264,6 +274,7 @@ class DeliveryConcurrencyIT {
         exec.shutdown();
 
         assertThat(finished).as("두 호출 모두 10초 안에 완료").isTrue();
+        assertThat(otherError.get()).as("BusinessException 외 예외 없음").isNull();
         assertThat(acceptOk.get() + cancelOk.get()).as("정확히 1건만 성공").isEqualTo(1);
         assertThat(stateErr.get()).as("나머지 1건은 상태 가드로 거부").isEqualTo(1);
 
