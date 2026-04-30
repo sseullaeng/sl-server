@@ -30,6 +30,20 @@ spring:
       password: ${REDIS_PASSWORD:}
     mongodb:
       uri: ${MONGO_URI}
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
 
 app:
   jwt:
@@ -60,6 +74,8 @@ app:
     base-url: https://api.tosspayments.com
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  email:
+    from: ${MAIL_FROM:noreply@sseulang.test}
 
 logging:
   level:
