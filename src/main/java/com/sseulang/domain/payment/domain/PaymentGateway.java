@@ -19,4 +19,11 @@ public interface PaymentGateway {
      * <p>4xx (없는 paymentKey 등) → BusinessException, 5xx → ExternalApiException.</p>
      */
     PaymentConfirmResult lookup(String paymentKey);
+
+    /**
+     * orderId(merchantUid) 로 PG 측 결제 상태 조회. dangling 복구 스케줄러용 (follow-up #21):
+     * confirm 도중 응답 유실로 paymentKey 를 못 받은 status=대기 Payment 를 orderId 만으로 토스 측 상태 동기화.
+     * <p>4xx (없는 orderId 등) → BusinessException, 5xx → ExternalApiException.</p>
+     */
+    PaymentConfirmResult lookupByOrderId(String orderId);
 }

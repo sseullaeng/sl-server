@@ -25,4 +25,18 @@ interface EmailVerificationJpaRepository extends JpaRepository<EmailVerification
                AND v.usedAt IS NULL
             """)
     int invalidateUnusedSignupTokens(@Param("userId") Long userId, @Param("now") LocalDateTime now);
+
+    /**
+     * 토큰 atomic 소진 — 동시 두 요청이 같은 token 으로 도달해도 1건만 성공 (follow-up #42).
+     * clearAutomatically + flushAutomatically 로 영속성 컨텍스트 동기화.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE EmailVerification v
+               SET v.usedAt = :now
+             WHERE v.token = :token
+               AND v.usedAt IS NULL
+               AND v.expiresAt > :now
+            """)
+    int markUsedIfValid(@Param("token") String token, @Param("now") LocalDateTime now);
 }

@@ -70,6 +70,9 @@ public class TossPaymentGateway implements PaymentGateway {
             response = restClient.post()
                     .uri("/v1/payments/confirm")
                     .header("Authorization", authorizationHeader)
+                    // Idempotency-Key: 같은 paymentKey 로 confirm 재시도 시 토스가 동일 응답 반환 (follow-up #21).
+                    // 응답 유실/네트워크 타임아웃 후 재시도 안전 — paymentKey 자체가 결제 단위 멱등 키.
+                    .header("Idempotency-Key", paymentKey)
                     .body(body)
                     .retrieve()
                     .body(String.class);
@@ -104,6 +107,26 @@ public class TossPaymentGateway implements PaymentGateway {
             throw new ExternalApiException("토스 결제 조회 실패", e);
         } catch (Exception e) {
             throw new ExternalApiException("토스 결제 조회 통신 실패", e);
+        }
+        return parse(response);
+    }
+
+    @Override
+    public PaymentConfirmResult lookupByOrderId(String orderId) {
+        String response;
+        try {
+            response = restClient.get()
+                    .uri("/v1/payments/orders/{orderId}", orderId)
+                    .header("Authorization", authorizationHeader)
+                    .retrieve()
+                    .body(String.class);
+        } catch (RestClientResponseException e) {
+            if (e.getStatusCode().is4xxClientError()) {
+                throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
+            }
+            throw new ExternalApiException("토스 결제 조회(orderId) 실패", e);
+        } catch (Exception e) {
+            throw new ExternalApiException("토스 결제 조회(orderId) 통신 실패", e);
         }
         return parse(response);
     }

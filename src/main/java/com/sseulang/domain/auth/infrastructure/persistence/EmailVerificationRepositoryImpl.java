@@ -29,4 +29,9 @@ public class EmailVerificationRepositoryImpl implements EmailVerificationReposit
     public int invalidateUnusedSignupTokens(Long userId, java.time.LocalDateTime now) {
         return jpa.invalidateUnusedSignupTokens(userId, now);
     }
+
+    @Override
+    public int markUsedIfValid(String token, java.time.LocalDateTime now) {
+        return jpa.markUsedIfValid(token, now);
+    }
 }

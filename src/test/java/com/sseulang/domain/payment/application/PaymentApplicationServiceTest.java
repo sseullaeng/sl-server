@@ -462,6 +462,87 @@ class PaymentApplicationServiceTest {
                 .isEqualTo(PaymentStatus.대기);
     }
 
+    // ───────── follow-up #21 — Reconciliation ─────────
+
+    @Test
+    @DisplayName("reconcile 정상_dangling Payment 가 lookupByOrderId 로 복구 + 적립")
+    void reconcile_정상() {
+        long amount = 25_000L;
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, amount));
+        gateway.lookupByOrderIdAmount = amount;
+
+        boolean recovered = service.reconcileStalePayment(started.paymentId());
+
+        assertThat(recovered).isTrue();
+        assertThat(gateway.lookupByOrderIdCalls).isEqualTo(1);
+        assertThat(userRepo.findPointBalance(userId)).isEqualTo(amount);
+        assertThat(paymentRepo.findById(started.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.완료);
+    }
+
+    @Test
+    @DisplayName("reconcile 이미 완료된 Payment_skip (lookup 호출 X)")
+    void reconcile_이미완료() {
+        long amount = 10_000L;
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, amount));
+        service.confirmCharge(new ChargeConfirmCommand(userId, "pk", started.merchantUid(), amount));
+        int lookupBefore = gateway.lookupByOrderIdCalls;
+
+        boolean recovered = service.reconcileStalePayment(started.paymentId());
+
+        assertThat(recovered).isFalse();
+        assertThat(gateway.lookupByOrderIdCalls).isEqualTo(lookupBefore);
+    }
+
+    @Test
+    @DisplayName("reconcile lookupByOrderId 4xx_skip (다음 cycle 대기)")
+    void reconcile_lookup_4xx() {
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, 5_000L));
+        gateway.lookupByOrderIdException = new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
+
+        boolean recovered = service.reconcileStalePayment(started.paymentId());
+
+        assertThat(recovered).isFalse();
+        assertThat(userRepo.findPointBalance(userId)).isZero();
+        assertThat(paymentRepo.findById(started.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.대기);
+    }
+
+    @Test
+    @DisplayName("reconcile lookupByOrderId 5xx_skip (재시도 가능)")
+    void reconcile_lookup_5xx() {
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, 5_000L));
+        gateway.lookupByOrderIdException = new com.sseulang.global.exception.ExternalApiException("toss", "5xx");
+
+        boolean recovered = service.reconcileStalePayment(started.paymentId());
+
+        assertThat(recovered).isFalse();
+        assertThat(paymentRepo.findById(started.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.대기);
+    }
+
+    @Test
+    @DisplayName("reconcile amount 위변조_PAYMENT_AMOUNT_MISMATCH (적립 X)")
+    void reconcile_amount_위변조() {
+        long realAmount = 7_000L;
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, realAmount));
+        gateway.lookupByOrderIdAmount = realAmount + 50_000L;
+
+        assertThatThrownBy(() -> service.reconcileStalePayment(started.paymentId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
+        assertThat(userRepo.findPointBalance(userId)).isZero();
+    }
+
+    @Test
+    @DisplayName("findStalePendingIds_status=대기 Payment id 반환")
+    void findStalePending_정상() {
+        ChargeStartResult fresh = service.startCharge(new ChargeStartCommand(userId, 1_000L));
+        java.util.List<Long> stale = service.findStalePendingIds(java.time.LocalDateTime.now(), 10);
+        assertThat(stale).contains(fresh.paymentId());
+    }
+
     @Test
     @DisplayName("handleWebhook 저장된 paymentKey 는 lookup 응답의 것 (payload 위변조 차단)")
     void handleWebhook_paymentKey_from_lookup() {

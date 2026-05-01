@@ -348,6 +348,59 @@ public class PaymentApplicationService {
         return new PaymentStatsResult(paymentRepository.countPaid(), paymentRepository.sumPaidAmount());
     }
 
+    // ───────── Reconciliation (follow-up #21) ─────────
+
+    /**
+     * dangling 복구 — orderId 로 토스 lookup 시도 후 일치하면 markAsPaid + 적립.
+     * Reconciliation 스케줄러가 호출. 단일 Payment 단위 트랜잭션.
+     *
+     * @return true = 복구 성공 (markAsPaid), false = 토스 측 미완료 / 위변조 / 매칭 실패 등
+     */
+    @Transactional
+    public boolean reconcileStalePayment(Long paymentId) {
+        Payment payment = paymentRepository.findById(paymentId).orElse(null);
+        if (payment == null || payment.getStatus() != PaymentStatus.대기) {
+            return false;
+        }
+        PaymentConfirmResult lookup;
+        try {
+            lookup = paymentGateway.lookupByOrderId(payment.getMerchantUid());
+        } catch (BusinessException e) {
+            log.debug("[reconcile] payment#{} lookup 실패 code={}", paymentId, e.getErrorCode());
+            return false;
+        } catch (Exception e) {
+            log.warn("[reconcile] payment#{} lookup 통신 실패 — 다음 cycle 재시도", paymentId, e);
+            return false;
+        }
+        Payment locked = paymentRepository.findByMerchantUidForUpdate(payment.getMerchantUid()).orElse(null);
+        if (locked == null || locked.getStatus() != PaymentStatus.대기) {
+            return false;
+        }
+        locked.verifyAmount(lookup.amount());
+        boolean newlyPaid = locked.markAsPaid(
+                lookup.paymentKey(), lookup.method(), lookup.approvedAt(), lookup.rawResponse()
+        );
+        if (newlyPaid) {
+            pointApplicationService.credit(
+                    locked.getUserId(),
+                    locked.getAmount(),
+                    PointHistoryType.충전,
+                    PointReferenceType.PAYMENT,
+                    locked.getId(),
+                    "토스 reconcile 복구"
+            );
+            log.info("[reconcile] payment#{} 복구 완료", paymentId);
+        }
+        return true;
+    }
+
+    /** Reconciliation 스케줄러 진입점 — stale Payment id 목록 조회. */
+    public java.util.List<Long> findStalePendingIds(java.time.LocalDateTime cutoff, int limit) {
+        return paymentRepository.findStalePending(cutoff, limit).stream()
+                .map(Payment::getId)
+                .toList();
+    }
+
     private static String generateMerchantUid() {
         return "charge-" + UUID.randomUUID();
     }

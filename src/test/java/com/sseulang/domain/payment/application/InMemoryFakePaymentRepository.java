@@ -42,6 +42,20 @@ public class InMemoryFakePaymentRepository implements PaymentRepository {
     }
 
     @Override
+    public java.util.List<Payment> findStalePending(java.time.LocalDateTime cutoff, int limit) {
+        return store.values().stream()
+                .filter(p -> p.getStatus() == PaymentStatus.대기)
+                .filter(p -> p.getCreatedAt() == null || p.getCreatedAt().isBefore(cutoff))
+                .sorted((a, b) -> {
+                    if (a.getCreatedAt() == null) return -1;
+                    if (b.getCreatedAt() == null) return 1;
+                    return a.getCreatedAt().compareTo(b.getCreatedAt());
+                })
+                .limit(limit)
+                .toList();
+    }
+
+    @Override
     public long sumPaidAmount() {
         return store.values().stream()
                 .filter(p -> p.getStatus() == PaymentStatus.완료)

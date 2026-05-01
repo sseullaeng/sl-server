@@ -36,6 +36,11 @@ public class PaymentRepositoryImpl implements PaymentRepository {
     }
 
     @Override
+    public java.util.List<Payment> findStalePending(java.time.LocalDateTime cutoff, int limit) {
+        return jpa.findStalePending(cutoff, org.springframework.data.domain.PageRequest.of(0, limit));
+    }
+
+    @Override
     public long sumPaidAmount() {
         return jpa.sumPaidAmount();
     }
