@@ -36,6 +36,11 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
     private static final String KEY_PREFIX = "auth:rt:";
     private static final String VERSION_KEY_PREFIX = "auth:rtv:";
     private static final String MARKER = "1";
+    /**
+     * revokeAll 직후 versionKey TTL — RT TTL(보통 7일) 보다 길게 잡아 사용자 재로그인 grace window 확보.
+     * 30일 비활성 시 rtv 도 자연 회수 (follow-up #34).
+     */
+    private static final Duration VERSION_KEY_TTL_AFTER_REVOKE = Duration.ofDays(30);
 
     /**
      * Lua: (1) currentTv 조회 (없으면 "0"), (2) claimTv 와 비교, (3) 일치하면 DEL jti 시도.
@@ -78,6 +83,14 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
     @Override
     public void save(String role, Long userId, String jti, Duration ttl) {
         redis.opsForValue().set(jtiKey(role, userId, jti), MARKER, ttl);
+        // versionKey TTL = RT TTL — 비활성 사용자 rtv 잔존 차단 (follow-up #34).
+        // 기존 값 보존 + TTL 갱신 (없으면 "0" 으로 신규).
+        String vKey = versionKey(role, userId);
+        if (Boolean.TRUE.equals(redis.hasKey(vKey))) {
+            redis.expire(vKey, ttl);
+        } else {
+            redis.opsForValue().setIfAbsent(vKey, "0", ttl);
+        }
     }
 
     @Override
@@ -100,7 +113,10 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
     public void revokeAll(String role, Long userId) {
         // INCR 한 방. 진행 중 동시 save 가 있어도 이후 consume 의 tv 검증에서 mismatch 로 거부.
         // 폐기된 jti 키들은 TTL 만료까지 잔존하지만 의미상 무효 (consume 단계에서 막힘).
-        redis.opsForValue().increment(versionKey(role, userId));
+        String vKey = versionKey(role, userId);
+        redis.opsForValue().increment(vKey);
+        // INCR 가 새 키 만들면 TTL=-1 — 비활성 사용자 누적 차단 위해 명시 expire (follow-up #34).
+        redis.expire(vKey, VERSION_KEY_TTL_AFTER_REVOKE);
     }
 
     private static String jtiKey(String role, Long userId, String jti) {
