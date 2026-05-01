@@ -28,6 +28,10 @@ public class FakePaymentGateway implements PaymentGateway {
 
     public int confirmCalls;
     public int lookupCalls;
+    public int lookupByOrderIdCalls;
+    /** lookupByOrderId 응답 amount/orderId override (null 이면 호출 시 받은 orderId 그대로 echo, amount=lastConfirmAmount). */
+    public Long lookupByOrderIdAmount;
+    public RuntimeException lookupByOrderIdException;
     private long lastConfirmAmount;
     private String lastConfirmOrderId;
 
@@ -69,6 +73,23 @@ public class FakePaymentGateway implements PaymentGateway {
                 PaymentMethod.CARD,
                 LocalDateTime.now(),
                 "{\"raw\":\"fake-lookup\"}"
+        );
+    }
+
+    @Override
+    public PaymentConfirmResult lookupByOrderId(String orderId) {
+        lookupByOrderIdCalls++;
+        if (lookupByOrderIdException != null) {
+            throw lookupByOrderIdException;
+        }
+        long resultAmount = lookupByOrderIdAmount != null ? lookupByOrderIdAmount : lastConfirmAmount;
+        return new PaymentConfirmResult(
+                "fake-pk-" + orderId,
+                orderId,
+                resultAmount,
+                PaymentMethod.CARD,
+                LocalDateTime.now(),
+                "{\"raw\":\"fake-lookup-by-orderId\"}"
         );
     }
 }

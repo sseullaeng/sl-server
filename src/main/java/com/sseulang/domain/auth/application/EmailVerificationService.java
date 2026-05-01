@@ -1,5 +1,6 @@
 package com.sseulang.domain.auth.application;
 
+import com.sseulang.domain.auth.application.event.EmailDispatchRequestedEvent;
 import com.sseulang.domain.auth.domain.EmailSender;
 import com.sseulang.domain.auth.domain.EmailVerification;
 import com.sseulang.domain.auth.domain.EmailVerificationRepository;
@@ -9,6 +10,7 @@ import com.sseulang.domain.user.domain.User;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,7 +50,8 @@ public class EmailVerificationService {
 
     private final EmailVerificationRepository verificationRepository;
     private final UserApplicationService userService;
-    private final EmailSender emailSender;
+    private final EmailSender emailSender;  // 직접 호출은 deprecated — 이벤트 listener 가 발송 (follow-up #41)
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
     private final String verificationUrlBase;
 
@@ -56,6 +59,7 @@ public class EmailVerificationService {
             EmailVerificationRepository verificationRepository,
             UserApplicationService userService,
             EmailSender emailSender,
+            ApplicationEventPublisher eventPublisher,
             Clock clock,
             @Value("${app.email.verification-url-base:http://localhost:8080/api/v1/auth/verify-email}")
             String verificationUrlBase
@@ -63,6 +67,7 @@ public class EmailVerificationService {
         this.verificationRepository = verificationRepository;
         this.userService = userService;
         this.emailSender = emailSender;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
         this.verificationUrlBase = verificationUrlBase;
     }
@@ -76,6 +81,11 @@ public class EmailVerificationService {
      * </ol>
      * 가입 직후 흐름 (LocalAuthService.signup) 에서도 호출되며, 가입 시점엔 기존 토큰이 없어 invalidate 는 no-op.
      */
+    /**
+     * SIGNUP 토큰 발급 + 메일 발송 이벤트 발행 (follow-up #41 atomicity).
+     * 메일 발송은 트랜잭션 commit 후 별도 listener 가 처리 — 메일 시스템 다운 시에도
+     * user/token 은 보존, 사용자가 {@code /resend-verification} 으로 재시도 가능.
+     */
     @Transactional
     public void issueSignupToken(Long userId, String email) {
         LocalDateTime now = LocalDateTime.now(clock);
@@ -83,19 +93,40 @@ public class EmailVerificationService {
         String token = generateToken();
         LocalDateTime expiresAt = now.plus(TOKEN_TTL);
         verificationRepository.save(EmailVerification.issue(userId, token, VerificationPurpose.SIGNUP, expiresAt));
-        emailSender.sendVerificationEmail(email, verificationUrlBase + "?token=" + token);
+        // AFTER_COMMIT 으로 발송 — 본 트랜잭션 롤백 시 메일 발송 X.
+        eventPublisher.publishEvent(new EmailDispatchRequestedEvent(email, verificationUrlBase + "?token=" + token));
         lastIssuedAt.put(userId, now);
     }
 
-    /** 토큰 검증 + user.markEmailVerified. 만료/재사용/없음 모두 명시 ErrorCode. */
+    /**
+     * 토큰 검증 + user.markEmailVerified. 만료/재사용/없음 모두 명시 ErrorCode.
+     *
+     * <p>{@link EmailVerificationRepository#markUsedIfValid} atomic UPDATE 로 동시 검증 race 차단
+     * (follow-up #42). 정확히 1건만 1 rows affected — 다른 요청은 0 rows → 사유 분기.</p>
+     */
     @Transactional
     public void verifyToken(String token) {
         if (token == null || token.isBlank()) {
             throw new BusinessException(ErrorCode.AUTH_VERIFICATION_TOKEN_INVALID);
         }
+        LocalDateTime now = LocalDateTime.now(clock);
+        int affected = verificationRepository.markUsedIfValid(token, now);
+        if (affected == 0) {
+            // 사유 분기 — 미존재 / 이미 사용 / 만료 중 정확한 ErrorCode 결정.
+            EmailVerification ver = verificationRepository.findByToken(token)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_VERIFICATION_TOKEN_INVALID));
+            if (ver.isUsed()) {
+                throw new BusinessException(ErrorCode.AUTH_VERIFICATION_TOKEN_INVALID);
+            }
+            if (ver.isExpired(now)) {
+                throw new BusinessException(ErrorCode.AUTH_VERIFICATION_TOKEN_EXPIRED);
+            }
+            // 정상적으론 도달 불가 — race 우승자 트랜잭션이 아직 commit 전 인 보기 드문 경우.
+            throw new BusinessException(ErrorCode.AUTH_VERIFICATION_TOKEN_INVALID);
+        }
+        // atomic UPDATE 성공. user 조회 + verified 플래그 마킹.
         EmailVerification ver = verificationRepository.findByToken(token)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_VERIFICATION_TOKEN_INVALID));
-        ver.markUsed(LocalDateTime.now(clock));  // 만료/재사용 시 throw
         User user = userService.getById(ver.getUserId());
         user.markEmailVerified();
     }

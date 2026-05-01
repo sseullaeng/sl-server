@@ -12,6 +12,7 @@ import com.sseulang.global.security.JwtProvider;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -74,7 +75,12 @@ public class LocalAuthService {
     /**
      * LOCAL 가입 + 자동 로그인. email 중복 시 {@link ErrorCode#USER_EMAIL_DUPLICATED} (다른 provider
      * 로 이미 가입돼있어도 동일 — 가이드 §12 정책).
+     *
+     * <p>{@code @Transactional} — user 저장 + 인증 토큰 발급을 한 트랜잭션으로 묶어 atomicity 보장
+     * (follow-up #41). 메일 발송은 트랜잭션 commit 후 별도 listener 가 처리 — 메일 다운 시에도
+     * user/token 보존, 재발송으로 회복 가능.</p>
      */
+    @Transactional
     public TokenPair signup(Email email, String rawPassword, String nickname) {
         validatePassword(rawPassword);
 
