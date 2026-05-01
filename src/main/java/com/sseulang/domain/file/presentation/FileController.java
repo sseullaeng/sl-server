@@ -7,6 +7,8 @@ import com.sseulang.domain.file.presentation.dto.PresignedUrlRequest;
 import com.sseulang.domain.file.presentation.dto.PresignedUrlResponse;
 import com.sseulang.global.common.ApiResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+@Tag(name = "File", description = "S3 presigned URL 발급")
 @RestController
 @RequestMapping("/api/v1/files")
 public class FileController {
@@ -25,6 +28,9 @@ public class FileController {
         this.fileService = fileService;
     }
 
+    @Operation(summary = "S3 presigned URL 발급",
+            description = "이메일 인증 필수. purpose=PROFILE/ITEM 만 (그 외 403 FORBIDDEN). "
+                    + "Content-Type=image/*, ≤5MB, 한 번에 ≤10건. URL 5분 만료. 발급 후 클라이언트가 S3 에 PUT 직접 업로드.")
     @PostMapping("/presigned-url")
     public ApiResponse<PresignedUrlResponse> issue(
             @AuthenticationPrincipal Long userId,

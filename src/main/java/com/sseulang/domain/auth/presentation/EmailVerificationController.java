@@ -4,6 +4,8 @@ import com.sseulang.domain.auth.application.EmailVerificationService;
 import com.sseulang.domain.auth.presentation.dto.VerifyEmailRequest;
 import com.sseulang.global.common.ApiResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>{@code /resend-verification} — auth 필수 (hasRole("USER")) + CSRF 적용 (게이트 1 round 2 보강)</li>
  * </ul>
  */
+@Tag(name = "EmailVerification", description = "이메일 인증 메일 발송/확인")
 @RestController
 @RequestMapping("/api/v1/auth")
 public class EmailVerificationController {
@@ -29,13 +32,16 @@ public class EmailVerificationController {
         this.verificationService = verificationService;
     }
 
+    @Operation(summary = "이메일 인증 토큰 확인 (익명)",
+            description = "사용자가 인증 메일 링크 클릭 시 호출. 만료 400 AUTH_VERIFICATION_TOKEN_EXPIRED, 잘못된 토큰 400 AUTH_VERIFICATION_TOKEN_INVALID.")
     @PostMapping("/verify-email")
     public ApiResponse<Void> verify(@Valid @RequestBody VerifyEmailRequest request) {
         verificationService.verifyToken(request.token());
         return ApiResponse.ok();
     }
 
-    /** 본인 인증 메일 재발송 — 로그인 필수. 이미 verified 면 no-op. */
+    @Operation(summary = "인증 메일 재발송",
+            description = "로그인 필수. 이미 verified 면 no-op. rate limit 적용 (429 AUTH_VERIFICATION_RESEND_TOO_SOON).")
     @PostMapping("/resend-verification")
     public ApiResponse<Void> resend(@AuthenticationPrincipal Long userId) {
         verificationService.resendForUser(userId);

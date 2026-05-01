@@ -6,6 +6,8 @@ import com.sseulang.domain.chat.presentation.dto.ChatRoomResponse;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "ChatRoom", description = "1:1 채팅방 개설/조회")
 @RestController
 @RequestMapping("/api/v1/chat-rooms")
 public class ChatRoomController {
@@ -30,7 +33,9 @@ public class ChatRoomController {
         this.chatRoomService = chatRoomService;
     }
 
-    /** 멱등 — 같은 (요청자, 상대, 물품) 채팅방이 있으면 기존 반환, 없으면 생성. */
+    @Operation(summary = "채팅방 개설 (멱등)",
+            description = "이메일 인증 필수. 같은 (요청자, 상대, 물품) 채팅방이 있으면 기존 반환, 없으면 생성. "
+                    + "본인 물품 거부(403 CHAT_FORBIDDEN). 삭제/비공개 물품 거부.")
     @PostMapping
     public ApiResponse<ChatRoomResponse> openFor(
             @AuthenticationPrincipal Long requesterId,
@@ -40,6 +45,8 @@ public class ChatRoomController {
                 chatRoomService.openFor(requesterId, request.itemId())));
     }
 
+    @Operation(summary = "내 채팅방 목록",
+            description = "본인이 참여한 채팅방 페이징. lastMessageAt 최신순.")
     @GetMapping
     public ApiResponse<PageResponse<ChatRoomResponse>> listMine(
             @AuthenticationPrincipal Long requesterId,
@@ -55,6 +62,8 @@ public class ChatRoomController {
         return ApiResponse.ok(PageResponse.from(result));
     }
 
+    @Operation(summary = "채팅방 단건 조회",
+            description = "참여자만. 그 외 403 CHAT_FORBIDDEN.")
     @GetMapping("/{id}")
     public ApiResponse<ChatRoomResponse> getOne(
             @AuthenticationPrincipal Long requesterId,

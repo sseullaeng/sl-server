@@ -10,6 +10,7 @@ import com.sseulang.domain.item.presentation.dto.ItemSummaryResponse;
 import com.sseulang.domain.item.presentation.dto.ItemUpdateRequest;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -41,6 +42,8 @@ public class ItemController {
         this.itemService = itemService;
     }
 
+    @Operation(summary = "물품 등록",
+            description = "이메일 인증 필수. imageUrls 의 임시 폴더(items/{userId}/) 가 등록 후 정식 폴더(items/{itemId}/) 로 자동 promote.")
     @PostMapping
     public ResponseEntity<ApiResponse<ItemIdResponse>> register(
             @AuthenticationPrincipal Long sellerId,
@@ -51,6 +54,8 @@ public class ItemController {
                 .body(ApiResponse.ok(new ItemIdResponse(id)));
     }
 
+    @Operation(summary = "물품 검색·페이징 (공개)",
+            description = "FULLTEXT(ngram) 검색. q 1글자는 LIKE 폴백. categoryId/tradeType/minPrice/maxPrice/tag 조합 필터. 인증 불필요.")
     @GetMapping
     public ApiResponse<PageResponse<ItemSummaryResponse>> list(
             @RequestParam(name = "q", required = false) String q,
@@ -72,11 +77,15 @@ public class ItemController {
         return ApiResponse.ok(PageResponse.from(result));
     }
 
+    @Operation(summary = "물품 상세 조회 (공개)",
+            description = "조회 시 viewCount 1 증가. 삭제된 물품은 404. 인증 불필요.")
     @GetMapping("/{id}")
     public ApiResponse<ItemDetailResponse> getOne(@PathVariable("id") Long id) {
         return ApiResponse.ok(ItemDetailResponse.from(itemService.getById(id)));
     }
 
+    @Operation(summary = "물품 수정",
+            description = "본인 물품만. imageUrls non-null 이면 전체 교체 + 임시→정식 promote. hashtags non-null 이면 전체 교체.")
     @PatchMapping("/{id}")
     public ApiResponse<Void> update(
             @AuthenticationPrincipal Long requesterId,
@@ -87,6 +96,8 @@ public class ItemController {
         return ApiResponse.ok();
     }
 
+    @Operation(summary = "물품 삭제 (soft delete)",
+            description = "본인 물품만. status=삭제 로 전환. 관련 거래/채팅방은 유지.")
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(
             @AuthenticationPrincipal Long requesterId,

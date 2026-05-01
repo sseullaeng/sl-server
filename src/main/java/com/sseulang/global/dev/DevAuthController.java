@@ -11,6 +11,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpHeaders;
@@ -33,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>OAuth 콘솔 키 없이도 임의 user 시드 + JWT 쿠키 받아서 Swagger / curl 시나리오 가능.
  * 정식 OAuth 흐름 (가이드 §4.4) 과는 무관 — local 작업 편의 용이며 실서비스 배포 시 등록 X.</p>
  */
+@Tag(name = "DevAuth", description = "로컬 개발 인증 우회 (prod 비활성)")
 @RestController
 @RequestMapping("/api/v1/auth/dev")
 @Profile("local")
@@ -53,10 +56,9 @@ public class DevAuthController {
         this.cookieUtil = cookieUtil;
     }
 
-    /**
-     * 임시 user 를 시드(또는 기존 user 재사용)하고 JWT 쿠키 발급.
-     * 동일 nickname 으로 재호출 시 같은 user 반환 (멱등).
-     */
+    @Operation(summary = "[로컬 전용] 임시 user 시드 + JWT 쿠키 발급",
+            description = "OAuth 콘솔 키 없이 Swagger/curl 로 인증된 시나리오 테스트. "
+                    + "prod 비활성 (Profile=local + app.dev-auth.enabled=true 둘 다 만족 시만). 동일 nickname 멱등.")
     @PostMapping("/seed-and-login")
     public ResponseEntity<ApiResponse<DevLoginResponse>> seedAndLogin(
             HttpServletRequest request,

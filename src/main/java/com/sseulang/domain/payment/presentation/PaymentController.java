@@ -6,6 +6,7 @@ import com.sseulang.domain.payment.presentation.dto.ChargeStartRequest;
 import com.sseulang.domain.payment.presentation.dto.ChargeStartResponse;
 import com.sseulang.domain.payment.presentation.dto.PaymentResponse;
 import com.sseulang.global.common.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -30,6 +31,8 @@ public class PaymentController {
         this.paymentService = paymentService;
     }
 
+    @Operation(summary = "충전 시작",
+            description = "백엔드가 merchantUid 발급 + tossClientKey 반환. 응답 받은 즉시 토스 SDK 결제창 호출. 이메일 인증 필수.")
     @PostMapping("/charge")
     public ResponseEntity<ApiResponse<ChargeStartResponse>> startCharge(
             @AuthenticationPrincipal Long userId,
@@ -41,6 +44,9 @@ public class PaymentController {
                 )));
     }
 
+    @Operation(summary = "충전 확정",
+            description = "토스 SDK 결제 성공 콜백 후 호출. 백엔드가 토스 confirm API 로 amount 재검증 (위변조 차단) → 잔액 충전. "
+                    + "amount mismatch 400 PAYMENT_AMOUNT_MISMATCH, 같은 merchantUid 재호출 409 PAYMENT_DUPLICATED.")
     @PostMapping("/charge/confirm")
     public ApiResponse<PaymentResponse> confirmCharge(
             @AuthenticationPrincipal Long userId,
@@ -66,6 +72,9 @@ public class PaymentController {
      *
      * <p>SecurityConfig 의 CSRF / auth 면제 이미 적용 (Day 7).</p>
      */
+    @Operation(summary = "토스 결제 webhook (외부)",
+            description = "토스에서 호출. 인증/CSRF 면제. transmission-id 로 멱등성 보장. "
+                    + "위변조 방지는 토스 lookup API 재조회로 검증. 프론트는 호출하지 않음.")
     @PostMapping("/webhook/toss")
     public ApiResponse<Void> tossWebhook(
             @RequestBody String rawPayload,
@@ -75,6 +84,8 @@ public class PaymentController {
         return ApiResponse.ok();
     }
 
+    @Operation(summary = "결제 단건 조회",
+            description = "본인 결제만. status 가 PENDING 이면 webhook 또는 5분 reconciliation scheduler 대기 중.")
     @GetMapping("/{id}")
     public ApiResponse<PaymentResponse> getOne(
             @AuthenticationPrincipal Long userId,

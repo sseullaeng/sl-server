@@ -2,19 +2,21 @@ package com.sseulang.domain.delivery.presentation.dto;
 
 import com.sseulang.domain.delivery.application.dto.DeliveryResult;
 import com.sseulang.domain.delivery.domain.DeliveryStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
 
+@Schema(description = "배달 요청 — 모집중→수락→배송중→배송완료→정산완료. 정산 시 요청자 차감/라이더 적립.")
 public record DeliveryResponse(
-        Long id,
-        Long requesterId,
-        Long riderId,
-        String pickupAddress,
-        String dropoffAddress,
-        String itemDescription,
-        long fee,
+        @Schema(example = "55") Long id,
+        @Schema(example = "100") Long requesterId,
+        @Schema(description = "수락 후 채워짐", example = "200") Long riderId,
+        @Schema(example = "서울 강남구 테헤란로 123") String pickupAddress,
+        @Schema(example = "서울 송파구 올림픽로 456") String dropoffAddress,
+        @Schema(example = "A4 서류 봉투 1개") String itemDescription,
+        @Schema(example = "5000", description = "라이더 수수료 — 정산 시 요청자 잔액에서 차감") long fee,
         LocalDateTime requestedDeadline,
-        String memo,
+        @Schema(example = "1층 로비 보관함") String memo,
         DeliveryStatus status,
         LocalDateTime requestedAt,
         LocalDateTime acceptedAt,
