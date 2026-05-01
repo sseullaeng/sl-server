@@ -11,6 +11,7 @@ import com.sseulang.domain.item.domain.Item;
 import com.sseulang.domain.item.domain.TradeType;
 import com.sseulang.domain.message.application.dto.MessageResult;
 import com.sseulang.domain.message.application.dto.MessageSendCommand;
+import com.sseulang.domain.message.application.event.ChatRealtimePublishRequestedEvent;
 import com.sseulang.domain.notification.application.InMemoryFakeNotificationRepository;
 import com.sseulang.domain.notification.application.NotificationApplicationService;
 import com.sseulang.global.exception.BusinessException;
@@ -49,7 +50,14 @@ class MessageApplicationServiceTest {
         ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class));
         ChatRoomApplicationService roomSvc = new ChatRoomApplicationService(roomRepo, itemSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class));
         NotificationApplicationService notifSvc = new NotificationApplicationService(notifRepo);
-        service = new MessageApplicationService(msgRepo, roomSvc, notifSvc, publisher);
+        // 단위 테스트에선 트랜잭션 컨텍스트 X — AFTER_COMMIT listener 직접 호출하는 fake event publisher.
+        ChatRealtimeEventListener listener = new ChatRealtimeEventListener(publisher);
+        org.springframework.context.ApplicationEventPublisher eventPublisher = event -> {
+            if (event instanceof ChatRealtimePublishRequestedEvent e) {
+                listener.onPublish(e);
+            }
+        };
+        service = new MessageApplicationService(msgRepo, roomSvc, notifSvc, publisher, eventPublisher);
 
         Item item = itemRepo.save(Item.create(SELLER, null, "물건", "d", 1L, null, null, TradeType.판매, null));
         roomId = roomSvc.openFor(BUYER, item.getId()).id();
