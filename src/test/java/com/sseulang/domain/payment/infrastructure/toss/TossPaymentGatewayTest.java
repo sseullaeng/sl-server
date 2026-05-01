@@ -27,7 +27,7 @@ class TossPaymentGatewayTest {
         gateway = new TossPaymentGateway(
                 RestClient.builder(),
                 new ObjectMapper(),
-                new TossProperties("ck", "sk", "https://api.tosspayments.com")
+                new TossProperties("ck", "sk", "https://api.tosspayments.com", null, null)
         );
     }
 

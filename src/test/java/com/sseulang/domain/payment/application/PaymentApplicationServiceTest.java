@@ -15,6 +15,8 @@ import com.sseulang.domain.user.domain.User;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import com.sseulang.global.infra.payment.TossProperties;
+import com.sseulang.global.infra.payment.TossWebhookSignatureVerifier;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,9 +45,13 @@ class PaymentApplicationServiceTest {
         pointHistoryRepo = new InMemoryFakePointHistoryRepository();
         userService = new UserApplicationService(userRepo);
         PointApplicationService pointSvc = new PointApplicationService(userService, pointHistoryRepo);
+        TossProperties tossProps = new TossProperties(CLIENT_KEY, "test_sk_secret", null, null, null);
         service = new PaymentApplicationService(
                 paymentRepo, gateway, pointSvc, userService,
-                new TossProperties(CLIENT_KEY, "test_sk_secret", null)
+                tossProps,
+                new InMemoryFakeWebhookEventRepository(),
+                new TossWebhookSignatureVerifier(tossProps),
+                new ObjectMapper()
         );
         userId = userRepo.save(User.createSocialUser(
                 SocialProvider.KAKAO, "kakao-1", new Email("u1@x.com"), "u1", null
@@ -202,10 +208,106 @@ class PaymentApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("handleWebhook no-op (로깅만)")
+    @DisplayName("handleWebhook payload 파싱 + WebhookEvent 저장 (시그니처 검증 비활성)")
     void handleWebhook() {
-        // 예외 없이 통과
-        service.handleWebhook("{\"eventType\":\"PAYMENT_STATUS_CHANGED\"}");
+        // webhookSecret null 이라 시그니처 검증 비활성. eventId 만 있으면 저장 성공.
+        service.handleWebhook(
+                "{\"eventId\":\"evt-1\",\"eventType\":\"PAYMENT.STATUS_CHANGED\",\"data\":{}}",
+                null, null
+        );
+    }
+
+    @Test
+    @DisplayName("handleWebhook 동일 eventId 두 번_두번째는 멱등 (예외 X, 잔액 변동 X)")
+    void handleWebhook_멱등() {
+        String payload = "{\"eventId\":\"evt-dup\",\"eventType\":\"PAYMENT.STATUS_CHANGED\",\"data\":{}}";
+        service.handleWebhook(payload, null, null);
+        // 두 번째 호출 — UNIQUE 충돌 잡고 정상 종료해야 함
+        service.handleWebhook(payload, null, null);
+    }
+
+    @Test
+    @DisplayName("handleWebhook PAYMENT.STATUS_CHANGED + DONE_Payment markAsPaid + 포인트 적립")
+    void handleWebhook_done_동기화() {
+        long amount = 30_000L;
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, amount));
+
+        String payload = String.format(
+                "{\"eventId\":\"evt-done-1\",\"eventType\":\"PAYMENT.STATUS_CHANGED\"," +
+                        "\"data\":{\"paymentKey\":\"pk-1\",\"orderId\":\"%s\",\"status\":\"DONE\",\"totalAmount\":%d}}",
+                started.merchantUid(), amount
+        );
+        service.handleWebhook(payload, null, null);
+
+        // 잔액 적립 확인
+        assertThat(userRepo.findPointBalance(userId)).isEqualTo(amount);
+        // 결제 상태
+        var p = paymentRepo.findById(started.paymentId()).orElseThrow();
+        assertThat(p.getStatus()).isEqualTo(PaymentStatus.완료);
+    }
+
+    @Test
+    @DisplayName("handleWebhook 이미 완료된 Payment_멱등 (잔액 추가 적립 X)")
+    void handleWebhook_이미완료() {
+        long amount = 20_000L;
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, amount));
+        // 먼저 confirm 흐름으로 완료 — fake gateway 가 amount/orderId echo
+        service.confirmCharge(new ChargeConfirmCommand(userId, "pk-x", started.merchantUid(), amount));
+        long balanceAfterConfirm = userRepo.findPointBalance(userId);
+
+        // 그 다음 webhook 으로 동일 결제 통보
+        String payload = String.format(
+                "{\"eventId\":\"evt-after-confirm\",\"eventType\":\"PAYMENT.STATUS_CHANGED\"," +
+                        "\"data\":{\"paymentKey\":\"pk-x\",\"orderId\":\"%s\",\"status\":\"DONE\",\"totalAmount\":%d}}",
+                started.merchantUid(), amount
+        );
+        service.handleWebhook(payload, null, null);
+
+        // 잔액 변동 없음 — 두 번 적립되면 안 됨
+        assertThat(userRepo.findPointBalance(userId)).isEqualTo(balanceAfterConfirm);
+    }
+
+    @Test
+    @DisplayName("handleWebhook amount 위변조_PAYMENT_AMOUNT_MISMATCH")
+    void handleWebhook_amount_위변조() {
+        long realAmount = 10_000L;
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, realAmount));
+
+        String payload = String.format(
+                "{\"eventId\":\"evt-tamper\",\"eventType\":\"PAYMENT.STATUS_CHANGED\"," +
+                        "\"data\":{\"paymentKey\":\"pk-t\",\"orderId\":\"%s\",\"status\":\"DONE\",\"totalAmount\":%d}}",
+                started.merchantUid(), realAmount + 50_000L  // 위변조
+        );
+
+        assertThatThrownBy(() -> service.handleWebhook(payload, null, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
+        // 잔액 적립 X
+        assertThat(userRepo.findPointBalance(userId)).isZero();
+    }
+
+    @Test
+    @DisplayName("handleWebhook eventId 없음_PAYMENT_WEBHOOK_PAYLOAD_INVALID")
+    void handleWebhook_eventId_누락() {
+        assertThatThrownBy(() -> service.handleWebhook(
+                "{\"eventType\":\"PAYMENT.STATUS_CHANGED\",\"data\":{}}",
+                null, null
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_WEBHOOK_PAYLOAD_INVALID);
+    }
+
+    @Test
+    @DisplayName("handleWebhook 알 수 없는 orderId_무시 (예외 X, 잔액 변동 X)")
+    void handleWebhook_unknown_orderId() {
+        String payload = "{\"eventId\":\"evt-unknown\",\"eventType\":\"PAYMENT.STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-z\",\"orderId\":\"unknown-order\",\"status\":\"DONE\",\"totalAmount\":1000}}";
+
+        // 예외 없이 통과해야 함 (다른 시스템 결제일 수 있음)
+        service.handleWebhook(payload, null, null);
+        assertThat(userRepo.findPointBalance(userId)).isZero();
     }
 
     // ───────── Codex 게이트 1 ④ — confirm ALREADY_PROCESSED → lookup 동기화 ─────────
