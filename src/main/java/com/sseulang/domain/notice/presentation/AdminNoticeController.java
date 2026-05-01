@@ -8,6 +8,7 @@ import com.sseulang.domain.notice.presentation.dto.NoticeUpsertRequest;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -37,6 +38,7 @@ public class AdminNoticeController {
         this.noticeService = noticeService;
     }
 
+    @Operation(summary = "[관리자] 공지 전체 목록", description = "미공개/윈도우 외 공지 모두 포함.")
     @GetMapping
     public ApiResponse<PageResponse<NoticeResponse>> list(
             @RequestParam(value = "type", required = false) NoticeType type,
@@ -47,11 +49,13 @@ public class AdminNoticeController {
         ));
     }
 
+    @Operation(summary = "[관리자] 공지 단건 조회")
     @GetMapping("/{id}")
     public ApiResponse<NoticeResponse> getOne(@PathVariable("id") Long id) {
         return ApiResponse.ok(NoticeResponse.from(noticeService.adminFindById(id)));
     }
 
+    @Operation(summary = "[관리자] 공지 생성")
     @PostMapping
     public ResponseEntity<ApiResponse<Long>> create(
             @AuthenticationPrincipal Long adminId,
@@ -61,6 +65,7 @@ public class AdminNoticeController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(id));
     }
 
+    @Operation(summary = "[관리자] 공지 전체 수정")
     @PatchMapping("/{id}")
     public ApiResponse<Void> update(
             @PathVariable("id") Long id,
@@ -70,6 +75,7 @@ public class AdminNoticeController {
         return ApiResponse.ok();
     }
 
+    @Operation(summary = "[관리자] 공지 상단 고정 토글")
     @PatchMapping("/{id}/pin")
     public ApiResponse<Void> setPinned(
             @PathVariable("id") Long id,
@@ -79,6 +85,7 @@ public class AdminNoticeController {
         return ApiResponse.ok();
     }
 
+    @Operation(summary = "[관리자] 공지 게시/비게시 토글")
     @PatchMapping("/{id}/publish")
     public ApiResponse<Void> setPublished(
             @PathVariable("id") Long id,
@@ -88,6 +95,7 @@ public class AdminNoticeController {
         return ApiResponse.ok();
     }
 
+    @Operation(summary = "[관리자] 공지 삭제 (hard delete)")
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable("id") Long id) {
         noticeService.delete(id);

@@ -12,6 +12,7 @@ import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import com.sseulang.global.security.CookieUtil;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -46,14 +47,18 @@ public class AuthController {
         this.cookieUtil = cookieUtil;
     }
 
-    /** LOCAL email/password 가입 — 가입 즉시 자동 로그인 (AT/RT 쿠키 발급). */
+    @Operation(summary = "LOCAL 회원가입",
+            description = "이메일/비밀번호 가입. 성공 시 AT(at)/RT(rt) HttpOnly 쿠키 자동 발급 + 인증 메일 발송. "
+                    + "이메일 인증 전엔 자금 영향 API 가 403(AUTH_EMAIL_NOT_VERIFIED) 떨굼.")
     @PostMapping("/signup")
     public ResponseEntity<ApiResponse<Void>> signup(@Valid @RequestBody LocalSignupRequest request) {
         TokenPair pair = localAuthService.signup(request.toEmailVO(), request.password(), request.nickname());
         return setAuthCookies(pair);
     }
 
-    /** LOCAL email/password 로그인. 미존재/차단/비밀번호 불일치 모두 동일 응답 (leak 방어). */
+    @Operation(summary = "LOCAL 로그인",
+            description = "이메일/비밀번호 로그인. 미존재/차단/비밀번호 불일치 모두 동일 응답(401 AUTH_LOGIN_FAILED) — 이메일 존재 여부 leak 방지. "
+                    + "성공 시 AT/RT 쿠키 자동 발급.")
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<Void>> login(@Valid @RequestBody LocalLoginRequest request) {
         TokenPair pair = localAuthService.login(request.toEmailVO(), request.password());
@@ -69,6 +74,9 @@ public class AuthController {
                 .body(ApiResponse.ok());
     }
 
+    @Operation(summary = "OAuth 로그인 (kakao/google)",
+            description = "프론트가 SDK 로 받은 access_token 을 본 endpoint 에 POST. 백엔드가 provider 검증 + 신규/기존/takeover 분기 처리. "
+                    + "신규 가입은 email_verified=true 로 즉시 발급 (provider 검증된 이메일).")
     @PostMapping("/oauth2/{provider}")
     public ResponseEntity<ApiResponse<Void>> oauth2(
             @PathVariable("provider") String provider,
@@ -97,6 +105,9 @@ public class AuthController {
         };
     }
 
+    @Operation(summary = "AT 재발급 (RT rotation)",
+            description = "RT 쿠키로 새 AT/RT 쌍 발급. RT rotation 적용 — 사용된 RT 즉시 폐기. "
+                    + "AT 만료(401 AUTH_TOKEN_EXPIRED) 시 axios interceptor 등으로 자동 호출 권장.")
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<Void>> refresh(
             @CookieValue(name = CookieUtil.REFRESH_TOKEN_COOKIE, required = false) String refreshToken
@@ -115,6 +126,9 @@ public class AuthController {
                 .body(ApiResponse.ok());
     }
 
+    @Operation(summary = "로그아웃",
+            description = "AT 즉시 blacklist + RT 폐기 + AT/RT 쿠키 만료. "
+                    + "응답 후 모든 인증 요청 401(AUTH_TOKEN_REVOKED) 떨어짐.")
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(
             @CookieValue(name = CookieUtil.ACCESS_TOKEN_COOKIE, required = false) String accessToken,

@@ -4,6 +4,7 @@ import com.sseulang.domain.notification.application.NotificationApplicationServi
 import com.sseulang.domain.notification.presentation.dto.NotificationResponse;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -29,6 +30,8 @@ public class NotificationController {
         this.notificationService = notificationService;
     }
 
+    @Operation(summary = "내 알림 목록",
+            description = "본인 알림 페이징. read=false 필터는 클라이언트 책임 (현재 서버 필터 X — follow-up).")
     @GetMapping
     public ApiResponse<PageResponse<NotificationResponse>> listMine(
             @AuthenticationPrincipal Long userId,
@@ -44,6 +47,8 @@ public class NotificationController {
         return ApiResponse.ok(PageResponse.from(result));
     }
 
+    @Operation(summary = "알림 읽음 처리",
+            description = "본인 알림만 (그 외 무시). id 는 MongoDB ObjectId hex 24자.")
     @PatchMapping("/{id}/read")
     public ApiResponse<Void> markAsRead(
             @AuthenticationPrincipal Long userId,

@@ -6,6 +6,7 @@ import com.sseulang.domain.auth.application.dto.TokenPair;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.security.CookieUtil;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
@@ -32,6 +33,8 @@ public class AdminAuthController {
         this.cookieUtil = cookieUtil;
     }
 
+    @Operation(summary = "관리자 로그인",
+            description = "username/password (BCrypt). 성공 시 ROLE_ADMIN AT/RT 쿠키 발급. 실패 401 AUTH_LOGIN_FAILED.")
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<Void>> login(@Valid @RequestBody AdminLoginRequest request) {
         TokenPair pair = adminLoginService.login(request.username(), request.password());

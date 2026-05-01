@@ -5,6 +5,7 @@ import com.sseulang.domain.withdrawal.presentation.dto.WithdrawalRequest;
 import com.sseulang.domain.withdrawal.presentation.dto.WithdrawalResponse;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +31,9 @@ public class WithdrawalController {
         this.withdrawalService = withdrawalService;
     }
 
+    @Operation(summary = "출금 신청",
+            description = "잔액 즉시 차감(원자 UPDATE) + 신청 생성. idempotencyKey 로 중복 차단 — 같은 키 재호출은 동일 신청 반환. "
+                    + "잔액 부족 400 INSUFFICIENT_POINT.")
     @PostMapping
     public ResponseEntity<ApiResponse<Long>> request(
             @AuthenticationPrincipal Long userId,
@@ -39,6 +43,8 @@ public class WithdrawalController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(id));
     }
 
+    @Operation(summary = "내 출금 신청 목록",
+            description = "본인이 신청한 출금 페이징 (최신순).")
     @GetMapping
     public ApiResponse<PageResponse<WithdrawalResponse>> getMyWithdrawals(
             @AuthenticationPrincipal Long userId,
@@ -49,6 +55,8 @@ public class WithdrawalController {
         ));
     }
 
+    @Operation(summary = "출금 신청 단건 조회",
+            description = "본인 신청만. 그 외 403 WITHDRAWAL_FORBIDDEN.")
     @GetMapping("/{id}")
     public ApiResponse<WithdrawalResponse> getOne(
             @AuthenticationPrincipal Long userId,
@@ -57,6 +65,8 @@ public class WithdrawalController {
         return ApiResponse.ok(WithdrawalResponse.from(withdrawalService.getById(id, userId)));
     }
 
+    @Operation(summary = "출금 신청 취소",
+            description = "신청 상태(관리자 미처리)일 때만 가능. 잔액 자동 환불. 승인/완료 후 취소는 400 WITHDRAWAL_NOT_CANCELABLE.")
     @DeleteMapping("/{id}")
     public ApiResponse<Void> cancel(
             @AuthenticationPrincipal Long userId,

@@ -6,6 +6,7 @@ import com.sseulang.domain.delivery.presentation.dto.DeliveryCreateRequest;
 import com.sseulang.domain.delivery.presentation.dto.DeliveryResponse;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
@@ -31,7 +32,8 @@ public class DeliveryController {
         this.deliveryService = deliveryService;
     }
 
-    /** 요청 등록 — 요청자, requireVerified. */
+    @Operation(summary = "배달 요청 등록 (요청자)",
+            description = "이메일 인증 필수. 등록 시점에 fee escrow 안 함 — 정산(complete)에서 차감.")
     @PostMapping
     public ResponseEntity<ApiResponse<DeliveryResponse>> create(
             @AuthenticationPrincipal Long requesterId,
@@ -41,7 +43,8 @@ public class DeliveryController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(body));
     }
 
-    /** 모집중 목록 — 라이더가 수락 가능한 후보. 인증 필수, 본인 등록 여부는 클라이언트에서 필터. */
+    @Operation(summary = "모집중 배달 목록",
+            description = "라이더가 수락 가능한 후보. 본인 등록 여부 필터는 클라이언트 책임.")
     @GetMapping
     public ApiResponse<PageResponse<DeliveryResponse>> listOpen(Pageable pageable) {
         return ApiResponse.ok(PageResponse.from(
@@ -49,7 +52,8 @@ public class DeliveryController {
         ));
     }
 
-    /** 내 요청+수락 목록. */
+    @Operation(summary = "내 배달 목록 (요청+수락 포함)",
+            description = "본인이 requester 또는 rider 로 참여한 배달 페이징.")
     @GetMapping("/me")
     public ApiResponse<PageResponse<DeliveryResponse>> listMine(
             @AuthenticationPrincipal Long userId,
@@ -60,6 +64,8 @@ public class DeliveryController {
         ));
     }
 
+    @Operation(summary = "배달 단건 조회",
+            description = "모집중은 누구나 조회 가능. 그 외 상태는 참여자(requester/rider)만.")
     @GetMapping("/{id}")
     public ApiResponse<DeliveryResponse> getOne(
             @AuthenticationPrincipal Long userId,
@@ -68,7 +74,9 @@ public class DeliveryController {
         return ApiResponse.ok(DeliveryResponse.from(deliveryService.getById(id, userId)));
     }
 
-    /** 라이더 수락. */
+    @Operation(summary = "라이더 수락",
+            description = "이메일 인증 필수. 본인 거래 차단(400 DELIVERY_SELF_NOT_ALLOWED). "
+                    + "동시 수락 race 시 한 명만 성공(409 DELIVERY_ALREADY_ACCEPTED).")
     @PatchMapping("/{id}/accept")
     public ApiResponse<DeliveryResponse> accept(
             @AuthenticationPrincipal Long riderId,
@@ -77,7 +85,8 @@ public class DeliveryController {
         return ApiResponse.ok(DeliveryResponse.from(deliveryService.accept(id, riderId)));
     }
 
-    /** 라이더 픽업 완료. */
+    @Operation(summary = "라이더 픽업 완료",
+            description = "수락한 라이더만. 수락 → 배송중 전이.")
     @PatchMapping("/{id}/pickup")
     public ApiResponse<DeliveryResponse> pickup(
             @AuthenticationPrincipal Long riderId,
@@ -86,7 +95,8 @@ public class DeliveryController {
         return ApiResponse.ok(DeliveryResponse.from(deliveryService.markPickedUp(id, riderId)));
     }
 
-    /** 라이더 배송 완료. */
+    @Operation(summary = "라이더 배송 완료",
+            description = "수락한 라이더만. 배송중 → 배송완료 전이.")
     @PatchMapping("/{id}/deliver")
     public ApiResponse<DeliveryResponse> deliver(
             @AuthenticationPrincipal Long riderId,
@@ -95,7 +105,8 @@ public class DeliveryController {
         return ApiResponse.ok(DeliveryResponse.from(deliveryService.markDelivered(id, riderId)));
     }
 
-    /** 요청자 정산 확인 — 포인트 이동 + 정산완료. */
+    @Operation(summary = "요청자 정산 확인 — 포인트 이동",
+            description = "요청자만. 잔액에서 fee 차감 → 라이더 적립. 잔액 부족 400 INSUFFICIENT_POINT (전체 트랜잭션 롤백).")
     @PatchMapping("/{id}/complete")
     public ApiResponse<DeliveryResponse> complete(
             @AuthenticationPrincipal Long requesterId,
@@ -104,7 +115,8 @@ public class DeliveryController {
         return ApiResponse.ok(DeliveryResponse.from(deliveryService.complete(id, requesterId)));
     }
 
-    /** 요청자 취소 — 모집중 한정. */
+    @Operation(summary = "요청자 취소",
+            description = "모집중 한정. 수락 이후 취소는 400 DELIVERY_INVALID_STATE — 분쟁 흐름 별도 (follow-up).")
     @PatchMapping("/{id}/cancel")
     public ApiResponse<DeliveryResponse> cancel(
             @AuthenticationPrincipal Long requesterId,

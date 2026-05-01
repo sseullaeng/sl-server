@@ -8,6 +8,7 @@ import com.sseulang.domain.transaction.presentation.dto.TransactionResponse;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -32,6 +33,8 @@ public class TransactionController {
         this.transactionService = transactionService;
     }
 
+    @Operation(summary = "거래 생성 (buyer)",
+            description = "이메일 인증 필수. 본인 물품 / 비활성(예약/삭제) 물품 거부. 생성 즉시 status=채팅중.")
     @PostMapping
     public ResponseEntity<ApiResponse<TransactionIdResponse>> create(
             @AuthenticationPrincipal Long buyerId,
@@ -42,6 +45,8 @@ public class TransactionController {
                 .body(ApiResponse.ok(new TransactionIdResponse(id)));
     }
 
+    @Operation(summary = "거래 단건 조회",
+            description = "거래 참여자(seller/buyer) 만 조회 가능. 그 외 403 TRANSACTION_FORBIDDEN.")
     @GetMapping("/{id}")
     public ApiResponse<TransactionResponse> getOne(
             @AuthenticationPrincipal Long requesterId,
@@ -59,6 +64,9 @@ public class TransactionController {
      * </ul>
      * action={@code 채팅중} 은 거부 — 채팅중은 create 시점에만 부여되는 초기 상태.
      */
+    @Operation(summary = "거래 상태 전이 (예약 / 거래완료 / 취소)",
+            description = "action 분기 — 예약: seller, 거래완료: seller(잔액 부족 시 INSUFFICIENT_POINT), 취소: 양쪽. "
+                    + "예약→취소 시 Item 판매중으로 복원. 동시 reserve 는 한 건만 성공(409 TRANSACTION_RESERVED_BY_OTHER).")
     @PatchMapping("/{id}")
     public ApiResponse<Void> patch(
             @AuthenticationPrincipal Long requesterId,

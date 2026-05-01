@@ -2,6 +2,7 @@ package com.sseulang.domain.wishlist.presentation;
 
 import com.sseulang.domain.wishlist.application.WishlistApplicationService;
 import com.sseulang.global.common.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -25,6 +26,7 @@ public class WishlistController {
         this.wishlistService = wishlistService;
     }
 
+    @Operation(summary = "찜 추가", description = "멱등 — 이미 찜한 물품 재호출 OK. wishlist_count 자동 증가.")
     @PostMapping
     public ApiResponse<Void> add(
             @AuthenticationPrincipal Long userId,
@@ -34,6 +36,7 @@ public class WishlistController {
         return ApiResponse.ok();
     }
 
+    @Operation(summary = "찜 해제", description = "멱등 — 찜 안 한 상태 재호출 OK. wishlist_count 자동 감소(음수 방지).")
     @DeleteMapping
     public ApiResponse<Void> remove(
             @AuthenticationPrincipal Long userId,

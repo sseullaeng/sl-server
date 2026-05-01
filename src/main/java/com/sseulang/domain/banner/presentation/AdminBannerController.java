@@ -7,6 +7,7 @@ import com.sseulang.domain.banner.presentation.dto.BannerUpsertRequest;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -32,6 +33,7 @@ public class AdminBannerController {
         this.bannerService = bannerService;
     }
 
+    @Operation(summary = "[관리자] 배너 전체 목록", description = "active=false / 윈도우 외 배너도 모두 포함.")
     @GetMapping
     public ApiResponse<PageResponse<BannerResponse>> list(Pageable pageable) {
         return ApiResponse.ok(PageResponse.from(
@@ -39,11 +41,13 @@ public class AdminBannerController {
         ));
     }
 
+    @Operation(summary = "[관리자] 배너 단건 조회")
     @GetMapping("/{id}")
     public ApiResponse<BannerResponse> getOne(@PathVariable("id") Long id) {
         return ApiResponse.ok(BannerResponse.from(bannerService.adminFindById(id)));
     }
 
+    @Operation(summary = "[관리자] 배너 생성")
     @PostMapping
     public ResponseEntity<ApiResponse<Long>> create(
             @AuthenticationPrincipal Long adminId,
@@ -53,6 +57,7 @@ public class AdminBannerController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(id));
     }
 
+    @Operation(summary = "[관리자] 배너 전체 수정")
     @PatchMapping("/{id}")
     public ApiResponse<Void> update(
             @PathVariable("id") Long id,
@@ -62,6 +67,7 @@ public class AdminBannerController {
         return ApiResponse.ok();
     }
 
+    @Operation(summary = "[관리자] 배너 활성/비활성 토글")
     @PatchMapping("/{id}/active")
     public ApiResponse<Void> setActive(
             @PathVariable("id") Long id,
@@ -71,6 +77,7 @@ public class AdminBannerController {
         return ApiResponse.ok();
     }
 
+    @Operation(summary = "[관리자] 배너 삭제")
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable("id") Long id) {
         bannerService.delete(id);

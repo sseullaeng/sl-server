@@ -5,6 +5,7 @@ import com.sseulang.domain.message.presentation.dto.MessageResponse;
 import com.sseulang.domain.message.presentation.dto.MessageSendRequest;
 import com.sseulang.global.common.ApiResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +31,9 @@ public class MessageController {
         this.messageService = messageService;
     }
 
+    @Operation(summary = "메시지 전송 (REST)",
+            description = "채팅방 참여자만. content 또는 imageUrls 둘 중 하나 이상. 전송 후 STOMP topic 으로 broadcast + 상대방 알림 푸시. "
+                    + "WebSocket SEND 와 동일 결과 — 어느 경로든 OK.")
     @PostMapping
     public ResponseEntity<ApiResponse<MessageResponse>> send(
             @AuthenticationPrincipal Long senderId,
@@ -42,7 +46,8 @@ public class MessageController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(response));
     }
 
-    /** 커서 페이징 — {@code ?before={messageId}&size=30}. 결과는 최신순. */
+    @Operation(summary = "메시지 커서 페이징",
+            description = "최신순. before(messageId) 가 있으면 그 이전 size 개 — 무한 스크롤 패턴. 채팅방 참여자만.")
     @GetMapping
     public ApiResponse<List<MessageResponse>> listPage(
             @AuthenticationPrincipal Long requesterId,

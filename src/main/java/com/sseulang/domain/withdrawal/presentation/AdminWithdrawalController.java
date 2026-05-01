@@ -7,6 +7,7 @@ import com.sseulang.domain.withdrawal.presentation.dto.WithdrawalResponse;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -33,6 +34,7 @@ public class AdminWithdrawalController {
         this.withdrawalService = withdrawalService;
     }
 
+    @Operation(summary = "[관리자] 출금 신청 목록", description = "status 필터 (신청/승인/완료/거부) + 페이징.")
     @GetMapping
     public ApiResponse<PageResponse<WithdrawalResponse>> list(
             @RequestParam(value = "status", required = false) WithdrawalStatus status,
@@ -43,6 +45,8 @@ public class AdminWithdrawalController {
         ));
     }
 
+    @Operation(summary = "[관리자] 출금 처리",
+            description = "action: APPROVE(승인) / REJECT(거부, 잔액 자동 환불) / COMPLETE(외부 이체 완료 표시).")
     @PatchMapping("/{id}")
     public ApiResponse<Void> decide(
             @AuthenticationPrincipal Long adminId,
