@@ -36,12 +36,12 @@ class ItemApplicationServiceTest {
         categoryRepo = new InMemoryFakeCategoryRepository();
         CategoryApplicationService categoryService = new CategoryApplicationService(categoryRepo);
         // requireVerified 가드는 기본 통과 (mock void no-op) — 단위 테스트는 비즈니스 로직 검증.
-        service = new ItemApplicationService(itemRepo, categoryService, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class));
+        service = new ItemApplicationService(itemRepo, categoryService, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class), new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator());
         categoryId = categoryRepo.insert(Category.createRoot("디지털/가전", 1)).getId();
     }
 
     @Test
-    @DisplayName("register 정상_id 발급되고 이미지+해시태그 add")
+    @DisplayName("register 정상_id 발급되고 이미지+해시태그 add + 이미지 url promote (follow-up #12)")
     void register_정상() {
         Long id = service.register(new ItemRegisterCommand(
                 SELLER, categoryId, "title", "desc", 10_000L, null, null, TradeType.판매,
@@ -55,6 +55,9 @@ class ItemApplicationServiceTest {
         assertThat(result.sellerId()).isEqualTo(SELLER);
         assertThat(result.images()).hasSize(2);
         assertThat(result.images().get(0).thumbnail()).isTrue();
+        // 등록 시 임시 폴더(items/{SELLER}/) → 정식 폴더(items/{itemId}/) 로 promote
+        assertThat(result.images().get(0).imageUrl()).isEqualTo("https://cdn.test/items/" + id + "/img1.jpg");
+        assertThat(result.images().get(1).imageUrl()).isEqualTo("https://cdn.test/items/" + id + "/img2.jpg");
         assertThat(result.hashtags()).containsExactly("아이폰", "미개봉");
     }
 
@@ -127,7 +130,7 @@ class ItemApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("update imageUrls non-null_전체 교체")
+    @DisplayName("update imageUrls non-null_전체 교체 + 임시 prefix 자동 promote (follow-up #12)")
     void update_이미지_전체교체() {
         Long id = service.register(new ItemRegisterCommand(
                 SELLER, categoryId, "t", "d", 1L, null, null, TradeType.판매, null,
@@ -140,7 +143,8 @@ class ItemApplicationServiceTest {
 
         ItemDetailResult r = service.getById(id);
         assertThat(r.images()).hasSize(1);
-        assertThat(r.images().get(0).imageUrl()).isEqualTo("https://cdn.test/items/" + SELLER + "/new1.jpg");
+        // 임시 폴더(items/{SELLER}/) 가 정식 폴더(items/{itemId}/) 로 promote 됨
+        assertThat(r.images().get(0).imageUrl()).isEqualTo("https://cdn.test/items/" + id + "/new1.jpg");
     }
 
     @Test

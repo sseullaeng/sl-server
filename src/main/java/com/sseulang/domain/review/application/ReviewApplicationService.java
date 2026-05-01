@@ -5,6 +5,7 @@ import com.sseulang.domain.review.application.dto.ReviewWriteCommand;
 import com.sseulang.domain.review.domain.Review;
 import com.sseulang.domain.review.domain.ReviewRepository;
 import com.sseulang.domain.transaction.application.TransactionApplicationService;
+import com.sseulang.domain.transaction.application.dto.PendingReviewableResult;
 import com.sseulang.domain.transaction.application.dto.ReviewableTransactionResult;
 import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.global.exception.BusinessException;
@@ -78,6 +79,14 @@ public class ReviewApplicationService {
         return reviewRepository.findByRevieweeId(revieweeId, pageable)
                 .map(ReviewResult::from)
                 .map(r -> r.masked(requesterId));
+    }
+
+    /**
+     * Review 작성 대기 거래 목록 (follow-up #56). 본인이 reviewer 로 아직 작성 안 한 7일 이내 완료 거래.
+     * Cross-aggregate read 는 TransactionApplicationService 가 책임 — 본 서비스는 단순 위임.
+     */
+    public Page<PendingReviewableResult> listPending(Long requesterId, Pageable pageable) {
+        return transactionApplicationService.findPendingReviewable(requesterId, pageable);
     }
 
     private static boolean isUniqueConflict(DataIntegrityViolationException violation) {

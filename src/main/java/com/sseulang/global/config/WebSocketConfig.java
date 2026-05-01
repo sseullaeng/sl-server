@@ -31,9 +31,15 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // SockJS 폴백 — 브라우저 환경(쿠키 핸드셰이크)
         registry.addEndpoint("/ws-stomp")
                 .setAllowedOrigins(corsProperties.originsArray())
                 .withSockJS();
+        // native WebSocket — 모바일 / non-browser 클라이언트 (follow-up #19).
+        // 인증은 STOMP CONNECT frame 의 nativeHeader Authorization: Bearer <jwt> 로
+        // {@link com.sseulang.global.websocket.StompAuthChannelInterceptor} 가 처리.
+        registry.addEndpoint("/ws-stomp-native")
+                .setAllowedOrigins(corsProperties.originsArray());
     }
 
     @Override

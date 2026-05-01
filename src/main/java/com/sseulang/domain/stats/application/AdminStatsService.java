@@ -1,5 +1,7 @@
 package com.sseulang.domain.stats.application;
 
+import com.sseulang.domain.delivery.application.DeliveryApplicationService;
+import com.sseulang.domain.delivery.application.dto.DeliveryStatsResult;
 import com.sseulang.domain.payment.application.PaymentApplicationService;
 import com.sseulang.domain.payment.application.dto.PaymentStatsResult;
 import com.sseulang.domain.transaction.application.TransactionApplicationService;
@@ -18,8 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 다른 도메인 Repository 직접 호출 금지, 각 도메인 ApplicationService 만 의존.</p>
  *
  * <p>각 도메인 stats 호출은 단일 집계 쿼리 (GROUP BY / SUM / COUNT) 라 N+1 없음. 전체 dashboard
- * 한 번 호출 시 SQL 9개 (User 4 [all/blocked/deleted/active] + Transaction 1 + Payment 2 +
- * Withdrawal 2). prod 트래픽 스케일 커지면 schedule 캐싱 검토.</p>
+ * 한 번 호출 시 SQL 11개 (User 4 [all/blocked/deleted/active] + Transaction 1 + Payment 2 +
+ * Withdrawal 2 + Delivery 2). prod 트래픽 스케일 커지면 schedule 캐싱 검토.</p>
  */
 @Service
 @Transactional(readOnly = true)
@@ -29,17 +31,20 @@ public class AdminStatsService {
     private final TransactionApplicationService transactionService;
     private final PaymentApplicationService paymentService;
     private final WithdrawalApplicationService withdrawalService;
+    private final DeliveryApplicationService deliveryService;
 
     public AdminStatsService(
             UserApplicationService userService,
             TransactionApplicationService transactionService,
             PaymentApplicationService paymentService,
-            WithdrawalApplicationService withdrawalService
+            WithdrawalApplicationService withdrawalService,
+            DeliveryApplicationService deliveryService
     ) {
         this.userService = userService;
         this.transactionService = transactionService;
         this.paymentService = paymentService;
         this.withdrawalService = withdrawalService;
+        this.deliveryService = deliveryService;
     }
 
     public AdminDashboardResult dashboard() {
@@ -47,6 +52,7 @@ public class AdminStatsService {
         TransactionStatsResult transactions = transactionService.adminGetStats();
         PaymentStatsResult payments = paymentService.adminGetStats();
         WithdrawalStatsResult withdrawals = withdrawalService.adminGetStats();
-        return new AdminDashboardResult(users, transactions, payments, withdrawals);
+        DeliveryStatsResult deliveries = deliveryService.adminGetStats();
+        return new AdminDashboardResult(users, transactions, payments, withdrawals, deliveries);
     }
 }

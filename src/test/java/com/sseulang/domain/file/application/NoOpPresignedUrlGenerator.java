@@ -5,14 +5,14 @@ import com.sseulang.domain.file.domain.PresignedUrlResult;
 
 import java.time.Duration;
 
-public class FakePresignedUrlGenerator implements PresignedUrlGenerator {
+/**
+ * 단위 테스트용 — generate 는 dummy URL, promote 는 단순 string replace (no S3 call).
+ */
+public class NoOpPresignedUrlGenerator implements PresignedUrlGenerator {
 
     @Override
     public PresignedUrlResult generate(String key, String contentType, Duration expiresIn) {
-        String url = "https://fake.s3/" + key
-                + "?ct=" + contentType
-                + "&exp=" + expiresIn.toSeconds();
-        return new PresignedUrlResult(url, key);
+        return new PresignedUrlResult("https://test/" + key + "?signed", key);
     }
 
     @Override

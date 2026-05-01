@@ -4,6 +4,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -52,4 +53,10 @@ public interface DeliveryRepository {
 
     /** 사용자가 요청자 또는 라이더로 참여한 요청 페이징. */
     Page<DeliveryRequest> findByParticipant(Long userId, Pageable pageable);
+
+    /** status 별 카운트 집계 (admin stats). 단일 GROUP BY — N+1 없음. */
+    List<DeliveryStatusCount> countGroupByStatus();
+
+    /** 정산완료 상태의 fee 총합 (admin stats). 누적 라이더 수익 추정. */
+    long sumSettledFee();
 }

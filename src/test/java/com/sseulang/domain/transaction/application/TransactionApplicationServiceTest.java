@@ -47,7 +47,7 @@ class TransactionApplicationServiceTest {
         pointHistoryRepo = new InMemoryFakePointHistoryRepository();
         CategoryApplicationService catSvc = new CategoryApplicationService(new InMemoryFakeCategoryRepository());
         UserApplicationService userSvc = new UserApplicationService(userRepo);
-        itemSvc = new ItemApplicationService(itemRepo, catSvc, userSvc);
+        itemSvc = new ItemApplicationService(itemRepo, catSvc, userSvc, new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator());
         PointApplicationService pointSvc = new PointApplicationService(userSvc, pointHistoryRepo);
         service = new TransactionApplicationService(txRepo, itemSvc, pointSvc, userSvc, java.time.Clock.systemDefaultZone());
 

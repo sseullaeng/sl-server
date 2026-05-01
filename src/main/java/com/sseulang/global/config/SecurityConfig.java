@@ -68,8 +68,9 @@ public class SecurityConfig {
             "/api/v1/auth/logout",
             "/api/v1/auth/verify-email",
             // WebSocket handshake 는 SockJS 폴백 path 까지 포함해 CSRF 면제 — STOMP CONNECT 단계의
-            // 인증·인가는 ChannelInterceptor 가 별도 검증.
+            // 인증·인가는 ChannelInterceptor 가 별도 검증. native ws (follow-up #19) 도 동일.
             "/ws-stomp/**",
+            "/ws-stomp-native/**",
             // 토스 webhook — 외부 PG 가 호출하는 콜백. 시그니처 검증은 webhook 핸들러 책임 (후속).
             "/api/v1/payments/webhook/**"
     };
@@ -129,7 +130,7 @@ public class SecurityConfig {
     @Order(2)
     public SecurityFilterChain userFilterChain(HttpSecurity http) throws Exception {
         applyCommon(http)
-                .securityMatcher("/api/v1/**", "/ws-stomp/**")
+                .securityMatcher("/api/v1/**", "/ws-stomp/**", "/ws-stomp-native/**")
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(eagerCsrfHandler())
@@ -142,6 +143,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/items/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook/**").permitAll()
+                        // WebSocket handshake 는 인증 없이 통과 — STOMP CONNECT 단계의 ChannelInterceptor 가
+                        // Authorization 헤더 검증으로 인증 책임 (follow-up #19 native 토큰 인증).
+                        .requestMatchers("/ws-stomp/**", "/ws-stomp-native/**").permitAll()
                         // ROLE_USER 강제 — ADMIN AT 가 user 영역(특히 출금/결제) 진입하지 못하도록 차단.
                         // adminId 와 userId 가 동일 숫자면 본인 검사도 통과해버리는 격리 누수 방지 (게이트 1).
                         .anyRequest().hasRole("USER"))

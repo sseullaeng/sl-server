@@ -268,13 +268,64 @@ class DeliveryApplicationServiceTest {
         assertThat(service.getById(created.id(), RIDER).id()).isEqualTo(created.id());
     }
 
+    @Test
+    @DisplayName("adminGetStats_status 별 카운트 + 정산완료 fee 합계 (follow-up #52)")
+    void adminGetStats_집계() {
+        // 시드: 모집중 2, 수락 1, 정산완료 2 (fee 5000+7000=12000), 취소 1
+        DeliveryResult c1 = service.create(newCommandWithFee(5000L));
+        service.create(newCommandWithFee(3000L));  // 모집중 유지
+        DeliveryResult c3 = service.create(newCommandWithFee(4000L));
+        service.accept(c3.id(), RIDER);  // 수락
+        DeliveryResult c4 = service.create(newCommandWithFee(5000L));
+        service.accept(c4.id(), RIDER);
+        markSettled(c4.id());  // 정산완료 5000
+        DeliveryResult c5 = service.create(newCommandWithFee(7000L));
+        service.accept(c5.id(), RIDER);
+        markSettled(c5.id());  // 정산완료 7000
+        service.cancel(c1.id(), REQUESTER, "변심");  // 취소
+
+        com.sseulang.domain.delivery.application.dto.DeliveryStatsResult stats = service.adminGetStats();
+
+        assertThat(stats.total()).isEqualTo(5);
+        assertThat(stats.byStatus()).containsEntry(DeliveryStatus.모집중, 1L);
+        assertThat(stats.byStatus()).containsEntry(DeliveryStatus.수락, 1L);
+        assertThat(stats.byStatus()).containsEntry(DeliveryStatus.정산완료, 2L);
+        assertThat(stats.byStatus()).containsEntry(DeliveryStatus.취소, 1L);
+        assertThat(stats.byStatus()).containsEntry(DeliveryStatus.배송중, 0L);  // enum 전부 채움
+        assertThat(stats.byStatus()).containsEntry(DeliveryStatus.배송완료, 0L);
+        assertThat(stats.settledFeeTotal()).isEqualTo(12_000L);
+    }
+
+    @Test
+    @DisplayName("adminGetStats 0건_total 0 + 모든 status 0L")
+    void adminGetStats_빈상태() {
+        com.sseulang.domain.delivery.application.dto.DeliveryStatsResult stats = service.adminGetStats();
+
+        assertThat(stats.total()).isZero();
+        assertThat(stats.settledFeeTotal()).isZero();
+        for (DeliveryStatus s : DeliveryStatus.values()) {
+            assertThat(stats.byStatus()).containsEntry(s, 0L);
+        }
+    }
+
+    private void markSettled(Long deliveryId) {
+        // 배송중 → 배송완료 → 정산완료 전이 (단위 테스트 — pointService 는 mock 이라 transferForDelivery noop)
+        service.markPickedUp(deliveryId, RIDER);
+        service.markDelivered(deliveryId, RIDER);
+        service.complete(deliveryId, REQUESTER);
+    }
+
     private static DeliveryCreateCommand newCommand() {
+        return newCommandWithFee(5000L);
+    }
+
+    private static DeliveryCreateCommand newCommandWithFee(long fee) {
         return new DeliveryCreateCommand(
                 REQUESTER,
                 "서울 강남구 테헤란로 123",
                 "서울 송파구 올림픽로 456",
                 "A4 서류 봉투 1개",
-                5000L,
+                fee,
                 LocalDateTime.now().plusHours(2),
                 "1층 로비 보관함"
         );

@@ -3,8 +3,11 @@ package com.sseulang.domain.transaction.infrastructure.persistence;
 import com.sseulang.domain.transaction.domain.Transaction;
 import com.sseulang.domain.transaction.domain.TransactionRepository;
 import com.sseulang.domain.transaction.domain.TransactionStatusCount;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,5 +38,10 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     @Override
     public List<TransactionStatusCount> countGroupByStatus() {
         return jpa.countGroupByStatusJpql();
+    }
+
+    @Override
+    public Page<Transaction> findPendingReviewable(Long userId, LocalDateTime since, Pageable pageable) {
+        return jpa.findPendingReviewableJpql(userId, since, pageable);
     }
 }

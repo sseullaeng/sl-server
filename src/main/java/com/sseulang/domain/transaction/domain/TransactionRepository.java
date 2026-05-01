@@ -1,5 +1,9 @@
 package com.sseulang.domain.transaction.domain;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,4 +29,17 @@ public interface TransactionRepository {
 
     /** 단일 GROUP BY 집계 — (status, count) 행 리스트 (가능한 모든 status 행 포함, 0 인 status 는 없음). */
     List<TransactionStatusCount> countGroupByStatus();
+
+    // ───────── Review pending (follow-up #56) ─────────
+
+    /**
+     * 사용자가 reviewer 로 아직 작성하지 않은 거래완료 transaction 목록 (페이징, completedAt DESC).
+     *
+     * <p>cross-aggregate read query — Review 와 NOT EXISTS 로 join. write flow 는 여전히
+     * 각 aggregate root 가 책임. 본 메서드는 read-only 라 도메인 invariant 를 깨지 않음.</p>
+     *
+     * @param userId    조회 주체 (seller 또는 buyer 중 하나로 참여)
+     * @param since     completedAt 하한 (보통 now - 7일) — 작성 가능 기간 밖은 제외
+     */
+    Page<Transaction> findPendingReviewable(Long userId, LocalDateTime since, Pageable pageable);
 }

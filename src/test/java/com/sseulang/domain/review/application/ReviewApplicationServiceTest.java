@@ -47,7 +47,7 @@ class ReviewApplicationServiceTest {
         InMemoryFakeItemRepository itemRepo = new InMemoryFakeItemRepository();
         CategoryApplicationService catSvc = new CategoryApplicationService(new InMemoryFakeCategoryRepository());
         UserApplicationService userSvc = new UserApplicationService(userRepo);
-        ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, userSvc);
+        ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, userSvc, new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator());
         PointApplicationService pointSvc = new PointApplicationService(userSvc, new InMemoryFakePointHistoryRepository());
         TransactionApplicationService txSvc = new TransactionApplicationService(txRepo, itemSvc, pointSvc, userSvc, java.time.Clock.systemDefaultZone());
         service = new ReviewApplicationService(reviewRepo, txSvc, userSvc);
@@ -125,6 +125,50 @@ class ReviewApplicationServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TRANSACTION_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("listPending 본인 미작성 거래완료_포함 / 작성한 거래는 제외 (follow-up #56)")
+    void listPending_미작성_포함() {
+        // setUp 의 completedTxId 는 BUYER 입장에서 미작성 → 포함
+        // SELLER 가 작성한 별도 거래 시드 후 SELLER 입장에서는 제외되어야 함
+        Long anotherTxId = persistCompletedTransaction(1L, LocalDateTime.now().minusDays(2));
+        service.write(new ReviewWriteCommand(anotherTxId, SELLER, 4, null));
+        // SELLER 가 anotherTxId 에 대해 작성했음을 fake repo 에 알림 (NOT EXISTS 시뮬레이션)
+        txRepo.markReviewed(anotherTxId, SELLER);
+
+        org.springframework.data.domain.Page<com.sseulang.domain.transaction.application.dto.PendingReviewableResult> sellerPending =
+                service.listPending(SELLER, org.springframework.data.domain.PageRequest.of(0, 20));
+
+        // SELLER 는 anotherTxId 에 대해 이미 작성 → 제외. completedTxId 는 미작성 → 포함.
+        assertThat(sellerPending.getContent()).extracting("transactionId")
+                .containsExactlyInAnyOrder(completedTxId);
+        // 상대방(reviewee) 는 BUYER
+        assertThat(sellerPending.getContent().get(0).revieweeId()).isEqualTo(BUYER);
+    }
+
+    @Test
+    @DisplayName("listPending 7일 초과 거래는 제외")
+    void listPending_7일_초과_제외() {
+        Long oldTxId = persistCompletedTransaction(1L, LocalDateTime.now().minusDays(8));
+
+        org.springframework.data.domain.Page<com.sseulang.domain.transaction.application.dto.PendingReviewableResult> pending =
+                service.listPending(BUYER, org.springframework.data.domain.PageRequest.of(0, 20));
+
+        // 7일 이내인 completedTxId 만 포함 — oldTxId 는 since 필터로 제외
+        assertThat(pending.getContent()).extracting("transactionId").doesNotContain(oldTxId);
+        assertThat(pending.getContent()).extracting("transactionId").contains(completedTxId);
+    }
+
+    @Test
+    @DisplayName("listPending deadline = completedAt + 7d")
+    void listPending_deadline_정확() {
+        org.springframework.data.domain.Page<com.sseulang.domain.transaction.application.dto.PendingReviewableResult> pending =
+                service.listPending(BUYER, org.springframework.data.domain.PageRequest.of(0, 20));
+
+        assertThat(pending.getContent()).hasSize(1);
+        com.sseulang.domain.transaction.application.dto.PendingReviewableResult r = pending.getContent().get(0);
+        assertThat(r.deadline()).isEqualTo(r.completedAt().plusDays(7));
     }
 
     private Long persistCompletedTransaction(Long itemId, LocalDateTime completedAt) {

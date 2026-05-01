@@ -5,6 +5,7 @@ import com.sseulang.domain.item.application.dto.ItemForTransactionResult;
 import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.point.domain.PointReferenceType;
 import com.sseulang.domain.user.application.UserApplicationService;
+import com.sseulang.domain.transaction.application.dto.PendingReviewableResult;
 import com.sseulang.domain.transaction.application.dto.ReviewableTransactionResult;
 import com.sseulang.domain.transaction.application.dto.TransactionCreateCommand;
 import com.sseulang.domain.transaction.application.dto.TransactionResult;
@@ -15,6 +16,8 @@ import com.sseulang.domain.transaction.domain.TransactionStatus;
 import com.sseulang.domain.transaction.domain.TransactionStatusCount;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -190,6 +193,29 @@ public class TransactionApplicationService {
             total += row.count();
         }
         return new TransactionStatsResult(total, byStatus);
+    }
+
+    /**
+     * 본인이 reviewer 로 아직 작성하지 않은 거래완료 거래 페이징 (follow-up #56).
+     *
+     * <p>completedAt 이 7일 이내인 것만 — 작성 가능 기간이 지난 거래는 제외 (가이드 §5.5).
+     * 응답 DTO 의 deadline = completedAt + 7d → 클라이언트가 남은 시간 UI 작성에 사용.</p>
+     */
+    public Page<PendingReviewableResult> findPendingReviewable(Long userId, Pageable pageable) {
+        LocalDateTime since = LocalDateTime.now(clock).minusDays(7);
+        return transactionRepository.findPendingReviewable(userId, since, pageable)
+                .map(tx -> {
+                    Long revieweeId = tx.isSeller(userId) ? tx.getBuyerId() : tx.getSellerId();
+                    return new PendingReviewableResult(
+                            tx.getId(),
+                            tx.getItemId(),
+                            revieweeId,
+                            tx.getTradeType(),
+                            tx.getPrice(),
+                            tx.getCompletedAt(),
+                            tx.getCompletedAt().plusDays(7)
+                    );
+                });
     }
 
     private Transaction findOrThrow(Long id) {
