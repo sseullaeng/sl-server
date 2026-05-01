@@ -15,6 +15,8 @@ import com.sseulang.domain.user.domain.User;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import com.sseulang.global.infra.payment.TossProperties;
+import com.sseulang.global.infra.payment.TossWebhookSignatureVerifier;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,9 +45,14 @@ class PaymentApplicationServiceTest {
         pointHistoryRepo = new InMemoryFakePointHistoryRepository();
         userService = new UserApplicationService(userRepo);
         PointApplicationService pointSvc = new PointApplicationService(userService, pointHistoryRepo);
+        TossProperties tossProps = new TossProperties(CLIENT_KEY, "test_sk_secret", null, null, null);
         service = new PaymentApplicationService(
                 paymentRepo, gateway, pointSvc, userService,
-                new TossProperties(CLIENT_KEY, "test_sk_secret", null)
+                tossProps,
+                new InMemoryFakeWebhookEventRepository(),
+                new TossWebhookSignatureVerifier(tossProps),
+                new ObjectMapper(),
+                new WebhookPendingRateLimiter()
         );
         userId = userRepo.save(User.createSocialUser(
                 SocialProvider.KAKAO, "kakao-1", new Email("u1@x.com"), "u1", null
@@ -202,10 +209,277 @@ class PaymentApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("handleWebhook no-op (로깅만)")
-    void handleWebhook() {
-        // 예외 없이 통과
-        service.handleWebhook("{\"eventType\":\"PAYMENT_STATUS_CHANGED\"}");
+    @DisplayName("handleWebhook transmission-id 누락_PAYMENT_WEBHOOK_PAYLOAD_INVALID")
+    void handleWebhook_transmissionId_누락() {
+        assertThatThrownBy(() -> service.handleWebhook(
+                "{\"eventType\":\"PAYMENT_STATUS_CHANGED\",\"data\":{}}", null
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_WEBHOOK_PAYLOAD_INVALID);
+    }
+
+    @Test
+    @DisplayName("handleWebhook 동일 transmission-id 두 번_두번째는 멱등 (예외 X, lookup 한 번만)")
+    void handleWebhook_멱등() {
+        long amount = 5_000L;
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, amount));
+        gateway.lookupAmountOverride = amount;
+        gateway.lookupOrderIdOverride = started.merchantUid();
+
+        String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-dup\",\"orderId\":\"" + started.merchantUid() + "\"}}";
+        service.handleWebhook(payload, "tx-dup-1");
+        int lookupAfterFirst = gateway.lookupCalls;
+        // 두 번째 호출 — UNIQUE 충돌 잡고 정상 종료, lookup 추가 호출 X (멱등)
+        service.handleWebhook(payload, "tx-dup-1");
+        assertThat(gateway.lookupCalls).isEqualTo(lookupAfterFirst);
+    }
+
+    @Test
+    @DisplayName("handleWebhook PAYMENT_STATUS_CHANGED_lookup 호출 → markAsPaid + 포인트 적립")
+    void handleWebhook_done_동기화() {
+        long amount = 30_000L;
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, amount));
+
+        // FakePaymentGateway.lookup 은 lookupAmountOverride/lookupOrderIdOverride 로 응답 stub
+        gateway.lookupAmountOverride = amount;
+        gateway.lookupOrderIdOverride = started.merchantUid();
+
+        String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"toss-pk-1\",\"orderId\":\"" + started.merchantUid() + "\"}}";
+        service.handleWebhook(payload, "tx-done-1");
+
+        // lookup 호출됐는지
+        assertThat(gateway.lookupCalls).isPositive();
+        // 잔액 적립 확인
+        assertThat(userRepo.findPointBalance(userId)).isEqualTo(amount);
+        var p = paymentRepo.findById(started.paymentId()).orElseThrow();
+        assertThat(p.getStatus()).isEqualTo(PaymentStatus.완료);
+    }
+
+    @Test
+    @DisplayName("handleWebhook 이미 완료된 Payment_멱등 (lookup 호출 했어도 잔액 추가 적립 X)")
+    void handleWebhook_이미완료() {
+        long amount = 20_000L;
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, amount));
+        // 먼저 confirm 흐름으로 완료
+        service.confirmCharge(new ChargeConfirmCommand(userId, "pk-x", started.merchantUid(), amount));
+        long balanceAfterConfirm = userRepo.findPointBalance(userId);
+
+        gateway.lookupAmountOverride = amount;
+        gateway.lookupOrderIdOverride = started.merchantUid();
+
+        String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-x\",\"orderId\":\"" + started.merchantUid() + "\"}}";
+        service.handleWebhook(payload, "tx-after-confirm");
+
+        // 잔액 변동 없음 — 두 번 적립되면 안 됨
+        assertThat(userRepo.findPointBalance(userId)).isEqualTo(balanceAfterConfirm);
+    }
+
+    @Test
+    @DisplayName("handleWebhook lookup amount 위변조_PAYMENT_AMOUNT_MISMATCH (잔액 적립 X)")
+    void handleWebhook_amount_위변조() {
+        long realAmount = 10_000L;
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, realAmount));
+
+        // 토스 lookup 은 정상 DONE 인데 우리 저장 amount 와 다른 금액 (위변조 시뮬)
+        gateway.lookupAmountOverride = realAmount + 50_000L;
+        gateway.lookupOrderIdOverride = started.merchantUid();
+
+        String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-t\",\"orderId\":\"" + started.merchantUid() + "\"}}";
+
+        assertThatThrownBy(() -> service.handleWebhook(payload, "tx-tamper-1"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
+        // 잔액 적립 X
+        assertThat(userRepo.findPointBalance(userId)).isZero();
+    }
+
+    @Test
+    @DisplayName("handleWebhook eventType 없음_PAYMENT_WEBHOOK_PAYLOAD_INVALID")
+    void handleWebhook_eventType_누락() {
+        assertThatThrownBy(() -> service.handleWebhook("{\"data\":{}}", "tx-1"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_WEBHOOK_PAYLOAD_INVALID);
+    }
+
+    @Test
+    @DisplayName("handleWebhook payload orderId 가 우리 DB 에 없음_사전 차단 (저장 X + lookup X)")
+    void handleWebhook_unknown_orderId() {
+        int lookupBefore = gateway.lookupCalls;
+        String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-z\",\"orderId\":\"unknown-merchant-uid\"}}";
+
+        // 예외 없이 통과 (다른 가맹점 결제일 수 있음). lookup outbound X.
+        service.handleWebhook(payload, "tx-unknown");
+        assertThat(gateway.lookupCalls).isEqualTo(lookupBefore);
+        assertThat(userRepo.findPointBalance(userId)).isZero();
+    }
+
+    @Test
+    @DisplayName("handleWebhook lookup 자체가 BusinessException_무시 (트랜잭션 롤백 X, 잔액 변동 X)")
+    void handleWebhook_lookup_실패() {
+        long amount = 10_000L;
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, amount));
+
+        gateway.lookupException = new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
+
+        String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-fail\",\"orderId\":\"" + started.merchantUid() + "\"}}";
+
+        // 예외 없이 200 응답 — 토스 재시도 시 다시 시도 가능 (transmission-id 다르면)
+        service.handleWebhook(payload, "tx-lookup-fail");
+        assertThat(userRepo.findPointBalance(userId)).isZero();
+    }
+
+    @Test
+    @DisplayName("handleWebhook 결제 외 eventType_DoS 차단_저장 X + lookup X (게이트 1 round 2)")
+    void handleWebhook_other_eventType() {
+        int lookupBefore = gateway.lookupCalls;
+        service.handleWebhook("{\"eventType\":\"PAYOUT_CHANGED\",\"data\":{}}", "tx-payout-1");
+        assertThat(gateway.lookupCalls).isEqualTo(lookupBefore);
+        // 같은 transmission-id 두 번째 호출도 통과 (저장 안 했으니 충돌 X)
+        service.handleWebhook("{\"eventType\":\"PAYOUT_CHANGED\",\"data\":{}}", "tx-payout-1");
+    }
+
+    @Test
+    @DisplayName("handleWebhook PAYMENT_STATUS_CHANGED 인데 우리 결제 아님_DoS 차단 (저장 X + lookup X)")
+    void handleWebhook_dos_unknown_payment() {
+        int lookupBefore = gateway.lookupCalls;
+        // 우리 DB 에 없는 orderId 로 webhook
+        String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-attacker\",\"orderId\":\"unknown-merchant\"}}";
+
+        service.handleWebhook(payload, "tx-attack-1");
+
+        // lookup outbound 호출 X (Toss API 부하 차단)
+        assertThat(gateway.lookupCalls).isEqualTo(lookupBefore);
+        // 같은 transmission-id 두 번째도 통과 (저장 안 했으니 UNIQUE 충돌 X)
+        service.handleWebhook(payload, "tx-attack-1");
+    }
+
+    @Test
+    @DisplayName("handleWebhook payload paymentKey/orderId 누락_PAYMENT_WEBHOOK_PAYLOAD_INVALID")
+    void handleWebhook_missing_paymentKey() {
+        assertThatThrownBy(() -> service.handleWebhook(
+                "{\"eventType\":\"PAYMENT_STATUS_CHANGED\",\"data\":{}}", "tx-x"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_WEBHOOK_PAYLOAD_INVALID);
+    }
+
+    @Test
+    @DisplayName("handleWebhook lookup ExternalApiException_5xx 던짐 (토스 retry 트리거)")
+    void handleWebhook_lookup_external_failure() {
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, 10_000L));
+        gateway.lookupException = new com.sseulang.global.exception.ExternalApiException("toss", "5xx");
+
+        String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-ext\",\"orderId\":\"" + started.merchantUid() + "\"}}";
+
+        assertThatThrownBy(() -> service.handleWebhook(payload, "tx-ext-1"))
+                .isInstanceOf(com.sseulang.global.exception.ExternalApiException.class);
+        // 잔액 변동 X
+        assertThat(userRepo.findPointBalance(userId)).isZero();
+    }
+
+    @Test
+    @DisplayName("handleWebhook pending 유지 공격_rate limit 으로 lookup 한도 차단 (게이트 1 round 4)")
+    void handleWebhook_pending_rate_limit() {
+        long amount = 5_000L;
+        // pending 상태 유지 — confirm 안 함
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, amount));
+
+        // 공격: 같은 pending orderId 에 random paymentKey + unique transmission-id 반복
+        // 한도(5회) 안에서는 lookup 호출, 초과 시 거부
+        gateway.lookupException = new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);  // lookup 항상 실패
+        for (int i = 0; i < 10; i++) {
+            String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                    "\"data\":{\"paymentKey\":\"pk-attack-" + i + "\",\"orderId\":\"" + started.merchantUid() + "\"}}";
+            service.handleWebhook(payload, "tx-attack-" + i);
+        }
+
+        // 한도(MAX_PER_WINDOW=5) 만큼만 lookup 호출 — 나머지는 사전 거부
+        assertThat(gateway.lookupCalls).isLessThanOrEqualTo(WebhookPendingRateLimiter.MAX_PER_WINDOW);
+    }
+
+    @Test
+    @DisplayName("handleWebhook 본인 pending 으로 random paymentKey 반복_DoS 가드 (이미 종결된 결제는 무시)")
+    void handleWebhook_dos_against_own_pending() {
+        long amount = 5_000L;
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, amount));
+
+        // 1차: 정상 완료
+        gateway.lookupAmountOverride = amount;
+        gateway.lookupOrderIdOverride = started.merchantUid();
+        String payload1 = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-real\",\"orderId\":\"" + started.merchantUid() + "\"}}";
+        service.handleWebhook(payload1, "tx-real-1");
+        int lookupAfterReal = gateway.lookupCalls;
+        assertThat(paymentRepo.findById(started.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.완료);
+
+        // 2차 공격: 같은 orderId + random paymentKey + new transmission-id 반복
+        String payload2 = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-attack\",\"orderId\":\"" + started.merchantUid() + "\"}}";
+        for (int i = 0; i < 3; i++) {
+            service.handleWebhook(payload2, "tx-attack-" + i);
+        }
+
+        // lookup outbound 추가 호출 X — 사전 status=완료 가드로 차단
+        assertThat(gateway.lookupCalls).isEqualTo(lookupAfterReal);
+    }
+
+    @Test
+    @DisplayName("handleWebhook lookup orderId 가 payload orderId 와 다름_처리 거부 (잔액 변동 X)")
+    void handleWebhook_lookup_orderId_mismatch() {
+        long amount = 7_000L;
+        ChargeStartResult myPending = service.startCharge(new ChargeStartCommand(userId, amount));
+        // 다른 사용자 pending 결제 (lookup 이 이걸 가리키도록)
+        ChargeStartResult othersPending = service.startCharge(new ChargeStartCommand(otherUserId, amount));
+
+        // payload 는 내 orderId 로 보내지만 lookup 응답은 다른 사람 orderId 로 (토스 측 비정상 응답 시뮬)
+        gateway.lookupAmountOverride = amount;
+        gateway.lookupOrderIdOverride = othersPending.merchantUid();
+
+        String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-mismatch\",\"orderId\":\"" + myPending.merchantUid() + "\"}}";
+        service.handleWebhook(payload, "tx-mismatch-1");
+
+        // 둘 다 잔액 변동 X
+        assertThat(userRepo.findPointBalance(userId)).isZero();
+        assertThat(userRepo.findPointBalance(otherUserId)).isZero();
+        // 내 pending / 다른 사람 pending 모두 그대로
+        assertThat(paymentRepo.findById(myPending.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.대기);
+        assertThat(paymentRepo.findById(othersPending.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.대기);
+    }
+
+    @Test
+    @DisplayName("handleWebhook 저장된 paymentKey 는 lookup 응답의 것 (payload 위변조 차단)")
+    void handleWebhook_paymentKey_from_lookup() {
+        long amount = 15_000L;
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, amount));
+        gateway.lookupAmountOverride = amount;
+        gateway.lookupOrderIdOverride = started.merchantUid();
+        // payload 의 paymentKey 와 다른 신뢰원 — TossPaymentGateway 가 lookup 시 받은 paymentKey 그대로 echo
+        String trustworthyPaymentKey = "pk-from-lookup";
+
+        // FakePaymentGateway 는 lookup 시 받은 paymentKey 그대로 echo 하므로 payload paymentKey 와 동일
+        String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"" + trustworthyPaymentKey + "\",\"orderId\":\"" + started.merchantUid() + "\"}}";
+        service.handleWebhook(payload, "tx-pk-1");
+
+        var p = paymentRepo.findById(started.paymentId()).orElseThrow();
+        assertThat(p.getPaymentKey()).isEqualTo(trustworthyPaymentKey);
+        assertThat(p.getStatus()).isEqualTo(PaymentStatus.완료);
     }
 
     // ───────── Codex 게이트 1 ④ — confirm ALREADY_PROCESSED → lookup 동기화 ─────────

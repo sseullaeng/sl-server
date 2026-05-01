@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -51,12 +52,26 @@ public class PaymentController {
     }
 
     /**
-     * 토스 webhook — 본 PR 에선 로깅만. 인증 X (외부 호출). 추후 시그니처 검증 + 멱등 처리는 후속 이슈.
-     * SecurityConfig 의 CSRF / auth 면제 필요.
+     * 토스 webhook — 토스 공식 spec (PAYMENT_STATUS_CHANGED) 처리.
+     *
+     * <p>Toss 발송 헤더:
+     * <ul>
+     *   <li>{@code tosspayments-webhook-transmission-id} — 멱등 키 (재전송 시 동일)</li>
+     *   <li>{@code tosspayments-webhook-transmission-time} — 발송 시각 (감사용)</li>
+     * </ul>
+     *
+     * <p>결제 이벤트에는 HMAC 시그니처가 없으므로 위변조 방지는 토스 lookup API 재조회로 처리
+     * (게이트 1 round 1). 정상/멱등(중복 transmission-id) 시 200 → 재시도 중단. payload 형식 오류
+     * 또는 transmission-id 누락 시 400 → 토스 재시도.</p>
+     *
+     * <p>SecurityConfig 의 CSRF / auth 면제 이미 적용 (Day 7).</p>
      */
     @PostMapping("/webhook/toss")
-    public ApiResponse<Void> tossWebhook(@RequestBody String rawPayload) {
-        paymentService.handleWebhook(rawPayload);
+    public ApiResponse<Void> tossWebhook(
+            @RequestBody String rawPayload,
+            @RequestHeader(value = "tosspayments-webhook-transmission-id", required = false) String transmissionId
+    ) {
+        paymentService.handleWebhook(rawPayload, transmissionId);
         return ApiResponse.ok();
     }
 
