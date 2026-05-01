@@ -3,6 +3,7 @@ package com.sseulang.domain.delivery.application;
 import com.sseulang.domain.delivery.domain.DeliveryRepository;
 import com.sseulang.domain.delivery.domain.DeliveryRequest;
 import com.sseulang.domain.delivery.domain.DeliveryStatus;
+import com.sseulang.domain.delivery.domain.DeliveryStatusCount;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -10,6 +11,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -77,5 +79,24 @@ public class InMemoryFakeDeliveryRepository implements DeliveryRepository {
                 .sorted(Comparator.comparing(DeliveryRequest::getRequestedAt).reversed())
                 .toList();
         return new PageImpl<>(filtered, pageable, filtered.size());
+    }
+
+    @Override
+    public List<DeliveryStatusCount> countGroupByStatus() {
+        Map<DeliveryStatus, Long> grouped = new EnumMap<>(DeliveryStatus.class);
+        for (DeliveryRequest d : store.values()) {
+            grouped.merge(d.getStatus(), 1L, Long::sum);
+        }
+        return grouped.entrySet().stream()
+                .map(e -> new DeliveryStatusCount(e.getKey(), e.getValue()))
+                .toList();
+    }
+
+    @Override
+    public long sumSettledFee() {
+        return store.values().stream()
+                .filter(d -> d.getStatus() == DeliveryStatus.정산완료)
+                .mapToLong(DeliveryRequest::getFee)
+                .sum();
     }
 }

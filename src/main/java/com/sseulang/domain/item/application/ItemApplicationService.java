@@ -1,6 +1,7 @@
 package com.sseulang.domain.item.application;
 
 import com.sseulang.domain.category.application.CategoryApplicationService;
+import com.sseulang.domain.file.domain.PresignedUrlGenerator;
 import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.domain.item.application.dto.ItemDetailResult;
 import com.sseulang.domain.item.application.dto.ItemForTransactionResult;
@@ -18,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -27,15 +29,18 @@ public class ItemApplicationService {
     private final ItemRepository itemRepository;
     private final CategoryApplicationService categoryApplicationService;
     private final UserApplicationService userApplicationService;
+    private final PresignedUrlGenerator presignedUrlGenerator;
 
     public ItemApplicationService(
             ItemRepository itemRepository,
             CategoryApplicationService categoryApplicationService,
-            UserApplicationService userApplicationService
+            UserApplicationService userApplicationService,
+            PresignedUrlGenerator presignedUrlGenerator
     ) {
         this.itemRepository = itemRepository;
         this.categoryApplicationService = categoryApplicationService;
         this.userApplicationService = userApplicationService;
+        this.presignedUrlGenerator = presignedUrlGenerator;
     }
 
     @Transactional
@@ -52,9 +57,14 @@ public class ItemApplicationService {
                 cmd.price(), cmd.deposit(), cmd.rentalUnit(), cmd.tradeType(),
                 cmd.region()
         );
-        applyImages(item, cmd.imageUrls());
         applyHashtags(item, cmd.hashtags());
-        return itemRepository.save(item).getId();
+        Item saved = itemRepository.save(item);
+        // 등록된 itemId 가 생긴 후, 임시 폴더(items/{userId}/) 의 키를 정식 폴더(items/{itemId}/) 로
+        // S3 copy + delete (follow-up #12 옵션 A). 트랜잭션 안에서 실패 시 DB 롤백 + S3 garbage 는
+        // lifecycle 정책으로 정리.
+        List<String> promoted = promoteImageUrls(cmd.sellerId(), saved.getId(), cmd.imageUrls());
+        applyImages(saved, promoted);
+        return saved.getId();
     }
 
     @Transactional
@@ -82,10 +92,13 @@ public class ItemApplicationService {
             item.assignCategory(cmd.categoryId());
         }
         if (cmd.imageUrls() != null) {
-            // 업데이트 시에도 동일 ownership 검증 (follow-up #12 옵션 B).
-            validateImageOwnership(item.getSellerId(), cmd.imageUrls());
+            // 업데이트 시에도 동일 ownership 검증 — sellerId 임시 폴더 또는 이미 promote 된 itemId
+            // 정식 폴더 prefix 둘 다 허용 (follow-up #12 옵션 A/B 통합).
+            validateImageOwnershipForUpdate(item.getSellerId(), item.getId(), cmd.imageUrls());
             item.clearImages();
-            applyImages(item, cmd.imageUrls());
+            // 새로 업로드된 임시 키는 정식 폴더로 promote, 이미 정식인 키는 promoter 가 no-op.
+            List<String> promoted = promoteImageUrls(item.getSellerId(), item.getId(), cmd.imageUrls());
+            applyImages(item, promoted);
         }
         if (cmd.hashtags() != null) {
             item.clearHashtags();
@@ -217,6 +230,23 @@ public class ItemApplicationService {
     }
 
     /**
+     * 임시 폴더({@code items/{sellerId}/}) 의 객체를 정식 폴더({@code items/{itemId}/}) 로 S3 promote.
+     * 이미 정식 폴더에 있는 url 은 promoter 가 no-op (follow-up #12 옵션 A).
+     */
+    private List<String> promoteImageUrls(Long sellerId, Long itemId, List<String> sourceUrls) {
+        if (sourceUrls == null || sourceUrls.isEmpty()) {
+            return sourceUrls;
+        }
+        String fromPrefix = "items/" + sellerId + "/";
+        String toPrefix = "items/" + itemId + "/";
+        List<String> promoted = new ArrayList<>(sourceUrls.size());
+        for (String src : sourceUrls) {
+            promoted.add(presignedUrlGenerator.promote(src, fromPrefix, toPrefix));
+        }
+        return promoted;
+    }
+
+    /**
      * presigned URL 발급 시 받은 이미지 키가 본인 sellerId 의 prefix 를 가지는지 검증.
      * key 형식: {@code items/{sellerId}/{uuid}.{ext}} (FileApplicationService.buildKey 참조).
      * 다른 사용자의 임시 키를 본인 Item 으로 등록하는 위변조 차단 (follow-up #12).
@@ -228,6 +258,23 @@ public class ItemApplicationService {
         String expectedPrefix = "items/" + sellerId + "/";
         for (String url : imageUrls) {
             if (url == null || !url.contains(expectedPrefix)) {
+                throw new BusinessException(ErrorCode.ITEM_FORBIDDEN);
+            }
+        }
+    }
+
+    /**
+     * update 전용 — 임시 폴더({@code items/{sellerId}/}) 또는 정식 폴더({@code items/{itemId}/})
+     * 둘 다 허용. 정식 폴더는 이전 register 단계에서 promote 된 결과 url (사용자가 그대로 다시 보낸 경우).
+     */
+    private static void validateImageOwnershipForUpdate(Long sellerId, Long itemId, List<String> imageUrls) {
+        if (imageUrls == null || imageUrls.isEmpty()) {
+            return;
+        }
+        String tempPrefix = "items/" + sellerId + "/";
+        String finalPrefix = "items/" + itemId + "/";
+        for (String url : imageUrls) {
+            if (url == null || (!url.contains(tempPrefix) && !url.contains(finalPrefix))) {
                 throw new BusinessException(ErrorCode.ITEM_FORBIDDEN);
             }
         }

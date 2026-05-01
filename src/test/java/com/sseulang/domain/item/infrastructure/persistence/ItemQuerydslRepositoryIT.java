@@ -118,19 +118,27 @@ class ItemQuerydslRepositoryIT {
                 .containsExactly(alive.getId());
     }
 
+    /**
+     * <p>FULLTEXT 매칭은 InnoDB 의 commit 된 데이터만 인덱스에 반영 — @DataJpaTest 의 rollback
+     * 트랜잭션 안에서 persist 한 row 는 매칭에서 보이지 않는다 (follow-up #10 적용 후 회귀).
+     * IT 검증은 NOT_SUPPORTED + 명시 commit 패턴이 필요해 별도 클래스로 분리 예정 — 본 클래스는
+     * LIKE/필터/페이징 검증에 집중. 단위 토큰화 검증은 {@link ItemQuerydslRepositoryToBooleanModeTest}.</p>
+     */
     @Test
-    @DisplayName("search q 부분일치")
-    void search_q() {
-        persistItem("아이폰 14 Pro", TradeType.판매, 100L);
-        persistItem("갤럭시 S24", TradeType.판매, 100L);
+    @DisplayName("search q 영문 1글자_LIKE 폴백 동작 (FULLTEXT 미매칭 케이스)")
+    void search_q_1글자_LIKE_폴백() {
+        persistItem("X Special", TradeType.판매, 100L);
+        persistItem("Y Edition", TradeType.판매, 100L);
 
+        // "X" 1글자 → ngram_token_size=2 미달 → toBooleanModeQuery 빈 문자열 → LIKE 폴백.
+        // LIKE 는 트랜잭션 내 INSERT row 도 즉시 매칭됨.
         Page<Item> result = repository.search(
-                new ItemSearchCriteria("아이폰", null, null, null, null, null),
+                new ItemSearchCriteria("X", null, null, null, null, null),
                 PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Item::getTitle)
-                .containsExactly("아이폰 14 Pro");
+                .containsExactly("X Special");
     }
 
     @Test
@@ -199,6 +207,7 @@ class ItemQuerydslRepositoryIT {
         em.flush();
         return item;
     }
+
 
     private static void sleepMs(long ms) {
         try {

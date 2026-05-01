@@ -1,5 +1,6 @@
 package com.sseulang.domain.stats.presentation.dto;
 
+import com.sseulang.domain.delivery.application.dto.DeliveryStatsResult;
 import com.sseulang.domain.payment.application.dto.PaymentStatsResult;
 import com.sseulang.domain.stats.application.AdminDashboardResult;
 import com.sseulang.domain.transaction.application.dto.TransactionStatsResult;
@@ -14,9 +15,12 @@ public record AdminDashboardResponse(
         UserStatsResult users,
         TransactionStatsResult transactions,
         PaymentStatsResult payments,
-        WithdrawalStatsResult withdrawals
+        WithdrawalStatsResult withdrawals,
+        DeliveryStatsResult deliveries
 ) {
     public static AdminDashboardResponse from(AdminDashboardResult r) {
-        return new AdminDashboardResponse(r.users(), r.transactions(), r.payments(), r.withdrawals());
+        return new AdminDashboardResponse(
+                r.users(), r.transactions(), r.payments(), r.withdrawals(), r.deliveries()
+        );
     }
 }

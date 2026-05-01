@@ -2,6 +2,7 @@ package com.sseulang.domain.delivery.infrastructure.persistence;
 
 import com.sseulang.domain.delivery.domain.DeliveryRequest;
 import com.sseulang.domain.delivery.domain.DeliveryStatus;
+import com.sseulang.domain.delivery.domain.DeliveryStatusCount;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -12,6 +13,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /** Spring Data JPA — {@link DeliveryRepositoryImpl} 가 wrapping. 외부 직접 import 금지. */
@@ -70,4 +72,20 @@ interface DeliveryJpaRepository extends JpaRepository<DeliveryRequest, Long> {
              ORDER BY d.requestedAt DESC
             """)
     Page<DeliveryRequest> findByParticipant(@Param("userId") Long userId, Pageable pageable);
+
+    /** status 별 건수 — 단일 GROUP BY (admin stats follow-up #52). */
+    @Query("""
+            SELECT new com.sseulang.domain.delivery.domain.DeliveryStatusCount(d.status, COUNT(d))
+              FROM DeliveryRequest d
+             GROUP BY d.status
+            """)
+    List<DeliveryStatusCount> countGroupByStatusJpql();
+
+    /** 정산완료 fee 합계. NULL → 0 변환은 호출자(Impl)가 처리. */
+    @Query("""
+            SELECT COALESCE(SUM(d.fee), 0)
+              FROM DeliveryRequest d
+             WHERE d.status = com.sseulang.domain.delivery.domain.DeliveryStatus.정산완료
+            """)
+    Long sumSettledFeeJpql();
 }

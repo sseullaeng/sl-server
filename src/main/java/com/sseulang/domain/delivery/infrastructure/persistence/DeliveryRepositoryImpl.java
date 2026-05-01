@@ -3,11 +3,13 @@ package com.sseulang.domain.delivery.infrastructure.persistence;
 import com.sseulang.domain.delivery.domain.DeliveryRepository;
 import com.sseulang.domain.delivery.domain.DeliveryRequest;
 import com.sseulang.domain.delivery.domain.DeliveryStatus;
+import com.sseulang.domain.delivery.domain.DeliveryStatusCount;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -52,5 +54,16 @@ public class DeliveryRepositoryImpl implements DeliveryRepository {
     @Override
     public Page<DeliveryRequest> findByParticipant(Long userId, Pageable pageable) {
         return jpa.findByParticipant(userId, pageable);
+    }
+
+    @Override
+    public List<DeliveryStatusCount> countGroupByStatus() {
+        return jpa.countGroupByStatusJpql();
+    }
+
+    @Override
+    public long sumSettledFee() {
+        Long sum = jpa.sumSettledFeeJpql();
+        return sum != null ? sum : 0L;
     }
 }

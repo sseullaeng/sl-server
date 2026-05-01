@@ -2,8 +2,11 @@ package com.sseulang.domain.delivery.application;
 
 import com.sseulang.domain.delivery.application.dto.DeliveryCreateCommand;
 import com.sseulang.domain.delivery.application.dto.DeliveryResult;
+import com.sseulang.domain.delivery.application.dto.DeliveryStatsResult;
 import com.sseulang.domain.delivery.domain.DeliveryRepository;
 import com.sseulang.domain.delivery.domain.DeliveryRequest;
+import com.sseulang.domain.delivery.domain.DeliveryStatus;
+import com.sseulang.domain.delivery.domain.DeliveryStatusCount;
 import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.global.exception.BusinessException;
@@ -14,6 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.EnumMap;
+import java.util.Map;
 
 /**
  * Delivery (배달대행) ApplicationService — 트랜잭션 경계 + 도메인 흐름 조율.
@@ -208,5 +213,23 @@ public class DeliveryApplicationService {
     private DeliveryRequest findOrThrow(Long deliveryId) {
         return deliveryRepository.findById(deliveryId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DELIVERY_NOT_FOUND));
+    }
+
+    /**
+     * 관리자 dashboard 용 배달대행 통계 (follow-up #52). status 별 카운트 + 정산완료 fee 합계.
+     * 모든 status 가 byStatus 에 포함됨 — 0 건이면 0L. 단일 GROUP BY + 단일 SUM 쿼리.
+     */
+    public DeliveryStatsResult adminGetStats() {
+        Map<DeliveryStatus, Long> byStatus = new EnumMap<>(DeliveryStatus.class);
+        for (DeliveryStatus s : DeliveryStatus.values()) {
+            byStatus.put(s, 0L);
+        }
+        long total = 0;
+        for (DeliveryStatusCount row : deliveryRepository.countGroupByStatus()) {
+            byStatus.put(row.status(), row.count());
+            total += row.count();
+        }
+        long settledFeeTotal = deliveryRepository.sumSettledFee();
+        return new DeliveryStatsResult(total, byStatus, settledFeeTotal);
     }
 }
