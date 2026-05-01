@@ -166,75 +166,92 @@ public class PaymentApplicationService {
     }
 
     /**
-     * 토스 webhook 처리 — 시그니처 검증 + replay 차단 + 멱등 저장 + state 동기화.
+     * 토스 webhook 처리 — 토스 공식 spec 기반 (게이트 1 round 1 — Codex 피드백 반영 round 2).
+     *
+     * <p>토스 결제 webhook 공식 사항 (https://docs.tosspayments.com/reference/using-api/webhook-events):
+     * <ul>
+     *   <li>결제 이벤트 ({@code PAYMENT_STATUS_CHANGED}) 에는 <b>HMAC 시그니처 헤더가 없음</b> —
+     *       위변조 방지는 webhook payload 자체가 아니라 토스 lookup API 재조회로 한다.</li>
+     *   <li>멱등 키는 헤더 {@code tosspayments-webhook-transmission-id} (body 의 eventId 가 아님).</li>
+     *   <li>HMAC 시그니처 ({@code tosspayments-webhook-signature}) 는 {@code payout.changed},
+     *       {@code seller.changed} 등 일부 이벤트에만 포함 — 본 핸들러는 결제 이벤트만 처리하므로
+     *       시그니처 검증은 위 두 이벤트 도입 시 활성. {@link TossWebhookSignatureVerifier} 는 골격만.</li>
+     * </ul>
      *
      * <p>흐름:
      * <ol>
-     *   <li>{@link TossWebhookSignatureVerifier} 가 HMAC + timestamp 검증 (실패 시 401/400)</li>
-     *   <li>payload 파싱 → eventId / eventType / paymentKey 추출</li>
-     *   <li>WebhookEvent INSERT — UNIQUE(source, eventId) 충돌 시 멱등 응답 (이미 처리됨)</li>
-     *   <li>{@code PAYMENT.STATUS_CHANGED} 이고 PAID 면 우리 Payment lookup → confirm 흐름과
-     *       동일하게 verifyAmount + markAsPaid + 포인트 atomic 적립</li>
+     *   <li>transmission-id 헤더 → 멱등 키. WebhookEvent saveAndFlush — UNIQUE 충돌 즉시 catch
+     *       (lazy flush 로 트랜잭션 commit 시점에 터지는 회귀 차단).</li>
+     *   <li>payload 파싱 → {@code eventType / data.paymentKey}. payload 의 status/amount 는 신뢰 X.</li>
+     *   <li>{@code PAYMENT_STATUS_CHANGED} 이면 {@link PaymentGateway#lookup} 으로 토스 서버 재조회.</li>
+     *   <li>lookup 결과의 status=DONE + orderId/amount 일치 검증 → markAsPaid + 포인트 적립.</li>
      * </ol>
      *
      * <p>confirm 콜백과 webhook 모두 markAsPaid 를 호출할 수 있으므로 Payment 비관적 락 + 멱등
      * (markAsPaid 가 이미 완료면 false 반환) 으로 두 경로 race 차단.</p>
+     *
+     * @param transmissionId 토스 발송 ID (멱등 키, 헤더 누락 시 PAYLOAD_INVALID)
      */
     @Transactional
-    public void handleWebhook(String rawPayload, String signatureHeader, String timestampHeader) {
-        // 1. 시그니처 + timestamp.
-        webhookVerifier.verify(rawPayload, signatureHeader, timestampHeader);
-
-        // 2. payload 파싱.
+    public void handleWebhook(String rawPayload, String transmissionId) {
+        if (transmissionId == null || transmissionId.isBlank()) {
+            throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_PAYLOAD_INVALID);
+        }
         JsonNode root = parseOrThrow(rawPayload);
-        String eventId = textOrThrow(root, "eventId");
         String eventType = textOrThrow(root, "eventType");
         JsonNode data = root.path("data");
         String paymentKey = data.hasNonNull("paymentKey") ? data.get("paymentKey").asText() : null;
 
-        // 3. 멱등 저장 — UNIQUE 충돌 시 이미 처리된 이벤트.
+        // 1. 멱등 저장 — saveAndFlush 로 즉시 UNIQUE 충돌 감지 (게이트 1 round 1 Critical 4).
         LocalDateTime now = LocalDateTime.now();
         WebhookEvent saved;
         try {
             saved = webhookEventRepository.save(
-                    WebhookEvent.received(WebhookEventSource.TOSS, eventId, eventType, paymentKey, rawPayload, now)
+                    WebhookEvent.received(WebhookEventSource.TOSS, transmissionId, eventType, paymentKey, rawPayload, now)
             );
         } catch (DataIntegrityViolationException dup) {
-            log.info("[toss-webhook] 중복 eventId={} — 멱등 응답", eventId);
+            log.info("[toss-webhook] 중복 transmission-id={} — 멱등 응답", transmissionId);
             return;
         }
 
-        // 4. state 동기화 — 결제 완료 이벤트만 처리. 다른 eventType 은 저장만 (감사 로그).
-        if ("PAYMENT.STATUS_CHANGED".equals(eventType) || "PAYMENT.DONE".equals(eventType)) {
-            String status = data.hasNonNull("status") ? data.get("status").asText() : null;
-            if ("DONE".equals(status) && paymentKey != null) {
-                syncPaidByWebhook(paymentKey, data);
-            }
+        // 2. state 동기화 — 결제 완료 이벤트만 처리. 다른 eventType 은 저장만 (감사).
+        if ("PAYMENT_STATUS_CHANGED".equals(eventType) && paymentKey != null) {
+            syncPaidByWebhook(paymentKey);
         }
         saved.markProcessed(LocalDateTime.now());
     }
 
     /**
-     * webhook 으로 PAID 통보 받았을 때 우리 측 Payment 동기화.
-     * 이미 confirm 흐름으로 markAsPaid 됐다면 노op (멱등). orderId 매칭 못하면 무시 (다른 시스템 결제).
+     * webhook 받은 paymentKey 로 토스 lookup 재조회 → DONE 이고 우리 Payment 와 amount/orderId
+     * 일치하면 markAsPaid + 포인트 적립.
+     *
+     * <p>위변조 방지의 핵심 — webhook payload 의 status/amount 를 그대로 신뢰하지 않고 토스 서버에
+     * 직접 물어 본다 (게이트 1 round 1 Critical 3). lookup 결과 자체가 신뢰원.</p>
+     *
+     * <p>이미 confirm 흐름으로 markAsPaid 됐다면 멱등 (markAsPaid false 반환). lookup orderId 가
+     * 우리 DB 에 없으면 무시 (다른 가맹점 결제 잘못 라우팅 가능성).</p>
      */
-    private void syncPaidByWebhook(String paymentKey, JsonNode data) {
-        String orderId = data.hasNonNull("orderId") ? data.get("orderId").asText() : null;
-        if (orderId == null) {
-            log.warn("[toss-webhook] orderId 없음 — paymentKey={}", paymentKey);
+    private void syncPaidByWebhook(String paymentKey) {
+        // TossPaymentGateway.lookup 은 status=DONE 만 정상 반환 (DONE 아니면 PAYMENT_VERIFY_FAILED throw).
+        // 즉 정상 반환 = 토스 측 DONE 확정.
+        PaymentConfirmResult lookup;
+        try {
+            lookup = paymentGateway.lookup(paymentKey);
+        } catch (BusinessException e) {
+            log.warn("[toss-webhook] lookup 실패 paymentKey={} code={}", paymentKey, e.getErrorCode());
             return;
         }
-        Payment payment = paymentRepository.findByMerchantUidForUpdate(orderId).orElse(null);
+        Payment payment = paymentRepository.findByMerchantUidForUpdate(lookup.orderId()).orElse(null);
         if (payment == null) {
-            log.warn("[toss-webhook] 알 수 없는 orderId={} — 무시", orderId);
+            log.warn("[toss-webhook] 알 수 없는 orderId={} — 다른 가맹점 결제 추정, 무시", lookup.orderId());
             return;
         }
         if (payment.getStatus() == PaymentStatus.완료) {
             return;  // confirm 흐름으로 이미 처리. 멱등.
         }
-        long totalAmount = data.hasNonNull("totalAmount") ? data.get("totalAmount").asLong() : 0L;
-        payment.verifyAmount(totalAmount);
-        boolean newlyPaid = payment.markAsPaid(paymentKey, null, LocalDateTime.now(), data.toString());
+        // amount 위변조 검증 — lookup amount 와 우리 저장 amount 일치 확인.
+        payment.verifyAmount(lookup.amount());
+        boolean newlyPaid = payment.markAsPaid(paymentKey, lookup.method(), lookup.approvedAt(), lookup.rawResponse());
         if (newlyPaid) {
             pointApplicationService.credit(
                     payment.getUserId(),
