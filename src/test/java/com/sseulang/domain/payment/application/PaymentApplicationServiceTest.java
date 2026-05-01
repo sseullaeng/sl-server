@@ -51,7 +51,8 @@ class PaymentApplicationServiceTest {
                 tossProps,
                 new InMemoryFakeWebhookEventRepository(),
                 new TossWebhookSignatureVerifier(tossProps),
-                new ObjectMapper()
+                new ObjectMapper(),
+                new WebhookPendingRateLimiter()
         );
         userId = userRepo.save(User.createSocialUser(
                 SocialProvider.KAKAO, "kakao-1", new Email("u1@x.com"), "u1", null
@@ -386,6 +387,26 @@ class PaymentApplicationServiceTest {
                 .isInstanceOf(com.sseulang.global.exception.ExternalApiException.class);
         // 잔액 변동 X
         assertThat(userRepo.findPointBalance(userId)).isZero();
+    }
+
+    @Test
+    @DisplayName("handleWebhook pending 유지 공격_rate limit 으로 lookup 한도 차단 (게이트 1 round 4)")
+    void handleWebhook_pending_rate_limit() {
+        long amount = 5_000L;
+        // pending 상태 유지 — confirm 안 함
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, amount));
+
+        // 공격: 같은 pending orderId 에 random paymentKey + unique transmission-id 반복
+        // 한도(5회) 안에서는 lookup 호출, 초과 시 거부
+        gateway.lookupException = new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);  // lookup 항상 실패
+        for (int i = 0; i < 10; i++) {
+            String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                    "\"data\":{\"paymentKey\":\"pk-attack-" + i + "\",\"orderId\":\"" + started.merchantUid() + "\"}}";
+            service.handleWebhook(payload, "tx-attack-" + i);
+        }
+
+        // 한도(MAX_PER_WINDOW=5) 만큼만 lookup 호출 — 나머지는 사전 거부
+        assertThat(gateway.lookupCalls).isLessThanOrEqualTo(WebhookPendingRateLimiter.MAX_PER_WINDOW);
     }
 
     @Test

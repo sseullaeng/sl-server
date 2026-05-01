@@ -58,6 +58,7 @@ public class PaymentApplicationService {
     private final WebhookEventRepository webhookEventRepository;
     private final TossWebhookSignatureVerifier webhookVerifier;
     private final ObjectMapper objectMapper;
+    private final WebhookPendingRateLimiter pendingRateLimiter;
 
     public PaymentApplicationService(
             PaymentRepository paymentRepository,
@@ -67,7 +68,8 @@ public class PaymentApplicationService {
             TossProperties tossProperties,
             WebhookEventRepository webhookEventRepository,
             TossWebhookSignatureVerifier webhookVerifier,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            WebhookPendingRateLimiter pendingRateLimiter
     ) {
         this.paymentRepository = paymentRepository;
         this.paymentGateway = paymentGateway;
@@ -77,6 +79,7 @@ public class PaymentApplicationService {
         this.webhookEventRepository = webhookEventRepository;
         this.webhookVerifier = webhookVerifier;
         this.objectMapper = objectMapper;
+        this.pendingRateLimiter = pendingRateLimiter;
     }
 
     @Transactional
@@ -227,6 +230,13 @@ public class PaymentApplicationService {
             return;
         }
 
+        // pending 유지 공격 차단 (게이트 1 round 4) — 같은 pending orderId 에 대해 60초 윈도우
+        // 안 N회만 lookup outbound 허용. 토스 정상 흐름은 같은 transmission-id retry 라
+        // UNIQUE 멱등에 잡혀 lookup 1회만 — 한도에 걸릴 일 없음.
+        if (!pendingRateLimiter.tryAcquire(orderId)) {
+            return;
+        }
+
         // 1. 멱등 저장 — saveAndFlush 로 즉시 UNIQUE 충돌 감지 (게이트 1 round 1 Critical 4).
         LocalDateTime now = LocalDateTime.now();
         WebhookEvent saved;
@@ -240,8 +250,12 @@ public class PaymentApplicationService {
         }
 
         // 2. state 동기화 — Payment 비관적 락 + lookup 재조회 + payload orderId 와 lookup orderId 일치 검증.
-        syncPaidByWebhook(paymentKey, orderId);
+        boolean settled = syncPaidByWebhook(paymentKey, orderId);
         saved.markProcessed(LocalDateTime.now());
+        // 정상 정산된 경우만 카운터 회수 — lookup 실패는 카운터 유지해 공격 누적 차단.
+        if (settled) {
+            pendingRateLimiter.release(orderId);
+        }
     }
 
     /**
@@ -254,7 +268,11 @@ public class PaymentApplicationService {
      * <p>이미 confirm 흐름으로 markAsPaid 됐다면 멱등 (markAsPaid false 반환). lookup orderId 가
      * 우리 DB 에 없으면 무시 (다른 가맹점 결제 잘못 라우팅 가능성).</p>
      */
-    private void syncPaidByWebhook(String paymentKey, String expectedOrderId) {
+    /**
+     * @return true = 정상 정산 완료 (또는 confirm 으로 이미 완료된 멱등 케이스),
+     *         false = lookup 실패 / orderId 불일치 등 비정상 — 호출자가 rate limit 카운터 유지.
+     */
+    private boolean syncPaidByWebhook(String paymentKey, String expectedOrderId) {
         // TossPaymentGateway.lookup 은 status=DONE 만 정상 반환 (DONE 아니면 PAYMENT_VERIFY_FAILED throw).
         // BusinessException 은 토스 측 의미 있는 응답(미완료/취소 등) 으로 보고 200 + skip.
         // ExternalApiException (네트워크/5xx/파싱 실패) 은 catch 안 함 → 5xx 던져 토스 retry 유도.
@@ -263,28 +281,24 @@ public class PaymentApplicationService {
             lookup = paymentGateway.lookup(paymentKey);
         } catch (BusinessException e) {
             log.warn("[toss-webhook] lookup 비정상 응답 paymentKey={} code={}", paymentKey, e.getErrorCode());
-            return;
+            return false;
         }
         // payload orderId 와 lookup orderId 일치 검증 (게이트 1 round 3 — Critical).
-        // 공격자가 본인 pending orderId 와 random paymentKey 보낸 경우 lookup 결과 orderId 가
-        // payload orderId 와 다를 것 → 처리 거부.
         if (!expectedOrderId.equals(lookup.orderId())) {
             log.warn("[toss-webhook] payload orderId={} 와 lookup orderId={} 불일치 — 처리 거부",
                     expectedOrderId, lookup.orderId());
-            return;
+            return false;
         }
         Payment payment = paymentRepository.findByMerchantUidForUpdate(lookup.orderId()).orElse(null);
         if (payment == null) {
-            // 사전 검증 통과했으나 lookup 응답 orderId 가 다름 — 토스가 다른 결제 정보 회신한 비정상 케이스.
             log.warn("[toss-webhook] lookup orderId={} 가 우리 DB 에 없음 — 무시", lookup.orderId());
-            return;
+            return false;
         }
         if (payment.getStatus() == PaymentStatus.완료) {
-            return;  // confirm 흐름으로 이미 처리. 멱등.
+            return true;  // confirm 흐름으로 이미 처리. 멱등 정상.
         }
         // amount 위변조 검증 — lookup amount 와 우리 저장 amount 일치 확인.
         payment.verifyAmount(lookup.amount());
-        // 신뢰원은 lookup 응답 — paymentKey 도 lookup 의 것을 저장 (게이트 1 round 2 Warning).
         boolean newlyPaid = payment.markAsPaid(
                 lookup.paymentKey(), lookup.method(), lookup.approvedAt(), lookup.rawResponse()
         );
@@ -298,6 +312,7 @@ public class PaymentApplicationService {
                     "토스 webhook 충전"
             );
         }
+        return true;
     }
 
     private JsonNode parseOrThrow(String rawPayload) {
