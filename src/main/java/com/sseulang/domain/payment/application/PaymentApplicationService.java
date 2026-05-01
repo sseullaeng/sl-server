@@ -199,8 +199,27 @@ public class PaymentApplicationService {
         }
         JsonNode root = parseOrThrow(rawPayload);
         String eventType = textOrThrow(root, "eventType");
+
+        // DoS 차단 (게이트 1 round 2 Critical) — 결제 외 eventType 은 저장도 lookup 도 X.
+        // 공격자가 random eventType + transmission-id 로 webhook_events row 폭증시키는 경로 차단.
+        if (!"PAYMENT_STATUS_CHANGED".equals(eventType)) {
+            log.debug("[toss-webhook] 비결제 eventType={} — 무시", eventType);
+            return;
+        }
+
         JsonNode data = root.path("data");
         String paymentKey = data.hasNonNull("paymentKey") ? data.get("paymentKey").asText() : null;
+        String orderId = data.hasNonNull("orderId") ? data.get("orderId").asText() : null;
+        if (paymentKey == null || paymentKey.isBlank() || orderId == null || orderId.isBlank()) {
+            throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_PAYLOAD_INVALID);
+        }
+
+        // DoS 차단 — 우리 시스템 결제가 아니면 저장도 lookup outbound 도 X.
+        // 락 없이 단순 lookup (우리 DB 조회) 로 routing 검증만. lookup 자체는 read-only.
+        if (paymentRepository.findByMerchantUid(orderId).isEmpty()) {
+            log.warn("[toss-webhook] 알 수 없는 orderId={} (다른 가맹점 결제) — 저장 / lookup 모두 skip", orderId);
+            return;
+        }
 
         // 1. 멱등 저장 — saveAndFlush 로 즉시 UNIQUE 충돌 감지 (게이트 1 round 1 Critical 4).
         LocalDateTime now = LocalDateTime.now();
@@ -214,10 +233,8 @@ public class PaymentApplicationService {
             return;
         }
 
-        // 2. state 동기화 — 결제 완료 이벤트만 처리. 다른 eventType 은 저장만 (감사).
-        if ("PAYMENT_STATUS_CHANGED".equals(eventType) && paymentKey != null) {
-            syncPaidByWebhook(paymentKey);
-        }
+        // 2. state 동기화 — Payment 비관적 락 + lookup 재조회 검증 + markAsPaid + 적립.
+        syncPaidByWebhook(paymentKey);
         saved.markProcessed(LocalDateTime.now());
     }
 
@@ -233,17 +250,19 @@ public class PaymentApplicationService {
      */
     private void syncPaidByWebhook(String paymentKey) {
         // TossPaymentGateway.lookup 은 status=DONE 만 정상 반환 (DONE 아니면 PAYMENT_VERIFY_FAILED throw).
-        // 즉 정상 반환 = 토스 측 DONE 확정.
+        // BusinessException 은 토스 측 의미 있는 응답(미완료/취소 등) 으로 보고 200 + skip.
+        // ExternalApiException (네트워크/5xx/파싱 실패) 은 catch 안 함 → 5xx 던져 토스 retry 유도.
         PaymentConfirmResult lookup;
         try {
             lookup = paymentGateway.lookup(paymentKey);
         } catch (BusinessException e) {
-            log.warn("[toss-webhook] lookup 실패 paymentKey={} code={}", paymentKey, e.getErrorCode());
+            log.warn("[toss-webhook] lookup 비정상 응답 paymentKey={} code={}", paymentKey, e.getErrorCode());
             return;
         }
         Payment payment = paymentRepository.findByMerchantUidForUpdate(lookup.orderId()).orElse(null);
         if (payment == null) {
-            log.warn("[toss-webhook] 알 수 없는 orderId={} — 다른 가맹점 결제 추정, 무시", lookup.orderId());
+            // 사전 검증 통과했으나 lookup 응답 orderId 가 다름 — 토스가 다른 결제 정보 회신한 비정상 케이스.
+            log.warn("[toss-webhook] lookup orderId={} 가 우리 DB 에 없음 — 무시", lookup.orderId());
             return;
         }
         if (payment.getStatus() == PaymentStatus.완료) {
@@ -251,7 +270,10 @@ public class PaymentApplicationService {
         }
         // amount 위변조 검증 — lookup amount 와 우리 저장 amount 일치 확인.
         payment.verifyAmount(lookup.amount());
-        boolean newlyPaid = payment.markAsPaid(paymentKey, lookup.method(), lookup.approvedAt(), lookup.rawResponse());
+        // 신뢰원은 lookup 응답 — paymentKey 도 lookup 의 것을 저장 (게이트 1 round 2 Warning).
+        boolean newlyPaid = payment.markAsPaid(
+                lookup.paymentKey(), lookup.method(), lookup.approvedAt(), lookup.rawResponse()
+        );
         if (newlyPaid) {
             pointApplicationService.credit(
                     payment.getUserId(),

@@ -95,13 +95,24 @@ public class Payment extends BaseEntity {
         return p;
     }
 
-    /** 토스 confirm 응답 받아 완료 처리. 멱등 — 이미 완료면 무시 (true=새로 적용, false=중복). */
+    /**
+     * 토스 confirm 응답 받아 완료 처리. 멱등 — 이미 완료면 무시 (true=새로 적용, false=중복).
+     *
+     * <p>paymentKey / paidAt 필수 — 완료 결제인데 paid_at 비는 상태 차단 (게이트 1 round 2 Warning).
+     * method 는 결제수단별 nullable 허용 (예: 일부 가상계좌는 method 없이 응답).</p>
+     */
     public boolean markAsPaid(String paymentKey, PaymentMethod method, LocalDateTime paidAt, String rawResponse) {
         if (status == PaymentStatus.완료) {
             return false;  // 멱등 — 이미 완료
         }
         if (!status.canConfirm()) {
             throw new BusinessException(ErrorCode.PAYMENT_DUPLICATED);
+        }
+        if (paymentKey == null || paymentKey.isBlank()) {
+            throw new IllegalArgumentException("paymentKey 는 필수입니다");
+        }
+        if (paidAt == null) {
+            throw new IllegalArgumentException("paidAt 는 필수입니다");
         }
         this.paymentKey = paymentKey;
         this.method = method;
