@@ -1,5 +1,6 @@
 package com.sseulang.domain.delivery.domain;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 /**
  * 배달대행 요청 상태. DB VARCHAR(20) ENUM 매핑.
  *
@@ -12,6 +13,7 @@ package com.sseulang.domain.delivery.domain;
  * ({@code WHERE id = ? AND status = '모집중'}) 로 동시 수락 차단. 본 enum 은 단일 row
  * 의 다음 전이가 가능한지 표현만 한다.</p>
  */
+@Schema(description = "배달 상태. 모집중→수락→배송중→배송완료→정산완료 (또는 취소).")
 public enum DeliveryStatus {
     모집중,
     수락,

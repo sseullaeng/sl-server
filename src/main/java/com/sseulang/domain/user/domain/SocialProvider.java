@@ -1,5 +1,6 @@
 package com.sseulang.domain.user.domain;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 /**
  * 사용자 가입 출처. V1 스키마의 {@code users.social_provider} 컬럼(VARCHAR(20))과 1:1 매핑.
  * <ul>
@@ -8,6 +9,7 @@ package com.sseulang.domain.user.domain;
  *   <li>{@link #DEV} — 로컬 smoke test 전용 (Codex 게이트 1 보강 — KAKAO provider 의미 오염 차단)</li>
  * </ul>
  */
+@Schema(description = "사용자 가입 출처. LOCAL(이메일/비밀번호) / KAKAO / GOOGLE / DEV(로컬 전용).")
 public enum SocialProvider {
     LOCAL,
     KAKAO,

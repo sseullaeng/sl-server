@@ -1,5 +1,6 @@
 package com.sseulang.domain.withdrawal.domain;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 /**
  * 출금 상태. V1 스키마 ENUM 1:1 매핑. 가이드 §4.8 출금 흐름.
  *
@@ -9,6 +10,7 @@ package com.sseulang.domain.withdrawal.domain;
  *     └── 취소 (사용자, 신청 상태만)
  * </pre>
  */
+@Schema(description = "출금 상태. 신청→승인→완료 또는 거부(잔액 자동 환불).")
 public enum WithdrawalStatus {
     신청,
     승인,
