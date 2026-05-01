@@ -214,10 +214,16 @@ public class PaymentApplicationService {
             throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_PAYLOAD_INVALID);
         }
 
-        // DoS 차단 — 우리 시스템 결제가 아니면 저장도 lookup outbound 도 X.
-        // 락 없이 단순 lookup (우리 DB 조회) 로 routing 검증만. lookup 자체는 read-only.
-        if (paymentRepository.findByMerchantUid(orderId).isEmpty()) {
+        // DoS 차단 — 우리 시스템 결제가 아니거나 이미 종결된 결제면 저장 / lookup outbound 모두 X.
+        // 본인 pending 으로 random paymentKey 반복 공격 차단을 위해 status=대기 만 진행 (게이트 1 round 3).
+        Payment routed = paymentRepository.findByMerchantUid(orderId).orElse(null);
+        if (routed == null) {
             log.warn("[toss-webhook] 알 수 없는 orderId={} (다른 가맹점 결제) — 저장 / lookup 모두 skip", orderId);
+            return;
+        }
+        if (routed.getStatus() != PaymentStatus.대기) {
+            log.info("[toss-webhook] 이미 종결된 orderId={} status={} — webhook 무시 (DoS 가드)",
+                    orderId, routed.getStatus());
             return;
         }
 
@@ -233,8 +239,8 @@ public class PaymentApplicationService {
             return;
         }
 
-        // 2. state 동기화 — Payment 비관적 락 + lookup 재조회 검증 + markAsPaid + 적립.
-        syncPaidByWebhook(paymentKey);
+        // 2. state 동기화 — Payment 비관적 락 + lookup 재조회 + payload orderId 와 lookup orderId 일치 검증.
+        syncPaidByWebhook(paymentKey, orderId);
         saved.markProcessed(LocalDateTime.now());
     }
 
@@ -248,7 +254,7 @@ public class PaymentApplicationService {
      * <p>이미 confirm 흐름으로 markAsPaid 됐다면 멱등 (markAsPaid false 반환). lookup orderId 가
      * 우리 DB 에 없으면 무시 (다른 가맹점 결제 잘못 라우팅 가능성).</p>
      */
-    private void syncPaidByWebhook(String paymentKey) {
+    private void syncPaidByWebhook(String paymentKey, String expectedOrderId) {
         // TossPaymentGateway.lookup 은 status=DONE 만 정상 반환 (DONE 아니면 PAYMENT_VERIFY_FAILED throw).
         // BusinessException 은 토스 측 의미 있는 응답(미완료/취소 등) 으로 보고 200 + skip.
         // ExternalApiException (네트워크/5xx/파싱 실패) 은 catch 안 함 → 5xx 던져 토스 retry 유도.
@@ -257,6 +263,14 @@ public class PaymentApplicationService {
             lookup = paymentGateway.lookup(paymentKey);
         } catch (BusinessException e) {
             log.warn("[toss-webhook] lookup 비정상 응답 paymentKey={} code={}", paymentKey, e.getErrorCode());
+            return;
+        }
+        // payload orderId 와 lookup orderId 일치 검증 (게이트 1 round 3 — Critical).
+        // 공격자가 본인 pending orderId 와 random paymentKey 보낸 경우 lookup 결과 orderId 가
+        // payload orderId 와 다를 것 → 처리 거부.
+        if (!expectedOrderId.equals(lookup.orderId())) {
+            log.warn("[toss-webhook] payload orderId={} 와 lookup orderId={} 불일치 — 처리 거부",
+                    expectedOrderId, lookup.orderId());
             return;
         }
         Payment payment = paymentRepository.findByMerchantUidForUpdate(lookup.orderId()).orElse(null);

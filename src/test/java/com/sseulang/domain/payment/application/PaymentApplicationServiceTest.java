@@ -389,6 +389,59 @@ class PaymentApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("handleWebhook 본인 pending 으로 random paymentKey 반복_DoS 가드 (이미 종결된 결제는 무시)")
+    void handleWebhook_dos_against_own_pending() {
+        long amount = 5_000L;
+        ChargeStartResult started = service.startCharge(new ChargeStartCommand(userId, amount));
+
+        // 1차: 정상 완료
+        gateway.lookupAmountOverride = amount;
+        gateway.lookupOrderIdOverride = started.merchantUid();
+        String payload1 = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-real\",\"orderId\":\"" + started.merchantUid() + "\"}}";
+        service.handleWebhook(payload1, "tx-real-1");
+        int lookupAfterReal = gateway.lookupCalls;
+        assertThat(paymentRepo.findById(started.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.완료);
+
+        // 2차 공격: 같은 orderId + random paymentKey + new transmission-id 반복
+        String payload2 = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-attack\",\"orderId\":\"" + started.merchantUid() + "\"}}";
+        for (int i = 0; i < 3; i++) {
+            service.handleWebhook(payload2, "tx-attack-" + i);
+        }
+
+        // lookup outbound 추가 호출 X — 사전 status=완료 가드로 차단
+        assertThat(gateway.lookupCalls).isEqualTo(lookupAfterReal);
+    }
+
+    @Test
+    @DisplayName("handleWebhook lookup orderId 가 payload orderId 와 다름_처리 거부 (잔액 변동 X)")
+    void handleWebhook_lookup_orderId_mismatch() {
+        long amount = 7_000L;
+        ChargeStartResult myPending = service.startCharge(new ChargeStartCommand(userId, amount));
+        // 다른 사용자 pending 결제 (lookup 이 이걸 가리키도록)
+        ChargeStartResult othersPending = service.startCharge(new ChargeStartCommand(otherUserId, amount));
+
+        // payload 는 내 orderId 로 보내지만 lookup 응답은 다른 사람 orderId 로 (토스 측 비정상 응답 시뮬)
+        gateway.lookupAmountOverride = amount;
+        gateway.lookupOrderIdOverride = othersPending.merchantUid();
+
+        String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-mismatch\",\"orderId\":\"" + myPending.merchantUid() + "\"}}";
+        service.handleWebhook(payload, "tx-mismatch-1");
+
+        // 둘 다 잔액 변동 X
+        assertThat(userRepo.findPointBalance(userId)).isZero();
+        assertThat(userRepo.findPointBalance(otherUserId)).isZero();
+        // 내 pending / 다른 사람 pending 모두 그대로
+        assertThat(paymentRepo.findById(myPending.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.대기);
+        assertThat(paymentRepo.findById(othersPending.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.대기);
+    }
+
+    @Test
     @DisplayName("handleWebhook 저장된 paymentKey 는 lookup 응답의 것 (payload 위변조 차단)")
     void handleWebhook_paymentKey_from_lookup() {
         long amount = 15_000L;
