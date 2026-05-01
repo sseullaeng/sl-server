@@ -49,7 +49,7 @@ class ReviewApplicationServiceTest {
         UserApplicationService userSvc = new UserApplicationService(userRepo);
         ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, userSvc);
         PointApplicationService pointSvc = new PointApplicationService(userSvc, new InMemoryFakePointHistoryRepository());
-        TransactionApplicationService txSvc = new TransactionApplicationService(txRepo, itemSvc, pointSvc, userSvc);
+        TransactionApplicationService txSvc = new TransactionApplicationService(txRepo, itemSvc, pointSvc, userSvc, java.time.Clock.systemDefaultZone());
         service = new ReviewApplicationService(reviewRepo, txSvc, userSvc);
 
         Item item = itemRepo.save(Item.create(

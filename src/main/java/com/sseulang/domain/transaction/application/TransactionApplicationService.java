@@ -45,17 +45,20 @@ public class TransactionApplicationService {
     private final ItemApplicationService itemApplicationService;
     private final PointApplicationService pointApplicationService;
     private final UserApplicationService userApplicationService;
+    private final java.time.Clock clock;
 
     public TransactionApplicationService(
             TransactionRepository transactionRepository,
             ItemApplicationService itemApplicationService,
             PointApplicationService pointApplicationService,
-            UserApplicationService userApplicationService
+            UserApplicationService userApplicationService,
+            java.time.Clock clock
     ) {
         this.transactionRepository = transactionRepository;
         this.itemApplicationService = itemApplicationService;
         this.pointApplicationService = pointApplicationService;
         this.userApplicationService = userApplicationService;
+        this.clock = clock;
     }
 
     @Transactional
@@ -87,7 +90,7 @@ public class TransactionApplicationService {
         }
         // Item 락 + 상태 전이 — 락 순서 Transaction → Item 고정 (deadlock 회피)
         itemApplicationService.markItemAsReserved(tx.getItemId());
-        tx.markAsReserved(LocalDateTime.now());
+        tx.markAsReserved(LocalDateTime.now(clock));
     }
 
     /**
@@ -121,7 +124,7 @@ public class TransactionApplicationService {
                     "거래 결제: tx#" + tx.getId()
             );
         }
-        tx.markAsCompleted(LocalDateTime.now());
+        tx.markAsCompleted(LocalDateTime.now(clock));
     }
 
     @Transactional
@@ -131,7 +134,7 @@ public class TransactionApplicationService {
             throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
         }
         boolean wasReserved = tx.getStatus() == TransactionStatus.예약;
-        tx.cancel(LocalDateTime.now(), reason);
+        tx.cancel(LocalDateTime.now(clock), reason);
         if (wasReserved) {
             // 예약 상태였던 거래만 Item 을 판매중으로 복원 (가이드 §5.2 채팅 재활성화)
             itemApplicationService.restoreItemFromReserved(tx.getItemId());
@@ -165,7 +168,7 @@ public class TransactionApplicationService {
             throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
         }
         // 7일 경계 정확 비교 — Duration.toDays() 는 내림이라 7일 23시간도 허용되는 회귀 (Codex 게이트 2).
-        if (LocalDateTime.now().isAfter(tx.getCompletedAt().plusDays(7))) {
+        if (LocalDateTime.now(clock).isAfter(tx.getCompletedAt().plusDays(7))) {
             throw new BusinessException(ErrorCode.REVIEW_PERIOD_EXPIRED);
         }
         Long revieweeId = tx.isSeller(requesterId) ? tx.getBuyerId() : tx.getSellerId();

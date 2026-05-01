@@ -49,7 +49,7 @@ class TransactionApplicationServiceTest {
         UserApplicationService userSvc = new UserApplicationService(userRepo);
         itemSvc = new ItemApplicationService(itemRepo, catSvc, userSvc);
         PointApplicationService pointSvc = new PointApplicationService(userSvc, pointHistoryRepo);
-        service = new TransactionApplicationService(txRepo, itemSvc, pointSvc, userSvc);
+        service = new TransactionApplicationService(txRepo, itemSvc, pointSvc, userSvc, java.time.Clock.systemDefaultZone());
 
         SELLER = userRepo.save(User.createSocialUser(
                 SocialProvider.KAKAO, "k-seller", new Email("seller@x.com"), "seller", null
