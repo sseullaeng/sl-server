@@ -2,6 +2,7 @@ package com.sseulang.domain.review.presentation.dto;
 
 import com.sseulang.domain.item.domain.TradeType;
 import com.sseulang.domain.transaction.application.dto.PendingReviewableResult;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
 
@@ -10,14 +11,15 @@ import java.time.LocalDateTime;
  *
  * <p>{@code deadline = completedAt + 7d} — 클라이언트가 남은 시간 카운트다운 UI 에 직접 사용.</p>
  */
+@Schema(description = "리뷰 작성 대기 거래 — 본인이 reviewer 로 아직 작성 안 한 7일 이내 완료 거래.")
 public record PendingReviewResponse(
-        Long transactionId,
-        Long itemId,
-        Long revieweeId,
+        @Schema(example = "12") Long transactionId,
+        @Schema(example = "42") Long itemId,
+        @Schema(description = "상대방 (reviewee) id", example = "200") Long revieweeId,
         TradeType tradeType,
-        long price,
+        @Schema(example = "1200000") long price,
         LocalDateTime completedAt,
-        LocalDateTime deadline
+        @Schema(description = "완료일 + 7일. 이 시간 지나면 작성 불가") LocalDateTime deadline
 ) {
     public static PendingReviewResponse from(PendingReviewableResult r) {
         return new PendingReviewResponse(

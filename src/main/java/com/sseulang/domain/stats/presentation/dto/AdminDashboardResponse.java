@@ -6,11 +6,13 @@ import com.sseulang.domain.stats.application.AdminDashboardResult;
 import com.sseulang.domain.transaction.application.dto.TransactionStatsResult;
 import com.sseulang.domain.user.application.dto.UserStatsResult;
 import com.sseulang.domain.withdrawal.application.dto.WithdrawalStatsResult;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * 관리자 dashboard JSON 응답. presentation layer 응답 — application Result 를 그대로 노출하지만
  * 향후 응답 shape 분리(예: 일부 필드 마스킹)에 대비해 wrapper 유지.
  */
+@Schema(description = "관리자 dashboard — 5개 도메인 (User/Transaction/Payment/Withdrawal/Delivery) 통계 묶음.")
 public record AdminDashboardResponse(
         UserStatsResult users,
         TransactionStatsResult transactions,
