@@ -6,6 +6,7 @@ import com.sseulang.domain.user.presentation.dto.UserBlockRequest;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 관리자 회원 관리. SecurityConfig admin chain 으로 ROLE_ADMIN 강제.
  */
+@Tag(name = "AdminUser", description = "관리자 — 사용자 목록/차단")
 @RestController
 @RequestMapping("/api/v1/admin/users")
 public class AdminUserController {

@@ -5,6 +5,7 @@ import com.sseulang.domain.notice.domain.NoticeType;
 import com.sseulang.domain.notice.presentation.dto.NoticeResponse;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 사용자 공지 조회 — 노출 윈도우 통과한 공지만. SecurityConfig user chain 으로 ROLE_USER 강제.
  */
+@Tag(name = "Notice", description = "공지 조회 (공개)")
 @RestController
 @RequestMapping("/api/v1/notices")
 public class NoticeController {

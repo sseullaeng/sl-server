@@ -6,6 +6,7 @@ import com.sseulang.domain.chat.presentation.dto.ChatRoomResponse;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "ChatRoom", description = "1:1 채팅방 개설/조회")
 @RestController
 @RequestMapping("/api/v1/chat-rooms")
 public class ChatRoomController {

@@ -6,6 +6,7 @@ import com.sseulang.domain.block.presentation.dto.UserBlockResponse;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "UserBlock", description = "사용자 차단/해제")
 @RestController
 @RequestMapping("/api/v1/blocks")
 public class UserBlockController {

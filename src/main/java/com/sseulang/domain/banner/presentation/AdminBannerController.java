@@ -7,6 +7,7 @@ import com.sseulang.domain.banner.presentation.dto.BannerUpsertRequest;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "AdminBanner", description = "관리자 — 배너 관리")
 @RestController
 @RequestMapping("/api/v1/admin/banners")
 public class AdminBannerController {

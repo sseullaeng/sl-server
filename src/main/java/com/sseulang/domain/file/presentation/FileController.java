@@ -7,6 +7,7 @@ import com.sseulang.domain.file.presentation.dto.PresignedUrlRequest;
 import com.sseulang.domain.file.presentation.dto.PresignedUrlResponse;
 import com.sseulang.global.common.ApiResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+@Tag(name = "File", description = "S3 presigned URL 발급")
 @RestController
 @RequestMapping("/api/v1/files")
 public class FileController {

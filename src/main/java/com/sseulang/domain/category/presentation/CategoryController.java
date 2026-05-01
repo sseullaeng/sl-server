@@ -4,6 +4,7 @@ import com.sseulang.domain.category.application.CategoryApplicationService;
 import com.sseulang.domain.category.presentation.dto.CategoryNodeResponse;
 import com.sseulang.domain.category.presentation.dto.CategoryResponse;
 import com.sseulang.global.common.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+@Tag(name = "Category", description = "카테고리 트리 조회 (공개)")
 @RestController
 @RequestMapping("/api/v1/categories")
 public class CategoryController {

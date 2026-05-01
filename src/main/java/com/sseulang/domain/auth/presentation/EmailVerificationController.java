@@ -4,6 +4,7 @@ import com.sseulang.domain.auth.application.EmailVerificationService;
 import com.sseulang.domain.auth.presentation.dto.VerifyEmailRequest;
 import com.sseulang.global.common.ApiResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>{@code /resend-verification} — auth 필수 (hasRole("USER")) + CSRF 적용 (게이트 1 round 2 보강)</li>
  * </ul>
  */
+@Tag(name = "EmailVerification", description = "이메일 인증 메일 발송/확인")
 @RestController
 @RequestMapping("/api/v1/auth")
 public class EmailVerificationController {
