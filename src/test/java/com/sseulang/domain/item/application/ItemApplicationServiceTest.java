@@ -46,7 +46,7 @@ class ItemApplicationServiceTest {
         Long id = service.register(new ItemRegisterCommand(
                 SELLER, categoryId, "title", "desc", 10_000L, null, null, TradeType.판매,
                 "서울",
-                List.of("https://img/1", "https://img/2"),
+                List.of("https://cdn.test/items/" + SELLER + "/img1.jpg", "https://cdn.test/items/" + SELLER + "/img2.jpg"),
                 List.of("아이폰", "미개봉")
         ));
 
@@ -131,16 +131,16 @@ class ItemApplicationServiceTest {
     void update_이미지_전체교체() {
         Long id = service.register(new ItemRegisterCommand(
                 SELLER, categoryId, "t", "d", 1L, null, null, TradeType.판매, null,
-                List.of("https://old/1", "https://old/2"), null
+                List.of("https://cdn.test/items/" + SELLER + "/old1.jpg", "https://cdn.test/items/" + SELLER + "/old2.jpg"), null
         ));
 
         service.update(id, SELLER, new ItemUpdateCommand(
-                null, "t", "d", 1L, null, null, null, List.of("https://new/1"), null
+                null, "t", "d", 1L, null, null, null, List.of("https://cdn.test/items/" + SELLER + "/new1.jpg"), null
         ));
 
         ItemDetailResult r = service.getById(id);
         assertThat(r.images()).hasSize(1);
-        assertThat(r.images().get(0).imageUrl()).isEqualTo("https://new/1");
+        assertThat(r.images().get(0).imageUrl()).isEqualTo("https://cdn.test/items/" + SELLER + "/new1.jpg");
     }
 
     @Test

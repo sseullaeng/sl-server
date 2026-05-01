@@ -19,7 +19,9 @@ import java.util.List;
  * Item 동적 검색 — QueryDSL BooleanBuilder.
  *
  * <p>q 검색은 현재 단순 {@code LIKE '%q%'} 로, V1 스키마의 FULLTEXT(ngram) 인덱스를 활용하지 못한다.
- * 데이터 규모가 커지면 풀스캔 위험 — MATCH AGAINST 마이그는 별도 트래킹: <a href="https://github.com/sseullaeng/sl-server/issues/10">issue #10</a>.</p>
+ * 데이터 규모가 커지면 풀스캔 위험 — MATCH AGAINST 마이그는 ngram boolean mode 한글 매칭 검증
+ * 필요해 follow-up #10 으로 미룸. {@link com.sseulang.global.config.FullTextFunctionContributor} 는
+ * Hibernate function 등록 골격으로 유지 (활성화 시 즉시 사용).</p>
  */
 @Repository
 public class ItemQuerydslRepository {

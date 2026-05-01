@@ -3,6 +3,7 @@ package com.sseulang.domain.message.application;
 import com.sseulang.domain.chat.application.ChatRoomApplicationService;
 import com.sseulang.domain.message.application.dto.MessageResult;
 import com.sseulang.domain.message.application.dto.MessageSendCommand;
+import com.sseulang.domain.message.application.event.ChatRealtimePublishRequestedEvent;
 import com.sseulang.domain.message.domain.Message;
 import com.sseulang.domain.message.domain.MessageRepository;
 import com.sseulang.domain.notification.application.NotificationApplicationService;
@@ -10,6 +11,7 @@ import com.sseulang.domain.notification.application.dto.NotificationResult;
 import com.sseulang.domain.notification.domain.Notification;
 import com.sseulang.domain.notification.domain.NotificationType;
 import com.sseulang.global.websocket.RealtimePublisher;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,18 +38,21 @@ public class MessageApplicationService {
     private final MessageRepository messageRepository;
     private final ChatRoomApplicationService chatRoomApplicationService;
     private final NotificationApplicationService notificationApplicationService;
-    private final RealtimePublisher realtimePublisher;
+    private final RealtimePublisher realtimePublisher;  // 단위 테스트 호환용 (deprecated 직접 호출)
+    private final ApplicationEventPublisher eventPublisher;
 
     public MessageApplicationService(
             MessageRepository messageRepository,
             ChatRoomApplicationService chatRoomApplicationService,
             NotificationApplicationService notificationApplicationService,
-            RealtimePublisher realtimePublisher
+            RealtimePublisher realtimePublisher,
+            ApplicationEventPublisher eventPublisher
     ) {
         this.messageRepository = messageRepository;
         this.chatRoomApplicationService = chatRoomApplicationService;
         this.notificationApplicationService = notificationApplicationService;
         this.realtimePublisher = realtimePublisher;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -76,7 +81,7 @@ public class MessageApplicationService {
 
         MessageResult result = MessageResult.from(saved);
 
-        // 상대방 알림 생성 + 실시간 push
+        // 상대방 알림 생성 (트랜잭션 안에서 저장)
         Notification notification = notificationApplicationService.notify(
                 opponentId,
                 NotificationType.메시지,
@@ -85,10 +90,14 @@ public class MessageApplicationService {
                 "chat-room",
                 cmd.chatRoomId()
         );
-        realtimePublisher.publishNotification(opponentId, NotificationResult.from(notification));
 
-        // 채팅방 토픽 broadcast — 양쪽 클라이언트가 구독 중
-        realtimePublisher.publishToChatRoom(cmd.chatRoomId(), result);
+        // 실시간 publish 는 AFTER_COMMIT 으로 분리 (follow-up #19) — 트랜잭션 롤백 시 발송 X.
+        eventPublisher.publishEvent(new ChatRealtimePublishRequestedEvent(
+                cmd.chatRoomId(),
+                opponentId,
+                result,
+                NotificationResult.from(notification)
+        ));
 
         return result;
     }

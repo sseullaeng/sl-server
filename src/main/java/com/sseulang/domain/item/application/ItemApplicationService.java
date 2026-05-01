@@ -43,6 +43,9 @@ public class ItemApplicationService {
         // Item 등록 — 사기 방지 위해 이메일 인증 필수 (게이트 1).
         userApplicationService.requireVerified(cmd.sellerId());
         categoryApplicationService.requireExists(cmd.categoryId());
+        // presigned URL 발급 시 받은 이미지 키가 본인 ownership prefix(items/{sellerId}/) 인지 검증.
+        // 다른 사용자의 임시 키를 본인 Item 으로 등록하는 위변조 차단 (follow-up #12 옵션 B).
+        validateImageOwnership(cmd.sellerId(), cmd.imageUrls());
         Item item = Item.create(
                 cmd.sellerId(), cmd.categoryId(),
                 cmd.title(), cmd.description(),
@@ -79,6 +82,8 @@ public class ItemApplicationService {
             item.assignCategory(cmd.categoryId());
         }
         if (cmd.imageUrls() != null) {
+            // 업데이트 시에도 동일 ownership 검증 (follow-up #12 옵션 B).
+            validateImageOwnership(item.getSellerId(), cmd.imageUrls());
             item.clearImages();
             applyImages(item, cmd.imageUrls());
         }
@@ -208,6 +213,23 @@ public class ItemApplicationService {
         for (String url : imageUrls) {
             order++;
             item.addImage(url, order, order == 1);
+        }
+    }
+
+    /**
+     * presigned URL 발급 시 받은 이미지 키가 본인 sellerId 의 prefix 를 가지는지 검증.
+     * key 형식: {@code items/{sellerId}/{uuid}.{ext}} (FileApplicationService.buildKey 참조).
+     * 다른 사용자의 임시 키를 본인 Item 으로 등록하는 위변조 차단 (follow-up #12).
+     */
+    private static void validateImageOwnership(Long sellerId, List<String> imageUrls) {
+        if (imageUrls == null || imageUrls.isEmpty()) {
+            return;
+        }
+        String expectedPrefix = "items/" + sellerId + "/";
+        for (String url : imageUrls) {
+            if (url == null || !url.contains(expectedPrefix)) {
+                throw new BusinessException(ErrorCode.ITEM_FORBIDDEN);
+            }
         }
     }
 
