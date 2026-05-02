@@ -1,0 +1,33 @@
+# 빌드 산출물 / 로컬 환경 — image 에 포함 X
+.git
+.gitignore
+.idea
+.vscode
+*.iml
+
+build
+out
+.gradle
+
+# 환경변수 (image 에 절대 포함 금지)
+.env
+.env.*
+!.env.example
+!.env.prod.example
+
+# 로그 / OS 파일
+*.log
+logs
+.DS_Store
+Thumbs.db
+
+# 노드 / 프론트 (백엔드 image 에 불필요)
+node_modules
+
+# 테스트 결과
+build/test-results
+build/reports
+
+# Docker 자체
+Dockerfile
+docker-compose*.yml
