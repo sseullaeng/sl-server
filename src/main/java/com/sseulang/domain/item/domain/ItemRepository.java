@@ -24,6 +24,12 @@ public interface ItemRepository {
     /** 동적 검색·필터 + 최신순 정렬. criteria 의 모든 필드가 null 이면 전체 (status != 삭제) 최신순. */
     Page<Item> search(ItemSearchCriteria criteria, Pageable pageable);
 
+    /**
+     * 본인 등록 물품 페이징 — 마이페이지 탭 분리용. status 가 null 이면 삭제만 자동 제외하고 전체.
+     * status 명시 시 정확히 일치 (예: 판매중 / 예약 / 거래완료 / 비공개).
+     */
+    Page<Item> findBySellerIdAndStatus(Long sellerId, ItemStatus status, Pageable pageable);
+
     Item save(Item item);
 
     void delete(Item item);
@@ -38,4 +44,10 @@ public interface ItemRepository {
      * 영향받은 행 수 반환.
      */
     int decrementWishlistCount(Long itemId);
+
+    /**
+     * 현재 wishlist_count 값. JPQL 스칼라 projection 으로 fresh DB 조회 — 같은 트랜잭션 내 bulk
+     * update 직후 호출해도 stale 캐시 회피. row 가 없으면 빈 Optional.
+     */
+    Optional<Integer> getWishlistCount(Long itemId);
 }

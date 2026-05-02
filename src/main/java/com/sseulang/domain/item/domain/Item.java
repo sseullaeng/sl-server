@@ -81,6 +81,13 @@ public class Item extends BaseEntity {
     @Column(name = "region", length = REGION_MAX_LENGTH)
     private String region;
 
+    /**
+     * 썸네일 image_url denormalize. {@link #addImage}/{@link #clearImages} 시 자동 갱신 — Aggregate
+     * 외부에서 직접 set 금지. ItemSummary 응답을 N+1 없이 내려주기 위한 V11 컬럼.
+     */
+    @Column(name = "thumbnail_url", length = 500)
+    private String thumbnailUrl;
+
     @Column(name = "view_count", nullable = false)
     private int viewCount;
 
@@ -140,10 +147,14 @@ public class Item extends BaseEntity {
             throw new BusinessException(ErrorCode.ITEM_IMAGE_LIMIT_EXCEEDED);
         }
         images.add(new ItemImage(this, imageUrl, sortOrder, thumbnail));
+        if (thumbnail) {
+            this.thumbnailUrl = imageUrl;
+        }
     }
 
     public void clearImages() {
         images.clear();
+        this.thumbnailUrl = null;
     }
 
     /** 외부에 노출되는 이미지 컬렉션은 immutable. 변경은 {@link #addImage} / {@link #clearImages}. */

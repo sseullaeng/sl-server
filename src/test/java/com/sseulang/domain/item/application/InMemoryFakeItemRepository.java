@@ -107,4 +107,28 @@ public class InMemoryFakeItemRepository implements ItemRepository {
         ReflectionTestUtils.setField(item, "wishlistCount", item.getWishlistCount() - 1);
         return 1;
     }
+
+    @Override
+    public Optional<Integer> getWishlistCount(Long itemId) {
+        Item item = store.get(itemId);
+        if (item == null) return Optional.empty();
+        return Optional.of(item.getWishlistCount());
+    }
+
+    @Override
+    public Page<Item> findBySellerIdAndStatus(Long sellerId, ItemStatus status, Pageable pageable) {
+        Stream<Item> stream = store.values().stream()
+                .filter(i -> sellerId.equals(i.getSellerId()));
+        if (status == null) {
+            stream = stream.filter(i -> i.getStatus() != ItemStatus.삭제);
+        } else {
+            stream = stream.filter(i -> i.getStatus() == status);
+        }
+        List<Item> filtered = stream
+                .sorted(Comparator.comparingLong(Item::getId).reversed())
+                .toList();
+        int start = Math.min((int) pageable.getOffset(), filtered.size());
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        return new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
+    }
 }

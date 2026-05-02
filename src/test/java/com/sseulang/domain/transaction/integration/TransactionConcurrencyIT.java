@@ -3,6 +3,7 @@ package com.sseulang.domain.transaction.integration;
 import com.sseulang.domain.category.application.CategoryApplicationService;
 import com.sseulang.domain.category.infrastructure.persistence.CategoryRepositoryImpl;
 import com.sseulang.domain.file.application.NoOpPresignedUrlGenerator;
+import com.sseulang.domain.item.application.NoOpWishlistView;
 import com.sseulang.domain.item.application.ItemApplicationService;
 import com.sseulang.domain.item.application.dto.ItemRegisterCommand;
 import com.sseulang.domain.item.domain.Item;
@@ -66,6 +67,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         ItemRepositoryImpl.class,
         ItemApplicationService.class,
         NoOpPresignedUrlGenerator.class,
+        NoOpWishlistView.class,
         CategoryRepositoryImpl.class,
         CategoryApplicationService.class,
         UserRepositoryImpl.class,

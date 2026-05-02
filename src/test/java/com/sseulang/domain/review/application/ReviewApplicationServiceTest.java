@@ -47,7 +47,7 @@ class ReviewApplicationServiceTest {
         InMemoryFakeItemRepository itemRepo = new InMemoryFakeItemRepository();
         CategoryApplicationService catSvc = new CategoryApplicationService(new InMemoryFakeCategoryRepository());
         UserApplicationService userSvc = new UserApplicationService(userRepo);
-        ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, userSvc, new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator());
+        ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, userSvc, new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(), new com.sseulang.domain.item.application.NoOpWishlistView());
         PointApplicationService pointSvc = new PointApplicationService(userSvc, new InMemoryFakePointHistoryRepository());
         TransactionApplicationService txSvc = new TransactionApplicationService(txRepo, itemSvc, pointSvc, userSvc, java.time.Clock.systemDefaultZone());
         service = new ReviewApplicationService(reviewRepo, txSvc, userSvc);
