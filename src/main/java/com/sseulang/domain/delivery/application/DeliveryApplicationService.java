@@ -206,6 +206,28 @@ public class DeliveryApplicationService {
         return deliveryRepository.findOpenList(pageable).map(DeliveryResult::from);
     }
 
+    /**
+     * 외부 도메인이 참여자 검증할 때 사용 (예: STOMP location SUBSCRIBE 인가).
+     * 참여자 아니면 {@link ErrorCode#DELIVERY_FORBIDDEN}.
+     */
+    public void requireParticipant(Long deliveryId, Long userId) {
+        DeliveryRequest d = findOrThrow(deliveryId);
+        if (!d.isParticipant(userId)) {
+            throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
+        }
+    }
+
+    /**
+     * 외부 도메인이 라이더 본인 검증할 때 사용 (예: STOMP location publish 권한).
+     * 수락된 라이더 아니면 {@link ErrorCode#DELIVERY_FORBIDDEN}.
+     */
+    public void requireRider(Long deliveryId, Long userId) {
+        DeliveryRequest d = findOrThrow(deliveryId);
+        if (!d.isRider(userId)) {
+            throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
+        }
+    }
+
     public Page<DeliveryResult> listMine(Long userId, Pageable pageable) {
         return deliveryRepository.findByParticipant(userId, pageable).map(DeliveryResult::from);
     }

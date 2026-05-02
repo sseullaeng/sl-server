@@ -30,4 +30,12 @@ public class RealtimePublisher {
         // Spring UserDestinationMessageHandler 가 /user/{userId}/queue/notifications 로 라우팅.
         template.convertAndSendToUser(String.valueOf(userId), "/queue/notifications", payload);
     }
+
+    /**
+     * 배달 실시간 위치 broadcast — {@code /topic/delivery/{deliveryId}/location}.
+     * 참여자(요청자/라이더) 만 SUBSCRIBE 허용 — 인가 검증은 {@link com.sseulang.global.websocket.StompAuthChannelInterceptor}.
+     */
+    public void publishDeliveryLocation(Long deliveryId, Object payload) {
+        template.convertAndSend("/topic/delivery/" + deliveryId + "/location", payload);
+    }
 }
