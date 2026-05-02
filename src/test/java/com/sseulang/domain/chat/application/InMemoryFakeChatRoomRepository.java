@@ -69,4 +69,16 @@ public class InMemoryFakeChatRoomRepository implements ChatRoomRepository {
         }
         return 1;
     }
+
+    @Override
+    public int markAsRead(Long chatRoomId, Long userId) {
+        ChatRoom room = store.get(chatRoomId);
+        if (room == null || !room.isParticipant(userId)) return 0;
+        if (userId.equals(room.getUser1Id())) {
+            ReflectionTestUtils.setField(room, "user1Unread", 0);
+        } else {
+            ReflectionTestUtils.setField(room, "user2Unread", 0);
+        }
+        return 1;
+    }
 }

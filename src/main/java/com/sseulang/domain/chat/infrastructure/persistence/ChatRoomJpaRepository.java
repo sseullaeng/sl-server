@@ -54,4 +54,15 @@ interface ChatRoomJpaRepository extends JpaRepository<ChatRoom, Long> {
             @Param("preview") String preview,
             @Param("sentAt") LocalDateTime sentAt
     );
+
+    /** 본인 unread 0 으로 atomic UPDATE. 비참여자는 영향 0. */
+    @Modifying
+    @Query("""
+        UPDATE ChatRoom c
+        SET c.user1Unread = CASE WHEN c.user1Id = :userId THEN 0 ELSE c.user1Unread END,
+            c.user2Unread = CASE WHEN c.user2Id = :userId THEN 0 ELSE c.user2Unread END
+        WHERE c.id = :roomId
+          AND (c.user1Id = :userId OR c.user2Id = :userId)
+    """)
+    int markAsRead(@Param("roomId") Long roomId, @Param("userId") Long userId);
 }
