@@ -1,5 +1,6 @@
 package com.sseulang.domain.transaction.application;
 
+import com.sseulang.domain.transaction.application.dto.TransactionRole;
 import com.sseulang.domain.transaction.domain.Transaction;
 import com.sseulang.domain.transaction.domain.TransactionRepository;
 import com.sseulang.domain.transaction.domain.TransactionStatus;
@@ -61,6 +62,27 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
 
     public void markReviewed(Long transactionId, Long reviewerId) {
         reviewedPairs.add(transactionId + ":" + reviewerId);
+    }
+
+    @Override
+    public Page<Transaction> findMyTransactions(
+            Long userId, TransactionRole role, TransactionStatus status, Pageable pageable) {
+        List<Transaction> filtered = store.values().stream()
+                .filter(t -> {
+                    if (role == null) {
+                        return userId.equals(t.getSellerId()) || userId.equals(t.getBuyerId());
+                    }
+                    if (role == TransactionRole.BUYER) {
+                        return userId.equals(t.getBuyerId());
+                    }
+                    return userId.equals(t.getSellerId());
+                })
+                .filter(t -> status == null || t.getStatus() == status)
+                .sorted(Comparator.comparingLong(Transaction::getId).reversed())
+                .toList();
+        int start = Math.min((int) pageable.getOffset(), filtered.size());
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        return new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
     }
 
     @Override

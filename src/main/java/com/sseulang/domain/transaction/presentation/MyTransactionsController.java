@@ -1,0 +1,61 @@
+package com.sseulang.domain.transaction.presentation;
+
+import com.sseulang.domain.transaction.application.TransactionApplicationService;
+import com.sseulang.domain.transaction.application.dto.TransactionRole;
+import com.sseulang.domain.transaction.domain.TransactionStatus;
+import com.sseulang.domain.transaction.presentation.dto.TransactionResponse;
+import com.sseulang.global.common.ApiResponse;
+import com.sseulang.global.common.PageResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * 마이페이지 본인 거래 목록 — {@link TransactionController} 의 단건 조회와 별개로 페이징 list 제공.
+ *
+ * <p>role 쿼리 (buyer/seller) 로 탭 분리, status 쿼리 (한글 enum) 로 상태별 필터.
+ * 둘 다 미지정 시 전체 (취소 포함).</p>
+ */
+@Tag(name = "Transaction", description = "마이페이지 본인 거래 목록")
+@RestController
+@RequestMapping("/api/v1/users/me/transactions")
+public class MyTransactionsController {
+
+    private static final int MAX_PAGE_SIZE = 100;
+
+    private final TransactionApplicationService transactionService;
+
+    public MyTransactionsController(TransactionApplicationService transactionService) {
+        this.transactionService = transactionService;
+    }
+
+    @Operation(summary = "내 거래 목록",
+            description = "본인이 buyer/seller 로 참여한 거래 페이징. "
+                    + "role 미지정 = 양쪽, status 미지정 = 전체(취소 포함). 잘못된 role 값은 양쪽으로 fallback. "
+                    + "정렬: createdAt DESC.")
+    @GetMapping
+    public ApiResponse<PageResponse<TransactionResponse>> listMine(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam(name = "role", required = false) String role,
+            @RequestParam(name = "status", required = false) TransactionStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        int safePage = Math.max(page, 0);
+        Pageable pageable = PageRequest.of(safePage, safeSize);
+        TransactionRole roleFilter = TransactionRole.parse(role);
+
+        Page<TransactionResponse> result = transactionService
+                .findMyTransactions(userId, roleFilter, status, pageable)
+                .map(TransactionResponse::from);
+        return ApiResponse.ok(PageResponse.from(result));
+    }
+}

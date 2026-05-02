@@ -1,7 +1,9 @@
 package com.sseulang.domain.transaction.infrastructure.persistence;
 
+import com.sseulang.domain.transaction.application.dto.TransactionRole;
 import com.sseulang.domain.transaction.domain.Transaction;
 import com.sseulang.domain.transaction.domain.TransactionRepository;
+import com.sseulang.domain.transaction.domain.TransactionStatus;
 import com.sseulang.domain.transaction.domain.TransactionStatusCount;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -43,5 +45,23 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     @Override
     public Page<Transaction> findPendingReviewable(Long userId, LocalDateTime since, Pageable pageable) {
         return jpa.findPendingReviewableJpql(userId, since, pageable);
+    }
+
+    @Override
+    public Page<Transaction> findMyTransactions(
+            Long userId, TransactionRole role, TransactionStatus status, Pageable pageable) {
+        if (role == null) {
+            return (status == null)
+                    ? jpa.findByParticipant(userId, pageable)
+                    : jpa.findByParticipantAndStatus(userId, status, pageable);
+        }
+        if (role == TransactionRole.BUYER) {
+            return (status == null)
+                    ? jpa.findByBuyer(userId, pageable)
+                    : jpa.findByBuyerAndStatus(userId, status, pageable);
+        }
+        return (status == null)
+                ? jpa.findBySeller(userId, pageable)
+                : jpa.findBySellerAndStatus(userId, status, pageable);
     }
 }
