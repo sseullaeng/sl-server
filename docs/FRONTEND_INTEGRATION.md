@@ -1013,7 +1013,198 @@ await api.patch(`/deliveries/${id}/complete`); // → 정산완료, 잔액 이�
 
 ---
 
-## 11. 페이징 표준
+## 11. 관리자 (Admin) 영역
+
+> 모두 `ROLE_ADMIN` 강제. SecurityConfig 의 admin chain 이 다른 도메인과 분리해서 관리.
+> 일반 사용자 AT/RT 와 분리된 관리자 AT/RT 사용 — 같은 브라우저에서 두 세션 동시 접속 불가 (쿠키 덮어씀).
+
+### 11.1 관리자 로그인
+
+```
+POST /api/v1/auth/admin/login                  → 200 + Set-Cookie: AT, RT (ROLE_ADMIN)
+```
+Body:
+```json
+{ "username": "admin", "password": "AdminP@ssw0rd!" }
+```
+- 실패 시 401 `AUTH_LOGIN_FAILED` (username 존재 여부 노출 X)
+- 성공 후 발급되는 AT/RT 는 `ROLE_ADMIN` — `/api/v1/admin/**` 모든 endpoint 호출 가능
+- 일반 회원 endpoint (예: `/api/v1/items`) 호출 시 403 (격리)
+
+### 11.2 AdminUser — 회원 관리
+
+```
+GET   /api/v1/admin/users?page=&size=          → Page<AdminUserResponse>
+GET   /api/v1/admin/users/{id}                 → AdminUserResponse (단건)
+PATCH /api/v1/admin/users/{id}/block           → null
+  Body: { "blocked": true|false }
+  - blocked=true: 로그인 차단 + 토큰 폐기. 즉시 모든 세션 무효화
+```
+
+#### AdminUserResponse — 민감 정보 제외
+```json
+{
+  "id": 100,
+  "email": "user@example.com",
+  "nickname": "쓸랭이",
+  "profileImage": "https://...",
+  "socialProvider": "LOCAL",
+  "blocked": false,
+  "deleted": false,
+  "trustScore": 4.7,            // null = 리뷰 0건
+  "reviewCount": 12,
+  "pointBalance": 50000,
+  "createdAt": "2026-04-01T12:00:00"
+}
+```
+⚠️ 비밀번호 / social_id / 토큰 등 민감 정보 미노출.
+
+### 11.3 AdminBanner — 메인 배너 CRUD
+
+```
+GET    /api/v1/admin/banners?page=&size=       → Page<BannerResponse>  (active=false 포함)
+GET    /api/v1/admin/banners/{id}              → BannerResponse
+POST   /api/v1/admin/banners                   → 201 + { id }
+PATCH  /api/v1/admin/banners/{id}              → null  (전체 수정)
+PATCH  /api/v1/admin/banners/{id}/active       → null  (Body: { active: bool })
+DELETE /api/v1/admin/banners/{id}              → null  (hard delete)
+```
+
+#### BannerUpsertRequest (POST/PATCH 본문)
+```json
+{
+  "title": "여름 세일",                                       // 필수 ≤200
+  "imageUrl": "https://cdn.sseulang.test/banners/summer.jpg",  // 필수 ≤500
+  "linkUrl": "https://sseulang.test/events/summer",            // optional ≤500
+  "sortOrder": 10,                                              // 작을수록 상단
+  "startsAt": "2026-05-01T00:00:00",                            // optional, null=즉시
+  "endsAt": "2026-05-31T23:59:59"                               // optional, null=무기한
+}
+```
+
+응답 schema 는 §10.8 BannerResponse 와 동일.
+
+### 11.4 AdminNotice — 공지 CRUD + 토글
+
+```
+GET    /api/v1/admin/notices?type=&page=&size= → Page<NoticeResponse>  (미공개 포함)
+GET    /api/v1/admin/notices/{id}              → NoticeResponse
+POST   /api/v1/admin/notices                   → 201 + { id }
+PATCH  /api/v1/admin/notices/{id}              → null  (전체 수정)
+PATCH  /api/v1/admin/notices/{id}/pin          → null  (Body: { value: bool })  — 상단 고정 토글
+PATCH  /api/v1/admin/notices/{id}/publish      → null  (Body: { value: bool })  — 게시/비게시 토글
+DELETE /api/v1/admin/notices/{id}              → null  (hard delete)
+```
+
+#### NoticeUpsertRequest (POST/PATCH 본문)
+```json
+{
+  "type": "공지",                                  // 공지 | 이벤트 (한글 enum)
+  "title": "5월 거래 수수료 무료 이벤트",           // 필수 ≤200
+  "content": "5월 한 달간 모든 거래 수수료가 무료입니다.",  // 필수 (HTML/Markdown 자유)
+  "imageUrl": "https://cdn.../notices/202605.jpg", // optional ≤500
+  "startsAt": "2026-05-01T00:00:00",                // optional
+  "endsAt": "2026-05-31T23:59:59"                   // optional
+}
+```
+
+응답 schema 는 §10.9 NoticeResponse 와 동일.
+
+### 11.5 AdminReport — 신고 처리
+
+```
+GET   /api/v1/admin/reports?status=&page=&size= → Page<AdminReportResponse>
+GET   /api/v1/admin/reports/{id}                → AdminReportResponse
+PATCH /api/v1/admin/reports/{id}                → null
+  Body: { "action": "MARK_IN_PROGRESS"|"COMPLETE"|"REJECT", "memo"?: ≤500 }
+  - MARK_IN_PROGRESS: PENDING → IN_PROGRESS (검토 시작)
+  - COMPLETE: → COMPLETED (처리 완료)
+  - REJECT: → REJECTED (반려)
+```
+
+#### AdminReportResponse
+```json
+{
+  "id": 17,
+  "reporterId": 100,                  // 신고한 사용자
+  "reportedId": 200,                  // 신고당한 사용자
+  "itemId": 42,                       // 관련 물품 (없으면 null)
+  "reason": "FRAUD",                  // FRAUD / SPAM / HARASSMENT 등
+  "detail": "결제 후 물품을 보내지 않습니다",
+  "status": "PENDING",                // PENDING / IN_PROGRESS / COMPLETED / REJECTED
+  "adminId": null,                    // 처리한 관리자 (PENDING 단계는 null)
+  "adminMemo": null,
+  "processedAt": null,
+  "createdAt": "2026-05-02T10:00:00"
+}
+```
+
+### 11.6 AdminWithdrawal — 출금 신청 처리
+
+```
+GET   /api/v1/admin/withdrawals?status=&page=&size=   → Page<WithdrawalResponse>  (§7 schema 동일)
+PATCH /api/v1/admin/withdrawals/{id}                  → null
+  Body: { "action": "APPROVE"|"REJECT"|"COMPLETE", "memo"?: ≤500 }
+  - APPROVE: 신청 → 승인 (외부 이체 절차 시작)
+  - REJECT:  신청 → 거부 (잔액 자동 환불)
+  - COMPLETE: 승인 → 완료 (외부 이체 완료 표시)
+```
+
+⚠️ 잔액 차감은 사용자 출금 신청 시점 (`POST /withdrawals`) 에 이미 발생. REJECT 시 자동 환불은 백엔드가 atomic 처리.
+
+### 11.7 AdminStats — Dashboard
+
+```
+GET /api/v1/admin/stats/dashboard               → AdminDashboardResponse
+```
+5개 도메인 (User / Transaction / Payment / Withdrawal / Delivery) 통계 묶음 — 단일 호출 11 SQL.
+
+#### AdminDashboardResponse
+```json
+{
+  "users": {
+    "total": 1234,           // 탈퇴/차단 포함
+    "blocked": 12,
+    "deleted": 8,
+    "active": 1214
+  },
+  "transactions": {
+    "total": 568,
+    "byStatus": {            // 모든 status 포함 (0건도 0L)
+      "채팅중": 120,
+      "예약": 35,
+      "거래완료": 380,
+      "취소": 33
+    }
+  },
+  "payments": {
+    "paidCount": 342,
+    "totalPaidAmount": 12500000
+  },
+  "withdrawals": {
+    "total": 87,
+    "byStatus": { "신청": 3, "승인": 1, "완료": 80, "거부": 3 },
+    "completedAmount": 8000000
+  },
+  "deliveries": {
+    "total": 42,
+    "byStatus": { "모집중": 3, "수락": 2, "배송중": 1, "배송완료": 1, "정산완료": 33, "취소": 2 },
+    "settledFeeTotal": 165000
+  }
+}
+```
+
+### 11.8 admin 호출 시 흔한 함정
+
+| 증상 | 원인 |
+|---|---|
+| `/api/v1/admin/**` 401 | 일반 사용자 AT 로 호출 — admin 로그인 필요 |
+| `/api/v1/items` 등 일반 endpoint 가 admin 토큰으로 403 | ROLE_ADMIN 은 일반 영역 차단 (격리). 사용자 화면 보려면 별도 일반 계정 |
+| 동일 브라우저에서 admin/일반 동시 사용 불가 | 쿠키 덮어쓰기 — admin 패널은 별도 도메인/브라우저 권장 |
+
+---
+
+## 12. 페이징 표준
 
 ```http
 GET /api/v1/items?page=0&size=20&...
@@ -1030,7 +1221,7 @@ GET /api/v1/chat-rooms/{id}/messages?before={messageId}&size=30
 
 ---
 
-## 12. 환경별 차이 요약
+## 13. 환경별 차이 요약
 
 | 항목 | local | prod |
 |---|---|---|
@@ -1052,7 +1243,7 @@ POST /dev/auth/login
 
 ---
 
-## 13. 흔한 통합 이슈 트러블슈팅
+## 14. 흔한 통합 이슈 트러블슈팅
 
 | 증상 | 원인 / 해결 |
 |---|---|
@@ -1068,7 +1259,7 @@ POST /dev/auth/login
 
 ---
 
-## 14. 참조 문서
+## 15. 참조 문서
 
 - Swagger UI: 모든 endpoint 명세 + Request/Response 예시.
 - `docs/AUTH_SECURITY.md` — 인증/보안 결정 사항.
@@ -1078,7 +1269,7 @@ POST /dev/auth/login
 
 ---
 
-## 15. 합의 필요 항목 (PM/프론트와 합의 후 확정)
+## 16. 합의 필요 항목 (PM/프론트와 합의 후 확정)
 
 - [ ] prod 도메인 + CORS origins 확정
 - [ ] 쿠키 도메인 (`.sseulang.com` vs subdomain)
@@ -1089,8 +1280,10 @@ PM·프론트 합의 후 본 문서 갱신 + `application-prod.yml` 환경변수
 
 ---
 
-## 16. 변경 이력
+## 17. 변경 이력
 
+- **2026-05-03 (라운드 6)** — §11 관리자(Admin) 영역 신설 — AdminAuth/User/Banner/Notice/Report/Withdrawal/Stats 7개 endpoint group + Dashboard schema. 페이징/환경/트러블슈팅 §12~17 재번호.
+- **2026-05-03 (라운드 5 보강)** — §10 도메인 schema 누락분 추가 (Banner/Notice/Notification/UserBlock/Review/Delivery 6개).
 - **2026-05-03 (라운드 5)** — 채팅 도메인 schema 정확성 보강, STOMP destination 잘못된 매핑 수정, Item/ChatRoom 부분 편집 endpoint 추가, 도메인 schema 통합 §10 신설.
 - 2026-05-02 (라운드 4) — `GET /users/me/transactions` 추가, 거래 도메인 명세 정리.
 - 2026-05-02 (라운드 3) — 판매자 프로필 + 포인트 히스토리 + Item 이미지 부분편집 endpoint 추가.
