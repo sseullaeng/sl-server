@@ -782,6 +782,90 @@ GET /api/v1/categories/{id}                    → 단건
 ```
 - DB 시드된 트리 (2단 깊이). enum 고정 X.
 
+### 10.8 Delivery (배달대행)
+
+#### 상태 머신
+```
+모집중 → 수락 → 배송중 → 배송완료 → 정산완료
+   └→ 취소 (요청자, 모집중 한정)
+```
+- 상태값 모두 **한글**: `모집중 | 수락 | 배송중 | 배송완료 | 정산완료 | 취소`
+- 수락 이후 취소 → 400 `DELIVERY_INVALID_STATE` (분쟁 흐름 follow-up)
+
+#### Item / Transaction 과의 관계 — **❌ 없음. 완전 독립 도메인**
+- DeliveryRequest 엔티티에 itemId / transactionId FK 없음
+- `itemDescription` 은 자유 텍스트 String (예: "A4 서류 봉투 1개")
+- 배달 등록 시 거래 자동 생성 X — 별개 흐름
+- 수수료(fee)는 정산(complete) 시점에 잔액에서 이동 (PG 안 거침), `PointReferenceType.DELIVERY`
+
+#### DeliveryCreateRequest — 등록 body
+```json
+POST /api/v1/deliveries
+{
+  "pickupAddress":     "서울 강남구 테헤란로 123",   // 필수 ≤255
+  "dropoffAddress":    "서울 송파구 올림픽로 456",   // 필수 ≤255
+  "itemDescription":   "A4 서류 봉투 1개",           // 필수 ≤255 (자유 텍스트)
+  "fee":               5000,                         // 필수 > 0 (라이더 수수료, 원)
+  "requestedDeadline": "2026-05-04T15:00:00",        // optional, 미래 시각만
+  "memo":              "1층 로비 보관함"             // optional ≤500
+}
+```
+
+#### DeliveryResponse — 모든 GET / PATCH 응답
+```json
+{
+  "id": 55,
+  "requesterId": 100,
+  "riderId": null,                                   // 수락 후 채워짐
+  "pickupAddress": "서울 강남구 테헤란로 123",
+  "dropoffAddress": "서울 송파구 올림픽로 456",
+  "itemDescription": "A4 서류 봉투 1개",
+  "fee": 5000,
+  "requestedDeadline": "2026-05-04T15:00:00",        // null 가능
+  "memo": "1층 로비 보관함",                          // null 가능
+  "status": "모집중",
+  "requestedAt": "2026-05-03T10:00:00",
+  "acceptedAt": null,
+  "pickedUpAt": null,
+  "deliveredAt": null,
+  "completedAt": null,
+  "canceledAt": null,
+  "cancelReason": null
+}
+```
+
+#### endpoints — 액션마다 분리 endpoint (Transaction 의 단일 PATCH 와 패턴 다름)
+
+| Method | Path | 호출자 | 상태 전이 | 비고 |
+|---|---|---|---|---|
+| POST | `/api/v1/deliveries` | requester | → 모집중 | 이메일 인증. 등록 시 fee 차감 X (정산에서) |
+| GET | `/api/v1/deliveries` | 누구나 | — | 모집중 페이징 (라이더 후보 화면) |
+| GET | `/api/v1/deliveries/me` | 본인 | — | requester/rider 로 참여한 목록 |
+| GET | `/api/v1/deliveries/{id}` | 모집중=누구나 / 그 외=참여자 | — | 단건 |
+| PATCH | `/api/v1/deliveries/{id}/accept` | rider | 모집중 → 수락 | 본인 등록 거절(400 DELIVERY_SELF_NOT_ALLOWED). 동시 race → 한 명만(409 DELIVERY_ALREADY_ACCEPTED) |
+| PATCH | `/api/v1/deliveries/{id}/pickup` | 수락 rider | 수락 → 배송중 | |
+| PATCH | `/api/v1/deliveries/{id}/deliver` | 수락 rider | 배송중 → 배송완료 | |
+| PATCH | `/api/v1/deliveries/{id}/complete` | requester | 배송완료 → 정산완료 | requester 차감 → rider 적립 (id-asc 락). 잔액 부족 → 400 INSUFFICIENT_POINT + 전체 롤백 |
+| PATCH | `/api/v1/deliveries/{id}/cancel` | requester | 모집중 → 취소 | body `{ reason? }`. 수락 이후 취소 시 400 |
+
+#### WebSocket / 실시간 위치 — **❌ 현재 미지원**
+- `/topic/delivery/{id}/location` 같은 destination 미구현
+- DB 에 좌표 컬럼 없음 (`Item.lat/lng`, `DeliveryRequest.lat/lng` 모두 X)
+- GitHub issue #51 로 follow-up 등록 — **5/6 이후** (라이더 모바일 클라이언트 합류 후)
+- 그때까지 진행 상황은 폴링 (`GET /deliveries/{id}` refreshInterval 5초) 또는 status 변경 알림으로 대응
+
+#### 활용 예시
+```jsx
+// 라이더
+await api.patch(`/deliveries/${id}/accept`);   // → 수락
+await api.patch(`/deliveries/${id}/pickup`);   // → 배송중
+await api.patch(`/deliveries/${id}/deliver`);  // → 배송완료
+
+// 요청자
+await api.post('/deliveries', { pickupAddress, dropoffAddress, itemDescription, fee });
+await api.patch(`/deliveries/${id}/complete`); // → 정산완료, 잔액 이동
+```
+
 ---
 
 ## 11. 페이징 표준
