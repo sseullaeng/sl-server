@@ -2,6 +2,7 @@ package com.sseulang.global.websocket;
 
 import com.sseulang.domain.auth.domain.AccessTokenBlacklist;
 import com.sseulang.domain.chat.application.ChatRoomApplicationService;
+import com.sseulang.domain.delivery.application.DeliveryApplicationService;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import com.sseulang.global.security.JwtClaims;
@@ -32,6 +33,7 @@ import java.util.List;
  *   <li>SUBSCRIBE — destination allowlist (Codex 게이트 1 보강):
  *     <ul>
  *       <li>{@code /topic/chat-room/{roomId}} — 채팅방 참여자만</li>
+ *       <li>{@code /topic/delivery/{deliveryId}/location} — 배달 참여자(요청자/라이더)만 (follow-up #51)</li>
  *       <li>{@code /user/queue/messages}, {@code /user/queue/notifications} — Spring 자동 본인 라우팅</li>
  *       <li>그 외 destination — {@link ErrorCode#FORBIDDEN}</li>
  *     </ul>
@@ -43,21 +45,26 @@ import java.util.List;
 public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
     private static final String CHAT_TOPIC_PREFIX = "/topic/chat-room/";
+    private static final String DELIVERY_LOCATION_TOPIC_PREFIX = "/topic/delivery/";
+    private static final String DELIVERY_LOCATION_TOPIC_SUFFIX = "/location";
     private static final String USER_QUEUE_MESSAGES = "/user/queue/messages";
     private static final String USER_QUEUE_NOTIFICATIONS = "/user/queue/notifications";
     private static final String AUTH_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final ChatRoomApplicationService chatRoomService;
+    private final DeliveryApplicationService deliveryApplicationService;
     private final JwtProvider jwtProvider;
     private final AccessTokenBlacklist accessTokenBlacklist;
 
     public StompAuthChannelInterceptor(
             ChatRoomApplicationService chatRoomService,
+            DeliveryApplicationService deliveryApplicationService,
             JwtProvider jwtProvider,
             AccessTokenBlacklist accessTokenBlacklist
     ) {
         this.chatRoomService = chatRoomService;
+        this.deliveryApplicationService = deliveryApplicationService;
         this.jwtProvider = jwtProvider;
         this.accessTokenBlacklist = accessTokenBlacklist;
     }
@@ -126,6 +133,11 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             chatRoomService.requireParticipant(parseRoomId(destination), userId);
             return;
         }
+        if (destination.startsWith(DELIVERY_LOCATION_TOPIC_PREFIX)
+                && destination.endsWith(DELIVERY_LOCATION_TOPIC_SUFFIX)) {
+            deliveryApplicationService.requireParticipant(parseDeliveryId(destination), userId);
+            return;
+        }
         if (destination.equals(USER_QUEUE_MESSAGES) || destination.equals(USER_QUEUE_NOTIFICATIONS)) {
             // Spring UserDestinationMessageHandler 가 본인 destination 으로 자동 라우팅 — 통과.
             return;
@@ -138,6 +150,19 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         try {
             return Long.parseLong(destination.substring(CHAT_TOPIC_PREFIX.length()));
         } catch (NumberFormatException e) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    /** {@code /topic/delivery/{id}/location} 에서 id 추출. */
+    private static Long parseDeliveryId(String destination) {
+        try {
+            String mid = destination.substring(
+                    DELIVERY_LOCATION_TOPIC_PREFIX.length(),
+                    destination.length() - DELIVERY_LOCATION_TOPIC_SUFFIX.length()
+            );
+            return Long.parseLong(mid);
+        } catch (NumberFormatException | IndexOutOfBoundsException e) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST);
         }
     }

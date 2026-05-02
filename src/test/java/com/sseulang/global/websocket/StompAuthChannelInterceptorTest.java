@@ -69,7 +69,9 @@ class StompAuthChannelInterceptorTest {
         blacklist = mock(AccessTokenBlacklist.class);
         when(blacklist.isBlacklisted(anyString())).thenReturn(false);
 
-        interceptor = new StompAuthChannelInterceptor(roomSvc, jwtProvider, blacklist);
+        com.sseulang.domain.delivery.application.DeliveryApplicationService deliverySvc =
+                org.mockito.Mockito.mock(com.sseulang.domain.delivery.application.DeliveryApplicationService.class);
+        interceptor = new StompAuthChannelInterceptor(roomSvc, deliverySvc, jwtProvider, blacklist);
 
         Item item = itemRepo.save(Item.create(SELLER, null, "물건", "d", 1L, null, null, TradeType.판매, null));
         roomId = roomSvc.openFor(BUYER, item.getId()).id();
