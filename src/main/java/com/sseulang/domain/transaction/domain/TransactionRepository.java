@@ -1,5 +1,6 @@
 package com.sseulang.domain.transaction.domain;
 
+import com.sseulang.domain.transaction.application.dto.TransactionRole;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -42,4 +43,14 @@ public interface TransactionRepository {
      * @param since     completedAt 하한 (보통 now - 7일) — 작성 가능 기간 밖은 제외
      */
     Page<Transaction> findPendingReviewable(Long userId, LocalDateTime since, Pageable pageable);
+
+    /**
+     * 마이페이지 거래 목록 — viewer 가 buyer/seller/양쪽 으로 참여한 거래 페이징.
+     *
+     * @param userId 조회 주체
+     * @param role   {@link TransactionRole#BUYER} = buyer 만, {@link TransactionRole#SELLER} = seller 만, null = 양쪽
+     * @param status null = 전체 (취소 포함), 명시 시 정확 일치
+     */
+    Page<Transaction> findMyTransactions(
+            Long userId, TransactionRole role, TransactionStatus status, Pageable pageable);
 }

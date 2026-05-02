@@ -9,6 +9,7 @@ import com.sseulang.domain.transaction.application.dto.PendingReviewableResult;
 import com.sseulang.domain.transaction.application.dto.ReviewableTransactionResult;
 import com.sseulang.domain.transaction.application.dto.TransactionCreateCommand;
 import com.sseulang.domain.transaction.application.dto.TransactionResult;
+import com.sseulang.domain.transaction.application.dto.TransactionRole;
 import com.sseulang.domain.transaction.application.dto.TransactionStatsResult;
 import com.sseulang.domain.transaction.domain.Transaction;
 import com.sseulang.domain.transaction.domain.TransactionRepository;
@@ -201,6 +202,16 @@ public class TransactionApplicationService {
      * <p>completedAt 이 7일 이내인 것만 — 작성 가능 기간이 지난 거래는 제외 (가이드 §5.5).
      * 응답 DTO 의 deadline = completedAt + 7d → 클라이언트가 남은 시간 UI 작성에 사용.</p>
      */
+    /**
+     * 마이페이지 내 거래 목록 — viewer 가 buyer/seller/양쪽 으로 참여한 거래 페이징.
+     * role null = 양쪽, status null = 전체. 정렬: createdAt DESC + id DESC.
+     */
+    public Page<TransactionResult> findMyTransactions(
+            Long userId, TransactionRole role, TransactionStatus status, Pageable pageable) {
+        return transactionRepository.findMyTransactions(userId, role, status, pageable)
+                .map(TransactionResult::from);
+    }
+
     public Page<PendingReviewableResult> findPendingReviewable(Long userId, Pageable pageable) {
         LocalDateTime since = LocalDateTime.now(clock).minusDays(7);
         return transactionRepository.findPendingReviewable(userId, since, pageable)

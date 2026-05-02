@@ -1,6 +1,7 @@
 package com.sseulang.domain.transaction.infrastructure.persistence;
 
 import com.sseulang.domain.transaction.domain.Transaction;
+import com.sseulang.domain.transaction.domain.TransactionStatus;
 import com.sseulang.domain.transaction.domain.TransactionStatusCount;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
@@ -62,4 +63,55 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
     Page<Transaction> findPendingReviewableJpql(@Param("userId") Long userId,
                                                  @Param("since") LocalDateTime since,
                                                  Pageable pageable);
+
+    // ───────── 내 거래 목록 (마이페이지) ─────────
+    // role 4 분기 × status null/!=null 2 분기 = 6 메서드. role/status 모두 null 이 가장 흔한 케이스.
+
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE (t.sellerId = :userId OR t.buyerId = :userId)
+             ORDER BY t.createdAt DESC, t.id DESC
+            """)
+    Page<Transaction> findByParticipant(@Param("userId") Long userId, Pageable pageable);
+
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE (t.sellerId = :userId OR t.buyerId = :userId) AND t.status = :status
+             ORDER BY t.createdAt DESC, t.id DESC
+            """)
+    Page<Transaction> findByParticipantAndStatus(@Param("userId") Long userId,
+                                                  @Param("status") TransactionStatus status,
+                                                  Pageable pageable);
+
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE t.buyerId = :userId
+             ORDER BY t.createdAt DESC, t.id DESC
+            """)
+    Page<Transaction> findByBuyer(@Param("userId") Long userId, Pageable pageable);
+
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE t.buyerId = :userId AND t.status = :status
+             ORDER BY t.createdAt DESC, t.id DESC
+            """)
+    Page<Transaction> findByBuyerAndStatus(@Param("userId") Long userId,
+                                            @Param("status") TransactionStatus status,
+                                            Pageable pageable);
+
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE t.sellerId = :userId
+             ORDER BY t.createdAt DESC, t.id DESC
+            """)
+    Page<Transaction> findBySeller(@Param("userId") Long userId, Pageable pageable);
+
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE t.sellerId = :userId AND t.status = :status
+             ORDER BY t.createdAt DESC, t.id DESC
+            """)
+    Page<Transaction> findBySellerAndStatus(@Param("userId") Long userId,
+                                             @Param("status") TransactionStatus status,
+                                             Pageable pageable);
 }
