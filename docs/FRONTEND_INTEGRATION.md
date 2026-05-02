@@ -782,7 +782,152 @@ GET /api/v1/categories/{id}                    → 단건
 ```
 - DB 시드된 트리 (2단 깊이). enum 고정 X.
 
-### 10.8 Delivery (배달대행)
+### 10.8 Banner (메인 배너, 공개)
+
+```
+GET /api/v1/banners                            → List<BannerResponse>
+```
+- 활성(`active=true`) + 노출 윈도우(`startsAt~endsAt`) 통과한 배너만. `sortOrder` 오름차순.
+- 인증 불필요.
+
+#### BannerResponse
+```json
+{
+  "id": 2,
+  "adminId": 1,
+  "title": "5월 봄맞이 이벤트",
+  "imageUrl": "https://cdn.sseulang.com/banners/1/spring.jpg",
+  "linkUrl": "/events/spring",
+  "sortOrder": 1,
+  "active": true,
+  "startsAt": "2026-05-01T00:00:00",
+  "endsAt": "2026-05-31T23:59:59",
+  "createdAt": "2026-04-30T12:00:00"
+}
+```
+
+### 10.9 Notice (공지, 공개)
+
+```
+GET /api/v1/notices?type=&page=&size=          → Page<NoticeResponse>
+GET /api/v1/notices/{id}                       → NoticeResponse (viewCount +1)
+```
+- `type` 필터 옵션 (`NoticeType` enum). 미지정 시 전체.
+- `published=true` + 노출 윈도우 통과 + `pinned` 우선 정렬.
+- 미공개/윈도우 외 단건 조회 시 404 `NOTICE_NOT_FOUND`.
+
+#### NoticeResponse
+```json
+{
+  "id": 3,
+  "adminId": 1,
+  "type": "공지",                               // NoticeType enum 한글값
+  "title": "결제 시스템 점검 안내",
+  "content": "5/3 03:00~05:00 결제 일시 중단됩니다.",
+  "imageUrl": null,
+  "pinned": true,
+  "published": true,
+  "viewCount": 152,
+  "startsAt": "2026-05-01T00:00:00",
+  "endsAt": "2026-05-10T00:00:00",
+  "createdAt": "2026-04-30T12:00:00"
+}
+```
+
+### 10.10 Notification (본인 알림)
+
+```
+GET   /api/v1/notifications?page=&size=        → Page<NotificationResponse>
+PATCH /api/v1/notifications/{id}/read          → null  (id 는 String — MongoDB ObjectId hex 24자)
+```
+- 본인 알림만 페이징 (createdAt DESC).
+- `read=false` 필터 서버 미지원 (현재 클라이언트 책임 — follow-up).
+- 다른 사용자 알림 markRead 시도 시 무시 (영향 0 row).
+
+#### NotificationResponse
+```json
+{
+  "id": "65a1b2c3d4e5f60001234567",   // ⚠️ String (MongoDB ObjectId hex), Long 아님
+  "type": "CHAT",                       // NotificationType enum (영문)
+  "title": "새 메시지",
+  "content": "안녕하세요, 거래 가능할까요?",
+  "linkType": "CHAT_ROOM",              // CHAT_ROOM | TRANSACTION | DELIVERY 등 — 클라이언트 라우팅 키
+  "linkId": 8,                          // linkType 의 row id
+  "read": false,
+  "createdAt": "2026-05-03T10:00:00.123Z"   // ⚠️ Instant (UTC offset 포함)
+}
+```
+
+#### STOMP 푸시 (실시간)
+- 신규 알림 발생 시 `/user/queue/notifications` 로 자동 broadcast (§9 참조).
+- 클라이언트는 STOMP 구독 + REST 페이징 둘 다 사용 (재접속/페이지 새로고침 시 REST 로 보강).
+
+### 10.11 UserBlock (사용자 차단)
+
+```
+POST   /api/v1/blocks                          → null   (Body: { userId })
+DELETE /api/v1/blocks/{userId}                 → null
+GET    /api/v1/blocks?page=&size=              → Page<UserBlockResponse>
+```
+- 차단 후 양쪽 모두 채팅/거래 불가.
+- 차단/해제 모두 멱등.
+
+#### UserBlockResponse
+```json
+{
+  "id": 23,
+  "blockerId": 100,         // 본인
+  "blockedId": 200,         // 차단당한 사용자
+  "createdAt": "2026-05-03T10:00:00"
+}
+```
+
+### 10.12 Review (거래 후기)
+
+#### endpoints
+```
+POST  /api/v1/reviews                          → 201 + { id }
+  Body: { transactionId, rating: 1~5, comment?: ≤500 }
+  - 거래완료 후 7일 이내 + 거래 참여자만
+  - 같은 거래 본인 리뷰 중복 → 409 REVIEW_DUPLICATED
+  - 작성 후 reviewee.trustScore 자동 재계산 (atomic)
+
+GET   /api/v1/users/{userId}/reviews?page=&size=   → Page<ReviewResponse>
+  - userId 가 reviewee 인 리뷰 페이징
+  - ⚠️ comment 는 **작성자 본인 조회 시에만** 채워짐. 그 외엔 null 마스킹
+
+GET   /api/v1/reviews/pending?page=&size=      → Page<PendingReviewResponse>
+  - 본인이 reviewer 로 아직 작성 안 한 7일 이내 완료 거래
+  - deadline 필드로 카운트다운 UI 가능
+```
+
+#### ReviewResponse
+```json
+{
+  "id": 9,
+  "transactionId": 12,
+  "reviewerId": 200,
+  "revieweeId": 100,
+  "rating": 5,                       // 1~5
+  "comment": "친절하고 빠른 거래",     // ⚠️ 작성자 본인 조회시에만, 타인은 null 마스킹
+  "createdAt": "2026-05-03T10:00:00"
+}
+```
+
+#### PendingReviewResponse
+```json
+{
+  "transactionId": 12,
+  "itemId": 42,
+  "revieweeId": 200,                          // 상대방 (reviewer 의 카운터파트)
+  "tradeType": "판매",
+  "price": 1200000,
+  "completedAt": "2026-05-01T14:00:00",
+  "deadline": "2026-05-08T14:00:00"           // 완료 + 7일
+}
+```
+
+### 10.13 Delivery (배달대행)
 
 #### 상태 머신
 ```
