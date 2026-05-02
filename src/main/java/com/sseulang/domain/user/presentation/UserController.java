@@ -2,6 +2,7 @@ package com.sseulang.domain.user.presentation;
 
 import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.domain.user.presentation.dto.MeResponse;
+import com.sseulang.domain.user.presentation.dto.UserProfileResponse;
 import com.sseulang.domain.user.presentation.dto.UserUpdateRequest;
 import com.sseulang.global.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -10,6 +11,7 @@ import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,6 +32,14 @@ public class UserController {
     @GetMapping("/me")
     public ApiResponse<MeResponse> getMe(@AuthenticationPrincipal Long userId) {
         return ApiResponse.ok(MeResponse.from(userService.getById(userId)));
+    }
+
+    @Operation(summary = "다른 사용자 공개 프로필 조회",
+            description = "ItemDetail 의 sellerId 등으로 호출. 닉네임/프로필이미지/신뢰도/리뷰수/가입일. "
+                    + "이메일/잔액/emailVerified 등 민감 정보는 미노출. 인증 불필요 (공개).")
+    @GetMapping("/{id}/profile")
+    public ApiResponse<UserProfileResponse> getProfile(@PathVariable("id") Long id) {
+        return ApiResponse.ok(UserProfileResponse.from(userService.getById(id)));
     }
 
     @Operation(summary = "본인 프로필 수정 (partial)",

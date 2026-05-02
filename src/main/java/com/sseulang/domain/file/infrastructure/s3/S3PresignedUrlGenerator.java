@@ -85,4 +85,34 @@ public class S3PresignedUrlGenerator implements PresignedUrlGenerator {
 
         return sourceUrl.substring(0, idx) + toPrefix + fromKey.substring(fromPrefix.length());
     }
+
+    /**
+     * 단건 삭제 — best-effort. URL 안의 {@code items/} prefix 부터를 key 로 추출.
+     * S3Exception 은 삼키고 WARN 로깅만 (사용자 흐름은 이미 DB 반영 완료).
+     */
+    @Override
+    public void delete(String sourceUrl) {
+        if (sourceUrl == null || sourceUrl.isBlank()) {
+            return;
+        }
+        String key = extractKey(sourceUrl);
+        if (key == null) {
+            log.warn("[s3] delete — key 추출 실패. sourceUrl={}", sourceUrl);
+            return;
+        }
+        try {
+            s3Client.deleteObject(DeleteObjectRequest.builder()
+                    .bucket(bucket).key(key).build());
+        } catch (S3Exception e) {
+            // best-effort — DB 반영은 이미 끝났음. lifecycle 정책 의존.
+            log.warn("[s3] delete 실패 — key={} 잔여, lifecycle 정리 의존", key, e);
+        }
+    }
+
+    /** URL 에서 {@code items/} 이후를 key 로 사용. 매칭 안 되면 null. */
+    private static String extractKey(String url) {
+        int idx = url.indexOf("items/");
+        if (idx < 0) return null;
+        return url.substring(idx);
+    }
 }

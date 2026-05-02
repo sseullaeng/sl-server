@@ -144,6 +144,56 @@ public class ItemApplicationService {
     }
 
     /**
+     * 부분 추가 — 본인 + 이메일 인증 + 5장 한도 체크 (도메인). temp 폴더 url 은 promote, 정식 폴더 url 은
+     * 그대로 재사용 (no-op). 응답으로 반영 후 전체 image url 리스트 반환.
+     */
+    @Transactional
+    public List<String> appendImages(Long itemId, Long requesterId, List<String> imageUrls) {
+        userApplicationService.requireVerified(requesterId);
+        Item item = findOwnedOrThrow(itemId, requesterId);
+        if (imageUrls == null || imageUrls.isEmpty()) {
+            return collectImageUrls(item);
+        }
+        validateImageOwnershipForUpdate(item.getSellerId(), item.getId(), imageUrls);
+        List<String> promoted = promoteImageUrls(item.getSellerId(), item.getId(), imageUrls);
+        item.appendImages(promoted);
+        return collectImageUrls(item);
+    }
+
+    /**
+     * 단건 제거 — 본인 + 미존재 시 404 ITEM_IMAGE_NOT_FOUND. 도메인이 sortOrder/thumbnail 재계산.
+     * 트랜잭션 커밋 시점에 S3 delete 시도 (best-effort). 응답으로 남은 image url 리스트 반환.
+     */
+    @Transactional
+    public List<String> removeImage(Long itemId, Long requesterId, String imageUrl) {
+        userApplicationService.requireVerified(requesterId);
+        Item item = findOwnedOrThrow(itemId, requesterId);
+        item.removeImage(imageUrl);
+        // S3 delete — DB 반영(트랜잭션 커밋) 후에 호출하는 게 정합성 안전. 여기선 best-effort 라
+        // 트랜잭션 안에서 호출해도 무방 (실패해도 삼키므로 롤백 안 됨).
+        presignedUrlGenerator.delete(imageUrl);
+        return collectImageUrls(item);
+    }
+
+    /**
+     * 순서 재배치 — newOrder 가 기존 image url 들과 정확히 같은 set 이어야 함. 다르면 400 ORDER_MISMATCH.
+     * 첫 번째가 새 썸네일.
+     */
+    @Transactional
+    public List<String> reorderImages(Long itemId, Long requesterId, List<String> newOrder) {
+        userApplicationService.requireVerified(requesterId);
+        Item item = findOwnedOrThrow(itemId, requesterId);
+        item.reorderImages(newOrder);
+        return collectImageUrls(item);
+    }
+
+    private static List<String> collectImageUrls(Item item) {
+        return item.getImages().stream()
+                .map(img -> img.getImageUrl())
+                .toList();
+    }
+
+    /**
      * 다른 도메인 ApplicationService 가 "활성 Item 존재"만 검증할 때 사용 — Wishlist 등.
      * status=삭제 는 ITEM_NOT_FOUND. CLAUDE.md §3.3 의 다른 도메인 Repository 직접 호출 금지 룰
      * 정합 — 외부는 본 메서드를 통해서만 Item 검증.

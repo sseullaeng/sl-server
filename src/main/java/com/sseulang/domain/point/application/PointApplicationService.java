@@ -1,10 +1,13 @@
 package com.sseulang.domain.point.application;
 
+import com.sseulang.domain.point.application.dto.PointHistoryResult;
 import com.sseulang.domain.point.domain.PointHistory;
 import com.sseulang.domain.point.domain.PointHistoryRepository;
 import com.sseulang.domain.point.domain.PointHistoryType;
 import com.sseulang.domain.point.domain.PointReferenceType;
 import com.sseulang.domain.user.application.UserApplicationService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -197,5 +200,14 @@ public class PointApplicationService {
 
     private long readBalance(Long userId) {
         return userApplicationService.getPointBalance(userId);
+    }
+
+    /**
+     * 본인 포인트 히스토리 페이징 — 마이페이지 노출용. type 명시 시 정확 일치, null 이면 전체.
+     * createdAt DESC + id DESC 안정 정렬.
+     */
+    public Page<PointHistoryResult> findMyHistory(Long userId, PointHistoryType type, Pageable pageable) {
+        return pointHistoryRepository.findByUserIdAndType(userId, type, pageable)
+                .map(PointHistoryResult::from);
     }
 }

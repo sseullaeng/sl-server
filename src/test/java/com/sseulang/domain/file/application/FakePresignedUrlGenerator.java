@@ -22,4 +22,9 @@ public class FakePresignedUrlGenerator implements PresignedUrlGenerator {
         if (idx < 0) return sourceUrl;
         return sourceUrl.substring(0, idx) + toPrefix + sourceUrl.substring(idx + fromPrefix.length());
     }
+
+    @Override
+    public void delete(String sourceUrl) {
+        // 단위 테스트 — no-op.
+    }
 }

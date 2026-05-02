@@ -157,6 +157,85 @@ public class Item extends BaseEntity {
         this.thumbnailUrl = null;
     }
 
+    /**
+     * 부분 추가 — 기존 이미지 유지하고 imageUrls 순서대로 append. 합산 5장 한도 초과 시 IAE 가 아니라
+     * {@link ErrorCode#ITEM_IMAGE_LIMIT_EXCEEDED}. 기존이 비었으면 첫 번째 새 url 이 썸네일.
+     */
+    public void appendImages(List<String> imageUrls) {
+        if (imageUrls == null || imageUrls.isEmpty()) {
+            return;
+        }
+        if (images.size() + imageUrls.size() > MAX_IMAGES) {
+            throw new BusinessException(ErrorCode.ITEM_IMAGE_LIMIT_EXCEEDED);
+        }
+        boolean wasEmpty = images.isEmpty();
+        int order = images.size();
+        for (int i = 0; i < imageUrls.size(); i++) {
+            order++;
+            boolean isThumbnail = wasEmpty && i == 0;
+            images.add(new ItemImage(this, imageUrls.get(i), order, isThumbnail));
+            if (isThumbnail) {
+                this.thumbnailUrl = imageUrls.get(i);
+            }
+        }
+    }
+
+    /**
+     * 단건 제거 — image_url 기준. 미존재 시 ITEM_IMAGE_NOT_FOUND.
+     * 제거 후 sortOrder 재정렬 (1..N) + 첫 번째를 썸네일로 재지정. 모두 제거되면 thumbnailUrl=null.
+     */
+    public void removeImage(String imageUrl) {
+        if (imageUrl == null) {
+            throw new BusinessException(ErrorCode.ITEM_IMAGE_NOT_FOUND);
+        }
+        boolean removed = images.removeIf(img -> imageUrl.equals(img.getImageUrl()));
+        if (!removed) {
+            throw new BusinessException(ErrorCode.ITEM_IMAGE_NOT_FOUND);
+        }
+        // 남은 이미지에 대해 sortOrder + thumbnail 재계산. ItemImage 는 setter 가 없어 교체.
+        List<ItemImage> remaining = new ArrayList<>(images);
+        images.clear();
+        this.thumbnailUrl = null;
+        for (int i = 0; i < remaining.size(); i++) {
+            String url = remaining.get(i).getImageUrl();
+            boolean isThumbnail = (i == 0);
+            images.add(new ItemImage(this, url, i + 1, isThumbnail));
+            if (isThumbnail) {
+                this.thumbnailUrl = url;
+            }
+        }
+    }
+
+    /**
+     * 순서 재배치 — newOrder 가 기존 image url 들과 같은 set (count + elements) 이어야 함. 다르면
+     * ITEM_IMAGE_ORDER_MISMATCH. newOrder 첫 번째가 새 썸네일.
+     */
+    public void reorderImages(List<String> newOrder) {
+        if (newOrder == null || newOrder.size() != images.size()) {
+            throw new BusinessException(ErrorCode.ITEM_IMAGE_ORDER_MISMATCH);
+        }
+        Set<String> existingUrls = new HashSet<>();
+        for (ItemImage img : images) existingUrls.add(img.getImageUrl());
+        Set<String> newUrls = new HashSet<>(newOrder);
+        if (!existingUrls.equals(newUrls)) {
+            throw new BusinessException(ErrorCode.ITEM_IMAGE_ORDER_MISMATCH);
+        }
+        if (newUrls.size() != newOrder.size()) {
+            // 중복 url
+            throw new BusinessException(ErrorCode.ITEM_IMAGE_ORDER_MISMATCH);
+        }
+        images.clear();
+        this.thumbnailUrl = null;
+        for (int i = 0; i < newOrder.size(); i++) {
+            String url = newOrder.get(i);
+            boolean isThumbnail = (i == 0);
+            images.add(new ItemImage(this, url, i + 1, isThumbnail));
+            if (isThumbnail) {
+                this.thumbnailUrl = url;
+            }
+        }
+    }
+
     /** 외부에 노출되는 이미지 컬렉션은 immutable. 변경은 {@link #addImage} / {@link #clearImages}. */
     public List<ItemImage> getImages() {
         return Collections.unmodifiableList(images);
