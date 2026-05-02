@@ -169,7 +169,7 @@ class EndToEndHappyPathIT {
                 new Email("seller-" + System.nanoTime() + "@e2e.test"), "셀러", null
         );
         when(kakaoOAuthProvider.supports()).thenReturn(SocialProvider.KAKAO);
-        when(kakaoOAuthProvider.verifyAndFetch("SELLER_TOKEN")).thenReturn(sellerInfo);
+        when(kakaoOAuthProvider.exchangeCodeAndFetch("SELLER_TOKEN", "http://test/cb")).thenReturn(sellerInfo);
 
         Cookie sellerAt = loginAndExtractAt("SELLER_TOKEN");
 
@@ -199,7 +199,7 @@ class EndToEndHappyPathIT {
                 SocialProvider.KAKAO, "kakao-buyer-" + UUID.randomUUID(),
                 new Email("buyer-" + System.nanoTime() + "@e2e.test"), "바이어", null
         );
-        when(kakaoOAuthProvider.verifyAndFetch("BUYER_TOKEN")).thenReturn(buyerInfo);
+        when(kakaoOAuthProvider.exchangeCodeAndFetch("BUYER_TOKEN", "http://test/cb")).thenReturn(buyerInfo);
         Cookie buyerAt = loginAndExtractAt("BUYER_TOKEN");
 
         // ───────── 4. Buyer 충전 (Toss mock) ─────────
@@ -284,7 +284,7 @@ class EndToEndHappyPathIT {
         MvcResult result = mvc.perform(post("/api/v1/auth/oauth2/kakao")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"accessToken\":\"" + accessToken + "\"}"))
+                        .content("{\"code\":\"" + accessToken + "\",\"redirectUri\":\"http://test/cb\"}"))
                 .andExpect(status().isOk())
                 .andExpect(cookie().exists(CookieUtil.ACCESS_TOKEN_COOKIE))
                 .andReturn();

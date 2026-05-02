@@ -80,7 +80,11 @@ public class FileApplicationService {
         if (!USER_ALLOWED_PURPOSES.contains(purpose)) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
-        userService.requireVerified(ownerId);
+        // PROFILE 은 미인증 사용자도 허용 — 본인 정보 관리(자금/거래 영향 0). UX 친화 정책 (5/2 합의).
+        // ITEM 은 거래 시작점이라 인증 필수 유지.
+        if (purpose != FilePurpose.PROFILE) {
+            userService.requireVerified(ownerId);
+        }
         return issue(purpose, ownerId, files);
     }
 

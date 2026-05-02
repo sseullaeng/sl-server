@@ -179,6 +179,26 @@ public class User extends BaseEntity {
     }
 
     /**
+     * 본인 프로필 partial update. null 인 필드는 변경하지 않음 (PATCH 의미).
+     * 빈 문자열 nickname 은 거부.
+     *
+     * @param newProfileImage S3 GET URL (또는 key). null 이면 변경 X. 빈 문자열은 이미지 제거 의도로 허용 — null 로 설정.
+     * @param newNickname 새 닉네임 (1~50자). null 이면 변경 X.
+     */
+    public void updateProfile(String newProfileImage, String newNickname) {
+        if (newNickname != null) {
+            if (newNickname.isBlank() || newNickname.length() > 50) {
+                throw new IllegalArgumentException("nickname 은 1~50자여야 합니다");
+            }
+            this.nickname = newNickname.trim();
+        }
+        if (newProfileImage != null) {
+            // 빈 문자열 → 이미지 제거 (null 로 저장)
+            this.profileImage = newProfileImage.isBlank() ? null : newProfileImage;
+        }
+    }
+
+    /**
      * OAuth takeover — 기존 LOCAL user 가 점유한 email 에 진짜 owner 가 OAuth 로 가입 시도.
      * 기존 user 의 password 무효화 + social 정보 추가 + verified=true. 공격자(LOCAL 가입자)는
      * 더 이상 비밀번호로 로그인 불가. 게이트 1: 이메일 선점 공격 무력화.
