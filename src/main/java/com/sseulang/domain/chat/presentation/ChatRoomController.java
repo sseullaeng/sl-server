@@ -13,6 +13,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -70,5 +71,16 @@ public class ChatRoomController {
             @PathVariable("id") Long id
     ) {
         return ApiResponse.ok(ChatRoomResponse.from(chatRoomService.getOne(id, requesterId)));
+    }
+
+    @Operation(summary = "채팅방 읽음 처리",
+            description = "본인 unread 카운트를 0 으로 atomic UPDATE. 상대방 unread 는 영향 X. "
+                    + "참여자만 호출 (그 외 403 CHAT_FORBIDDEN). 응답에 myUnread=0 반영된 ChatRoomResponse.")
+    @PatchMapping("/{id}/read")
+    public ApiResponse<ChatRoomResponse> markAsRead(
+            @AuthenticationPrincipal Long requesterId,
+            @PathVariable("id") Long id
+    ) {
+        return ApiResponse.ok(ChatRoomResponse.from(chatRoomService.markAsRead(id, requesterId)));
     }
 }

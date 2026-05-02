@@ -3,6 +3,8 @@ package com.sseulang.domain.chat.application;
 import com.sseulang.domain.chat.application.dto.ChatRoomResult;
 import com.sseulang.domain.chat.domain.ChatRoom;
 import com.sseulang.domain.chat.domain.ChatRoomRepository;
+import com.sseulang.domain.chat.domain.ItemView;
+import com.sseulang.domain.chat.domain.UserView;
 import com.sseulang.domain.item.application.ItemApplicationService;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
@@ -12,6 +14,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Service
 @Transactional(readOnly = true)
@@ -23,15 +30,21 @@ public class ChatRoomApplicationService {
     private final ChatRoomRepository chatRoomRepository;
     private final ItemApplicationService itemApplicationService;
     private final com.sseulang.domain.user.application.UserApplicationService userApplicationService;
+    private final UserView userView;
+    private final ItemView itemView;
 
     public ChatRoomApplicationService(
             ChatRoomRepository chatRoomRepository,
             ItemApplicationService itemApplicationService,
-            com.sseulang.domain.user.application.UserApplicationService userApplicationService
+            com.sseulang.domain.user.application.UserApplicationService userApplicationService,
+            UserView userView,
+            ItemView itemView
     ) {
         this.chatRoomRepository = chatRoomRepository;
         this.itemApplicationService = itemApplicationService;
         this.userApplicationService = userApplicationService;
+        this.userView = userView;
+        this.itemView = itemView;
     }
 
     /**
@@ -46,13 +59,29 @@ public class ChatRoomApplicationService {
         if (sellerId.equals(requesterId)) {
             throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
         }
-        return chatRoomRepository.findByItemAndUsers(itemId, requesterId, sellerId)
-                .map(ChatRoomResult::from)
+        ChatRoom room = chatRoomRepository.findByItemAndUsers(itemId, requesterId, sellerId)
                 .orElseGet(() -> createWithRaceGuard(itemId, requesterId, sellerId));
+        return enrichOne(room, requesterId);
     }
 
+    /**
+     * 본인 채팅방 페이징 — 페이지 결과의 opponent userId / itemId 들을 모아 단일 SELECT IN 으로 batch
+     * fetch (N+1 회피). viewer 기준 derive 후 응답.
+     */
     public Page<ChatRoomResult> listMine(Long userId, Pageable pageable) {
-        return chatRoomRepository.findMine(userId, pageable).map(ChatRoomResult::from);
+        Page<ChatRoom> page = chatRoomRepository.findMine(userId, pageable);
+        if (page.isEmpty()) {
+            return page.map(c -> ChatRoomResult.from(c, userId, null, null, null, null));
+        }
+        Set<Long> opponentIds = new HashSet<>();
+        Set<Long> itemIds = new HashSet<>();
+        for (ChatRoom c : page.getContent()) {
+            opponentIds.add(userId.equals(c.getUser1Id()) ? c.getUser2Id() : c.getUser1Id());
+            itemIds.add(c.getItemId());
+        }
+        Map<Long, UserView.UserProjection> userMap = userView.findByIds(opponentIds);
+        Map<Long, ItemView.ItemProjection> itemMap = itemView.findByIds(itemIds);
+        return page.map(c -> enrichWithMaps(c, userId, userMap, itemMap));
     }
 
     public ChatRoomResult getOne(Long id, Long requesterId) {
@@ -61,7 +90,24 @@ public class ChatRoomApplicationService {
         if (!room.isParticipant(requesterId)) {
             throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
         }
-        return ChatRoomResult.from(room);
+        return enrichOne(room, requesterId);
+    }
+
+    /**
+     * 본인 unread 0 으로 리셋. 본인이 참여자가 아니면 atomic UPDATE 가 영향 0 — 그 경우 사전 권한
+     * 검증 후 CHAT_FORBIDDEN. 응답으로 갱신된 채팅방 반환 (myUnread = 0).
+     */
+    @Transactional
+    public ChatRoomResult markAsRead(Long roomId, Long userId) {
+        ChatRoom room = chatRoomRepository.findById(roomId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        if (!room.isParticipant(userId)) {
+            throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
+        }
+        chatRoomRepository.markAsRead(roomId, userId);
+        // entity 메모리 상태도 동기화 (응답에 fresh 값 반영)
+        room.markAsRead(userId);
+        return enrichOne(room, userId);
     }
 
     /** Message 도메인이 메시지 보낼 권한 검증 시 호출. 참여자 아니면 CHAT_FORBIDDEN. */
@@ -95,14 +141,39 @@ public class ChatRoomApplicationService {
         chatRoomRepository.recordIncomingMessage(chatRoomId, senderId, preview);
     }
 
-    private ChatRoomResult createWithRaceGuard(Long itemId, Long requesterId, Long sellerId) {
+    /** 단건 enrich — opponent + item batch fetch 후 ChatRoomResult.from. */
+    private ChatRoomResult enrichOne(ChatRoom room, Long viewerId) {
+        Long opponentId = viewerId.equals(room.getUser1Id()) ? room.getUser2Id() : room.getUser1Id();
+        Map<Long, UserView.UserProjection> userMap = userView.findByIds(List.of(opponentId));
+        Map<Long, ItemView.ItemProjection> itemMap = itemView.findByIds(List.of(room.getItemId()));
+        return enrichWithMaps(room, viewerId, userMap, itemMap);
+    }
+
+    private static ChatRoomResult enrichWithMaps(
+            ChatRoom c,
+            Long viewerId,
+            Map<Long, UserView.UserProjection> userMap,
+            Map<Long, ItemView.ItemProjection> itemMap
+    ) {
+        Long opponentId = viewerId.equals(c.getUser1Id()) ? c.getUser2Id() : c.getUser1Id();
+        UserView.UserProjection u = userMap.get(opponentId);
+        ItemView.ItemProjection i = itemMap.get(c.getItemId());
+        return ChatRoomResult.from(
+                c, viewerId,
+                u != null ? u.nickname() : null,
+                u != null ? u.profileImage() : null,
+                i != null ? i.title() : null,
+                i != null ? i.thumbnailUrl() : null
+        );
+    }
+
+    private ChatRoom createWithRaceGuard(Long itemId, Long requesterId, Long sellerId) {
         ChatRoom newRoom = ChatRoom.openFor(itemId, requesterId, sellerId);
         try {
-            return ChatRoomResult.from(chatRoomRepository.save(newRoom));
+            return chatRoomRepository.save(newRoom);
         } catch (DataIntegrityViolationException violation) {
             if (isUniqueConflict(violation)) {
                 return chatRoomRepository.findByItemAndUsers(itemId, requesterId, sellerId)
-                        .map(ChatRoomResult::from)
                         .orElseThrow(() -> violation);
             }
             throw violation;

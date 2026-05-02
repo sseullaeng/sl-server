@@ -86,4 +86,19 @@ public class ChatRoom extends BaseEntity {
     public boolean isParticipant(Long userId) {
         return userId != null && (userId.equals(user1Id) || userId.equals(user2Id));
     }
+
+    /**
+     * 본인이 user1 이면 user1Unread = 0, user2 면 user2Unread = 0. 상대방 unread 는 그대로.
+     * 호출자가 사전에 isParticipant 검증해야 함 (서비스 책임).
+     */
+    public void markAsRead(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId 는 필수입니다");
+        }
+        if (userId.equals(user1Id)) {
+            this.user1Unread = 0;
+        } else if (userId.equals(user2Id)) {
+            this.user2Unread = 0;
+        }
+    }
 }

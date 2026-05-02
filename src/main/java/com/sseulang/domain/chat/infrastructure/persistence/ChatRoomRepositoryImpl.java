@@ -43,4 +43,9 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepository {
     public int recordIncomingMessage(Long chatRoomId, Long senderId, String preview) {
         return jpa.recordIncomingMessage(chatRoomId, senderId, preview, java.time.LocalDateTime.now());
     }
+
+    @Override
+    public int markAsRead(Long chatRoomId, Long userId) {
+        return jpa.markAsRead(chatRoomId, userId);
+    }
 }

@@ -24,4 +24,9 @@ public interface ChatRoomRepository {
      * 가이드 §4.10 — 동시 메시지 발신 race 안전 (마지막 SQL 이 win).
      */
     int recordIncomingMessage(Long chatRoomId, Long senderId, String preview);
+
+    /**
+     * 본인 unread 만 0 으로 atomic UPDATE. 비참여자는 영향 0. 권한 검증은 서비스 책임.
+     */
+    int markAsRead(Long chatRoomId, Long userId);
 }
