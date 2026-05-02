@@ -62,6 +62,10 @@ app:
     allowed-origins:
       - http://localhost:3000
       - http://localhost:5173
+  email:
+    # 가입 직후 발송되는 인증 메일 링크 base. 프론트가 token query 파라미터를 받아서
+    # POST /api/v1/auth/verify-email 호출. (5/2 — 프론트 합의 path)
+    verification-url-base: http://localhost:3000/auth/verify-email
   # 로컬 smoke test 전용 인증 우회 — DevAuthController. prod 배포 시 절대 true 금지.
   dev-auth:
     enabled: true

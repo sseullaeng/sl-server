@@ -28,8 +28,8 @@ public record ItemRegisterRequest(
         @Schema(description = "보증금 (대여 거래 전용, 그 외 null)", example = "100000", nullable = true)
         @PositiveOrZero Long deposit,
 
-        @Schema(description = "대여 단위 (대여 거래 전용)", example = "DAY",
-                allowableValues = {"HOUR", "DAY", "WEEK", "MONTH"}, nullable = true)
+        @Schema(description = "대여 단위 (대여 거래 전용) — 시간/일/주/월", example = "일",
+                allowableValues = {"시간", "일", "주", "월"}, nullable = true)
         RentalUnit rentalUnit,
 
         @Schema(description = "거래 유형", example = "판매",

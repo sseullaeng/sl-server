@@ -55,7 +55,8 @@ public class ItemController {
     }
 
     @Operation(summary = "물품 검색·페이징 (공개)",
-            description = "FULLTEXT(ngram) 검색. q 1글자는 LIKE 폴백. categoryId/tradeType/minPrice/maxPrice/tag 조합 필터. 인증 불필요.")
+            description = "FULLTEXT(ngram) 검색. q 1글자는 LIKE 폴백. categoryId/tradeType/minPrice/maxPrice/tag 조합 필터. "
+                    + "sort 옵션: latest(default) / price_asc / price_desc / view_desc / wishlist_desc. 인증 불필요.")
     @GetMapping
     public ApiResponse<PageResponse<ItemSummaryResponse>> list(
             @RequestParam(name = "q", required = false) String q,
@@ -64,13 +65,16 @@ public class ItemController {
             @RequestParam(name = "minPrice", required = false) Long minPrice,
             @RequestParam(name = "maxPrice", required = false) Long maxPrice,
             @RequestParam(name = "tag", required = false) String tag,
+            @RequestParam(name = "sort", required = false) String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
         int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
         int safePage = Math.max(page, 0);
         Pageable pageable = PageRequest.of(safePage, safeSize);
-        ItemSearchCriteria criteria = new ItemSearchCriteria(q, categoryId, tradeType, minPrice, maxPrice, tag);
+        ItemSearchCriteria criteria = new ItemSearchCriteria(
+                q, categoryId, tradeType, minPrice, maxPrice, tag,
+                com.sseulang.domain.item.application.dto.ItemSort.parse(sort));
 
         Page<ItemSummaryResponse> result = itemService.search(criteria, pageable)
                 .map(ItemSummaryResponse::from);

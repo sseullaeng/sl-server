@@ -58,7 +58,7 @@ public class OAuthLoginService {
         this.refreshTokenTtl = Duration.ofSeconds(jwtProperties.refreshTokenValiditySeconds());
     }
 
-    public TokenPair login(SocialProvider provider, String accessToken) {
+    public TokenPair loginWithCode(SocialProvider provider, String code, String redirectUri) {
         OAuthProvider impl = providersByType.get(provider);
         if (impl == null) {
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
@@ -66,7 +66,7 @@ public class OAuthLoginService {
 
         OAuthUserInfo info;
         try {
-            info = impl.verifyAndFetch(accessToken);
+            info = impl.exchangeCodeAndFetch(code, redirectUri);
         } catch (ExternalApiException e) {
             // 외부 인프라 예외 → 사용자 응답은 AUTH_OAUTH_FAILED 통일.
             // 원인은 cause 에 보존 + 운영용 로그.

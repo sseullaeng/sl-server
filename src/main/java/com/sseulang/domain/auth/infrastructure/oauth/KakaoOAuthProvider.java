@@ -8,29 +8,45 @@ import com.sseulang.domain.user.domain.SocialProvider;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import com.sseulang.global.exception.ExternalApiException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 /**
- * 카카오 access_token 검증 + 사용자 정보 조회.
+ * 카카오 Authorization Code → access_token 교환 + 사용자 정보 조회.
  *
- * <p>API: {@code GET https://kapi.kakao.com/v2/user/me} with Bearer token.
- * 응답에서 {@code id} (providerId), {@code kakao_account.email}, {@code kakao_account.profile.nickname/profile_image_url}
- * 추출.</p>
+ * <ol>
+ *   <li>{@code POST https://kauth.kakao.com/oauth/token} — code/client_id/client_secret/redirect_uri</li>
+ *   <li>{@code GET https://kapi.kakao.com/v2/user/me} with Bearer access_token</li>
+ * </ol>
+ *
+ * <p>Client Secret 옵션이 켜져 있어도 안전 — 서버에서 secret 동봉. 프론트는 code 만 알면 됨.</p>
  *
  * <p>모든 실패(토큰 무효 / 네트워크 / 응답 파싱 / 동의 항목 누락)는 {@code AUTH_OAUTH_FAILED} 로 통일.</p>
  */
 @Component
 public class KakaoOAuthProvider implements OAuthProvider {
 
+    private static final String TOKEN_URI = "https://kauth.kakao.com/oauth/token";
     private static final String USER_INFO_URI = "https://kapi.kakao.com/v2/user/me";
 
     private final RestClient restClient;
+    private final String clientId;
+    private final String clientSecret;
 
-    public KakaoOAuthProvider(RestClient.Builder builder) {
+    public KakaoOAuthProvider(
+            RestClient.Builder builder,
+            @Value("${app.oauth2.kakao.client-id:}") String clientId,
+            @Value("${app.oauth2.kakao.client-secret:}") String clientSecret
+    ) {
         this.restClient = builder.build();
+        this.clientId = clientId;
+        this.clientSecret = clientSecret;
     }
 
     @Override
@@ -39,10 +55,47 @@ public class KakaoOAuthProvider implements OAuthProvider {
     }
 
     @Override
-    public OAuthUserInfo verifyAndFetch(String accessToken) {
-        if (accessToken == null || accessToken.isBlank()) {
+    public OAuthUserInfo exchangeCodeAndFetch(String code, String redirectUri) {
+        if (code == null || code.isBlank() || redirectUri == null || redirectUri.isBlank()) {
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }
+        if (clientId == null || clientId.isBlank()) {
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+        }
+
+        String accessToken = exchangeCodeForToken(code, redirectUri);
+        return fetchUserInfo(accessToken);
+    }
+
+    private String exchangeCodeForToken(String code, String redirectUri) {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("grant_type", "authorization_code");
+        form.add("client_id", clientId);
+        form.add("redirect_uri", redirectUri);
+        form.add("code", code);
+        if (clientSecret != null && !clientSecret.isBlank()) {
+            form.add("client_secret", clientSecret);
+        }
+
+        TokenResponse res;
+        try {
+            res = restClient.post()
+                    .uri(TOKEN_URI)
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(form)
+                    .retrieve()
+                    .body(TokenResponse.class);
+        } catch (RestClientException e) {
+            // 잘못된 code/redirectUri 도 카카오가 4xx 로 떨굼 — 인프라 + 비즈니스 분리 어려워 통합 처리.
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+        }
+        if (res == null || res.accessToken() == null || res.accessToken().isBlank()) {
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+        }
+        return res.accessToken();
+    }
+
+    private OAuthUserInfo fetchUserInfo(String accessToken) {
         KakaoUserResponse res;
         try {
             res = restClient.get()
@@ -51,7 +104,6 @@ public class KakaoOAuthProvider implements OAuthProvider {
                     .retrieve()
                     .body(KakaoUserResponse.class);
         } catch (RestClientException e) {
-            // 외부 인프라 예외 — anti-corruption wrap. 호출자가 정책에 맞춰 변환.
             throw new ExternalApiException("kakao-oauth", e);
         }
 
@@ -66,12 +118,9 @@ public class KakaoOAuthProvider implements OAuthProvider {
         String profileImage = profile != null ? profile.profileImageUrl() : null;
 
         if (email == null || nickname == null) {
-            // 동의 항목 누락 — 사용자가 약관에서 거부했거나 개발자 콘솔 권한 미설정
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }
-        // 게이트 1 round 2 — 카카오 응답에 미인증 이메일이 포함될 수 있어 takeover/auto-verified 의
-        // 전제("provider 가 검증한 이메일") 가 깨질 수 있다. is_email_valid + is_email_verified 둘 다
-        // true 인 이메일만 허용 — 둘 중 하나라도 false/null 이면 OAuth 거부.
+        // is_email_valid + is_email_verified 둘 다 true 만 허용.
         if (!Boolean.TRUE.equals(account.isEmailValid()) || !Boolean.TRUE.equals(account.isEmailVerified())) {
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }
@@ -85,10 +134,17 @@ public class KakaoOAuthProvider implements OAuthProvider {
                     profileImage
             );
         } catch (IllegalArgumentException e) {
-            // 잘못된 이메일 형식 등 — provider 가 비정상 응답
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }
     }
+
+    record TokenResponse(
+            @JsonProperty("access_token") String accessToken,
+            @JsonProperty("token_type") String tokenType,
+            @JsonProperty("refresh_token") String refreshToken,
+            @JsonProperty("expires_in") Long expiresIn,
+            String scope
+    ) {}
 
     record KakaoUserResponse(
             Long id,

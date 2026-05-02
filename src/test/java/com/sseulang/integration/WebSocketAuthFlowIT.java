@@ -244,11 +244,11 @@ class WebSocketAuthFlowIT {
         OAuthUserInfo info = new OAuthUserInfo(
                 SocialProvider.KAKAO, providerId, new Email(email), nickname, null
         );
-        when(kakaoOAuthProvider.verifyAndFetch(tokenSentinel)).thenReturn(info);
+        when(kakaoOAuthProvider.exchangeCodeAndFetch(tokenSentinel, "http://test/cb")).thenReturn(info);
         MvcResult r = mvc.perform(post("/api/v1/auth/oauth2/kakao")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"accessToken\":\"" + tokenSentinel + "\"}"))
+                        .content("{\"code\":\"" + tokenSentinel + "\",\"redirectUri\":\"http://test/cb\"}"))
                 .andExpect(status().isOk())
                 .andExpect(cookie().exists(CookieUtil.ACCESS_TOKEN_COOKIE))
                 .andReturn();

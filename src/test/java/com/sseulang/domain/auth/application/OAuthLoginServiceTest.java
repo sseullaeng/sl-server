@@ -85,13 +85,13 @@ class OAuthLoginServiceTest {
     @Test
     @DisplayName("login 정상_provider 호출 + user 생성/조회 + AT/RT 발급 + RT store 저장")
     void login_정상() {
-        when(kakaoProvider.verifyAndFetch("KAKAO_TOKEN")).thenReturn(INFO);
+        when(kakaoProvider.exchangeCodeAndFetch("KAKAO_TOKEN", "http://test/cb")).thenReturn(INFO);
         User u = userWithId(USER_ID, false, false);
         when(userService.findOrCreateBySocial(
                 eq(SocialProvider.KAKAO), eq(PROVIDER_ID), eq(EMAIL), eq("쓸랭이"), eq("https://img/u.png")))
                 .thenReturn(u);
 
-        TokenPair pair = service.login(SocialProvider.KAKAO, "KAKAO_TOKEN");
+        TokenPair pair = service.loginWithCode(SocialProvider.KAKAO, "KAKAO_TOKEN", "http://test/cb");
 
         assertThat(pair.accessToken()).isNotBlank();
         assertThat(pair.refreshToken()).isNotBlank();
@@ -106,28 +106,28 @@ class OAuthLoginServiceTest {
         assertThat(store.contains("USER", USER_ID, rtJti)).isTrue();
 
         // 다른 provider 호출 X
-        verify(googleProvider, never()).verifyAndFetch(any());
+        verify(googleProvider, never()).exchangeCodeAndFetch(any(), eq("http://test/cb"));
     }
 
     @Test
     @DisplayName("login_미지원 provider_AUTH_OAUTH_FAILED")
     void login_미지원provider() {
         // 본 service 에 KAKAO/GOOGLE 만 등록 → LOCAL 호출 시 실패
-        assertThatThrownBy(() -> service.login(SocialProvider.LOCAL, "T"))
+        assertThatThrownBy(() -> service.loginWithCode(SocialProvider.LOCAL, "T", "http://test/cb"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.AUTH_OAUTH_FAILED);
 
-        verify(kakaoProvider, never()).verifyAndFetch(any());
-        verify(googleProvider, never()).verifyAndFetch(any());
+        verify(kakaoProvider, never()).exchangeCodeAndFetch(any(), eq("http://test/cb"));
+        verify(googleProvider, never()).exchangeCodeAndFetch(any(), eq("http://test/cb"));
         verify(userService, never()).findOrCreateBySocial(any(), any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("login_provider 토큰 검증 실패_BusinessException 그대로 전파")
     void login_provider_검증실패() {
-        when(kakaoProvider.verifyAndFetch("BAD")).thenThrow(new BusinessException(ErrorCode.AUTH_OAUTH_FAILED));
+        when(kakaoProvider.exchangeCodeAndFetch("BAD", "http://test/cb")).thenThrow(new BusinessException(ErrorCode.AUTH_OAUTH_FAILED));
 
-        assertThatThrownBy(() -> service.login(SocialProvider.KAKAO, "BAD"))
+        assertThatThrownBy(() -> service.loginWithCode(SocialProvider.KAKAO, "BAD", "http://test/cb"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.AUTH_OAUTH_FAILED);
 
@@ -137,11 +137,11 @@ class OAuthLoginServiceTest {
     @Test
     @DisplayName("login_외부 API 호출 실패(ExternalApiException)_AUTH_OAUTH_FAILED 변환 + user 조회 X")
     void login_externalApi_실패() {
-        when(kakaoProvider.verifyAndFetch("T"))
+        when(kakaoProvider.exchangeCodeAndFetch("T", "http://test/cb"))
                 .thenThrow(new com.sseulang.global.exception.ExternalApiException(
                         "kakao-oauth", new RuntimeException("network")));
 
-        assertThatThrownBy(() -> service.login(SocialProvider.KAKAO, "T"))
+        assertThatThrownBy(() -> service.loginWithCode(SocialProvider.KAKAO, "T", "http://test/cb"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.AUTH_OAUTH_FAILED);
 
@@ -151,11 +151,11 @@ class OAuthLoginServiceTest {
     @Test
     @DisplayName("login_blocked user_USER_BLOCKED + JWT 발급 X")
     void login_blocked() {
-        when(kakaoProvider.verifyAndFetch("T")).thenReturn(INFO);
+        when(kakaoProvider.exchangeCodeAndFetch("T", "http://test/cb")).thenReturn(INFO);
         User u = userWithId(USER_ID, true, false);
         when(userService.findOrCreateBySocial(any(), any(), any(), any(), any())).thenReturn(u);
 
-        assertThatThrownBy(() -> service.login(SocialProvider.KAKAO, "T"))
+        assertThatThrownBy(() -> service.loginWithCode(SocialProvider.KAKAO, "T", "http://test/cb"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.USER_BLOCKED);
 
@@ -165,11 +165,11 @@ class OAuthLoginServiceTest {
     @Test
     @DisplayName("login_deleted user_USER_BLOCKED")
     void login_deleted() {
-        when(kakaoProvider.verifyAndFetch("T")).thenReturn(INFO);
+        when(kakaoProvider.exchangeCodeAndFetch("T", "http://test/cb")).thenReturn(INFO);
         User u = userWithId(USER_ID, false, true);
         when(userService.findOrCreateBySocial(any(), any(), any(), any(), any())).thenReturn(u);
 
-        assertThatThrownBy(() -> service.login(SocialProvider.KAKAO, "T"))
+        assertThatThrownBy(() -> service.loginWithCode(SocialProvider.KAKAO, "T", "http://test/cb"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.USER_BLOCKED);
     }
@@ -177,12 +177,12 @@ class OAuthLoginServiceTest {
     @Test
     @DisplayName("login_연속 호출_매번 새 jti store 저장 (누적 X 정책 X — Day3 단순화)")
     void login_연속() {
-        when(kakaoProvider.verifyAndFetch(any())).thenReturn(INFO);
+        when(kakaoProvider.exchangeCodeAndFetch(any(), eq("http://test/cb"))).thenReturn(INFO);
         User u = userWithId(USER_ID, false, false);
         when(userService.findOrCreateBySocial(any(), any(), any(), any(), any())).thenReturn(u);
 
-        TokenPair p1 = service.login(SocialProvider.KAKAO, "T1");
-        TokenPair p2 = service.login(SocialProvider.KAKAO, "T2");
+        TokenPair p1 = service.loginWithCode(SocialProvider.KAKAO, "T1", "http://test/cb");
+        TokenPair p2 = service.loginWithCode(SocialProvider.KAKAO, "T2", "http://test/cb");
 
         // 둘 다 store 에 등록 — 디바이스 동시 로그인 허용
         String j1 = jwtProvider.parse(p1.refreshToken()).jti();

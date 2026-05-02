@@ -14,9 +14,14 @@ public record ItemSearchCriteria(
         TradeType tradeType,
         Long minPrice,
         Long maxPrice,
-        String tag
+        String tag,
+        ItemSort sort
 ) {
+    public ItemSearchCriteria {
+        if (sort == null) sort = ItemSort.LATEST;
+    }
+
     public static ItemSearchCriteria empty() {
-        return new ItemSearchCriteria(null, null, null, null, null, null);
+        return new ItemSearchCriteria(null, null, null, null, null, null, ItemSort.LATEST);
     }
 }

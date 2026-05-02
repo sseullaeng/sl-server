@@ -19,6 +19,11 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 /**
  * 3-chain 분리:
@@ -109,6 +114,28 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    /**
+     * REST CORS — {@code app.cors.allowed-origins} 화이트리스트. 와일드카드(*) X.
+     * preflight(OPTIONS) 가 인증/CSRF 통과하지 못하던 회귀 차단 — Spring Security 의 cors() 가
+     * 본 Bean 을 자동 사용해 OPTIONS 를 SecurityFilterChain 진입 전에 처리.
+     *
+     * <p>credentials=true (쿠키 동봉) 라서 Origin 정확 매칭 필수. WebSocket handshake 는 STOMP
+     * endpoint 의 setAllowedOrigins 가 별도로 처리하므로 본 source 는 REST(/**) 에만.</p>
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource(CorsProperties corsProperties) {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(corsProperties.allowedOrigins());
+        config.setAllowedMethods(List.of("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setExposedHeaders(List.of("Set-Cookie"));
+        config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+
     @Bean
     @Order(1)
     public SecurityFilterChain adminFilterChain(HttpSecurity http) throws Exception {
@@ -170,6 +197,8 @@ public class SecurityConfig {
                 .httpBasic(b -> b.disable())
                 .formLogin(f -> f.disable())
                 .logout(l -> l.disable())
+                // corsConfigurationSource Bean 자동 사용 — preflight(OPTIONS) 통과 + 쿠키 허용 헤더 박힘.
+                .cors(c -> {})
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
     }
 }

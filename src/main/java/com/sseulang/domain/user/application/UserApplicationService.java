@@ -74,6 +74,17 @@ public class UserApplicationService {
     }
 
     /**
+     * 본인 프로필 partial update — null 필드는 변경 X. 미인증 사용자도 호출 가능 (자금/거래 영향 0).
+     * profileImage 빈 문자열 = 이미지 제거.
+     */
+    @Transactional
+    public User updateProfile(Long userId, String profileImage, String nickname) {
+        User user = getById(userId);
+        user.updateProfile(profileImage, nickname);
+        return user;
+    }
+
+    /**
      * 민감 기능 진입 가드 — 이메일 인증 미완료 시 {@link ErrorCode#AUTH_EMAIL_NOT_VERIFIED} (FORBIDDEN).
      * 거래 시작 / 결제 / 출금 / Item 등록 등 자금·신뢰 영향 흐름의 첫 진입점에서 호출.
      */

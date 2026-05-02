@@ -44,10 +44,27 @@ class AuthControllerTest {
         rotationService = mock(RefreshTokenRotationService.class);
         oauthLoginService = mock(OAuthLoginService.class);
         cookieUtil = mock(CookieUtil.class);
+        com.sseulang.global.security.JwtProvider jwtProvider =
+                mock(com.sseulang.global.security.JwtProvider.class);
+        com.sseulang.domain.user.application.UserApplicationService userService =
+                mock(com.sseulang.domain.user.application.UserApplicationService.class);
+        when(jwtProvider.parse(org.mockito.ArgumentMatchers.anyString())).thenReturn(
+                new com.sseulang.global.security.JwtClaims(
+                        100L, "USER", "jti-test", null,
+                        java.time.Instant.now(), java.time.Instant.now().plusSeconds(60)
+                )
+        );
+        when(userService.getById(org.mockito.ArgumentMatchers.anyLong())).thenReturn(
+                com.sseulang.domain.user.domain.User.createSocialUser(
+                        com.sseulang.domain.user.domain.SocialProvider.KAKAO, "kakao-test",
+                        new com.sseulang.domain.user.domain.Email("oauth@test.com"),
+                        "tester", null
+                )
+        );
         AuthController controller = new AuthController(
                 rotationService, oauthLoginService,
                 mock(com.sseulang.domain.auth.application.LocalAuthService.class),
-                cookieUtil
+                cookieUtil, jwtProvider, userService
         );
         mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
@@ -129,7 +146,7 @@ class AuthControllerTest {
     @Test
     @DisplayName("POST /auth/oauth2/kakao_정상_KAKAO 매핑 + AT/RT 쿠키 응답")
     void oauth2_kakao_정상() throws Exception {
-        when(oauthLoginService.login(eq(SocialProvider.KAKAO), eq("KAKAO_AT")))
+        when(oauthLoginService.loginWithCode(eq(SocialProvider.KAKAO), eq("KAKAO_AT"), eq("http://test/cb")))
                 .thenReturn(new TokenPair("NEW_AT", "NEW_RT"));
         when(cookieUtil.accessTokenCookie("NEW_AT"))
                 .thenReturn(ResponseCookie.from("at", "NEW_AT").path("/").httpOnly(true).maxAge(1800).build());
@@ -138,7 +155,7 @@ class AuthControllerTest {
 
         MvcResult result = mvc.perform(post("/api/v1/auth/oauth2/kakao")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"accessToken\":\"KAKAO_AT\"}"))
+                        .content("{\"code\":\"KAKAO_AT\",\"redirectUri\":\"http://test/cb\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andReturn();
@@ -148,13 +165,13 @@ class AuthControllerTest {
         assertThat(setCookies).anyMatch(s -> s.startsWith("at=NEW_AT"));
         assertThat(setCookies).anyMatch(s -> s.startsWith("rt=NEW_RT"));
 
-        verify(oauthLoginService, times(1)).login(SocialProvider.KAKAO, "KAKAO_AT");
+        verify(oauthLoginService, times(1)).loginWithCode(SocialProvider.KAKAO, "KAKAO_AT", "http://test/cb");
     }
 
     @Test
     @DisplayName("POST /auth/oauth2/google_정상_GOOGLE 매핑")
     void oauth2_google_정상() throws Exception {
-        when(oauthLoginService.login(eq(SocialProvider.GOOGLE), eq("G_AT")))
+        when(oauthLoginService.loginWithCode(eq(SocialProvider.GOOGLE), eq("G_AT"), eq("http://test/cb")))
                 .thenReturn(new TokenPair("AT", "RT"));
         when(cookieUtil.accessTokenCookie("AT"))
                 .thenReturn(ResponseCookie.from("at", "AT").path("/").build());
@@ -163,10 +180,10 @@ class AuthControllerTest {
 
         mvc.perform(post("/api/v1/auth/oauth2/google")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"accessToken\":\"G_AT\"}"))
+                        .content("{\"code\":\"G_AT\",\"redirectUri\":\"http://test/cb\"}"))
                 .andExpect(status().isOk());
 
-        verify(oauthLoginService, times(1)).login(SocialProvider.GOOGLE, "G_AT");
+        verify(oauthLoginService, times(1)).loginWithCode(SocialProvider.GOOGLE, "G_AT", "http://test/cb");
     }
 
     @Test
@@ -174,23 +191,23 @@ class AuthControllerTest {
     void oauth2_unknown_provider() throws Exception {
         mvc.perform(post("/api/v1/auth/oauth2/twitter")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"accessToken\":\"T\"}"))
+                        .content("{\"code\":\"T\",\"redirectUri\":\"http://test/cb\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value(ErrorCode.AUTH_OAUTH_FAILED.name()));
 
-        verify(oauthLoginService, never()).login(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(oauthLoginService, never()).loginWithCode(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
     @DisplayName("POST /auth/oauth2/kakao_provider 검증 실패_AUTH_OAUTH_FAILED 전파")
     void oauth2_provider_검증실패_전파() throws Exception {
-        when(oauthLoginService.login(eq(SocialProvider.KAKAO), eq("BAD")))
+        when(oauthLoginService.loginWithCode(eq(SocialProvider.KAKAO), eq("BAD"), eq("http://test/cb")))
                 .thenThrow(new BusinessException(ErrorCode.AUTH_OAUTH_FAILED));
 
         mvc.perform(post("/api/v1/auth/oauth2/kakao")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"accessToken\":\"BAD\"}"))
+                        .content("{\"code\":\"BAD\",\"redirectUri\":\"http://test/cb\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error.code").value(ErrorCode.AUTH_OAUTH_FAILED.name()));
     }
@@ -198,7 +215,7 @@ class AuthControllerTest {
     @Test
     @DisplayName("POST /auth/oauth2/KAKAO (대문자)_path 대소문자 무시")
     void oauth2_path_대소문자() throws Exception {
-        when(oauthLoginService.login(eq(SocialProvider.KAKAO), eq("T")))
+        when(oauthLoginService.loginWithCode(eq(SocialProvider.KAKAO), eq("T"), eq("http://test/cb")))
                 .thenReturn(new TokenPair("AT", "RT"));
         when(cookieUtil.accessTokenCookie("AT"))
                 .thenReturn(ResponseCookie.from("at", "AT").path("/").build());
@@ -207,9 +224,9 @@ class AuthControllerTest {
 
         mvc.perform(post("/api/v1/auth/oauth2/KAKAO")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"accessToken\":\"T\"}"))
+                        .content("{\"code\":\"T\",\"redirectUri\":\"http://test/cb\"}"))
                 .andExpect(status().isOk());
 
-        verify(oauthLoginService, times(1)).login(SocialProvider.KAKAO, "T");
+        verify(oauthLoginService, times(1)).loginWithCode(SocialProvider.KAKAO, "T", "http://test/cb");
     }
 }

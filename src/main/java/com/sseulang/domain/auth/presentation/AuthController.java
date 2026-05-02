@@ -7,11 +7,14 @@ import com.sseulang.domain.auth.application.dto.TokenPair;
 import com.sseulang.domain.auth.presentation.dto.LocalLoginRequest;
 import com.sseulang.domain.auth.presentation.dto.LocalSignupRequest;
 import com.sseulang.domain.auth.presentation.dto.OAuthLoginRequest;
+import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.domain.user.domain.SocialProvider;
+import com.sseulang.domain.user.presentation.dto.MeResponse;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import com.sseulang.global.security.CookieUtil;
+import com.sseulang.global.security.JwtProvider;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -34,64 +37,70 @@ public class AuthController {
     private final OAuthLoginService oauthLoginService;
     private final LocalAuthService localAuthService;
     private final CookieUtil cookieUtil;
+    private final JwtProvider jwtProvider;
+    private final UserApplicationService userService;
 
     public AuthController(
             RefreshTokenRotationService rotationService,
             OAuthLoginService oauthLoginService,
             LocalAuthService localAuthService,
-            CookieUtil cookieUtil
+            CookieUtil cookieUtil,
+            JwtProvider jwtProvider,
+            UserApplicationService userService
     ) {
         this.rotationService = rotationService;
         this.oauthLoginService = oauthLoginService;
         this.localAuthService = localAuthService;
         this.cookieUtil = cookieUtil;
+        this.jwtProvider = jwtProvider;
+        this.userService = userService;
     }
 
     @Operation(summary = "LOCAL 회원가입",
             description = "이메일/비밀번호 가입. 성공 시 AT(at)/RT(rt) HttpOnly 쿠키 자동 발급 + 인증 메일 발송. "
                     + "이메일 인증 전엔 자금 영향 API 가 403(AUTH_EMAIL_NOT_VERIFIED) 떨굼.")
     @PostMapping("/signup")
-    public ResponseEntity<ApiResponse<Void>> signup(@Valid @RequestBody LocalSignupRequest request) {
+    public ResponseEntity<ApiResponse<MeResponse>> signup(@Valid @RequestBody LocalSignupRequest request) {
         TokenPair pair = localAuthService.signup(request.toEmailVO(), request.password(), request.nickname());
-        return setAuthCookies(pair);
+        return setAuthCookiesWithMe(pair);
     }
 
     @Operation(summary = "LOCAL 로그인",
             description = "이메일/비밀번호 로그인. 미존재/차단/비밀번호 불일치 모두 동일 응답(401 AUTH_LOGIN_FAILED) — 이메일 존재 여부 leak 방지. "
                     + "성공 시 AT/RT 쿠키 자동 발급.")
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<Void>> login(@Valid @RequestBody LocalLoginRequest request) {
+    public ResponseEntity<ApiResponse<MeResponse>> login(@Valid @RequestBody LocalLoginRequest request) {
         TokenPair pair = localAuthService.login(request.toEmailVO(), request.password());
-        return setAuthCookies(pair);
+        return setAuthCookiesWithMe(pair);
     }
 
-    private ResponseEntity<ApiResponse<Void>> setAuthCookies(TokenPair pair) {
+    /**
+     * 발급된 AT 에서 userId 추출 → 본인 정보 조회 → 응답 body 에 포함.
+     * 프론트가 로그인 후 별도 /users/me 호출 없이 바로 store 초기화 가능.
+     */
+    private ResponseEntity<ApiResponse<MeResponse>> setAuthCookiesWithMe(TokenPair pair) {
         ResponseCookie at = cookieUtil.accessTokenCookie(pair.accessToken());
         ResponseCookie rt = cookieUtil.refreshTokenCookie(pair.refreshToken());
+        Long userId = jwtProvider.parse(pair.accessToken()).userId();
+        MeResponse me = MeResponse.from(userService.getById(userId));
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, at.toString())
                 .header(HttpHeaders.SET_COOKIE, rt.toString())
-                .body(ApiResponse.ok());
+                .body(ApiResponse.ok(me));
     }
 
-    @Operation(summary = "OAuth 로그인 (kakao/google)",
-            description = "프론트가 SDK 로 받은 access_token 을 본 endpoint 에 POST. 백엔드가 provider 검증 + 신규/기존/takeover 분기 처리. "
-                    + "신규 가입은 email_verified=true 로 즉시 발급 (provider 검증된 이메일).")
+    @Operation(summary = "OAuth 로그인 (kakao/google) — Authorization Code Grant",
+            description = "프론트가 OAuth redirect 로 받은 code + 본인이 쓴 redirectUri 를 본 endpoint 에 POST. "
+                    + "백엔드가 provider token endpoint 에 client_id/client_secret 동봉해 access_token 으로 교환 + user info 조회. "
+                    + "신규 가입은 email_verified=true 로 즉시 발급 (provider 검증된 이메일). Client Secret 활성화 호환.")
     @PostMapping("/oauth2/{provider}")
-    public ResponseEntity<ApiResponse<Void>> oauth2(
+    public ResponseEntity<ApiResponse<MeResponse>> oauth2(
             @PathVariable("provider") String provider,
             @Valid @RequestBody OAuthLoginRequest request
     ) {
         SocialProvider socialProvider = parseProvider(provider);
-        TokenPair pair = oauthLoginService.login(socialProvider, request.accessToken());
-
-        ResponseCookie at = cookieUtil.accessTokenCookie(pair.accessToken());
-        ResponseCookie rt = cookieUtil.refreshTokenCookie(pair.refreshToken());
-
-        return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, at.toString())
-                .header(HttpHeaders.SET_COOKIE, rt.toString())
-                .body(ApiResponse.ok());
+        TokenPair pair = oauthLoginService.loginWithCode(socialProvider, request.code(), request.redirectUri());
+        return setAuthCookiesWithMe(pair);
     }
 
     private SocialProvider parseProvider(String pathParam) {

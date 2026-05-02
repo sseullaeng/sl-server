@@ -104,7 +104,7 @@ class ItemSearchFullTextIT {
         seedItem("갤럭시 S24", "디테일 없음");
 
         Page<Item> result = repository.search(
-                new ItemSearchCriteria("아이폰", null, null, null, null, null),
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria("아이폰", null, null, null, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
                 PageRequest.of(0, 10));
 
         assertThat(result.getContent())
@@ -120,7 +120,7 @@ class ItemSearchFullTextIT {
         seedItem("갤럭시 미개봉", "x");
 
         Page<Item> result = repository.search(
-                new ItemSearchCriteria("아이폰 미개봉", null, null, null, null, null),
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria("아이폰 미개봉", null, null, null, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
                 PageRequest.of(0, 10));
 
         assertThat(result.getContent())
@@ -135,7 +135,7 @@ class ItemSearchFullTextIT {
         seedItem("물건2", "다른 제품 설명");
 
         Page<Item> result = repository.search(
-                new ItemSearchCriteria("갤럭시", null, null, null, null, null),
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria("갤럭시", null, null, null, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
                 PageRequest.of(0, 10));
 
         assertThat(result.getContent())

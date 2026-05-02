@@ -35,11 +35,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers = ProtectedTestController.class)
 @Import({
         SecurityConfig.class,
+        com.sseulang.global.config.CorsProperties.class,
+        com.sseulang.global.security.CsrfCookieFilter.class,
         JwtAuthenticationFilter.class,
         JwtAuthenticationEntryPoint.class,
         JwtAccessDeniedHandler.class,
         TraceIdFilter.class,
         GlobalExceptionHandler.class
+})
+@org.springframework.test.context.TestPropertySource(properties = {
+        "app.cors.allowed-origins=http://localhost:3000"
 })
 class AuthSecurityFlowIT {
 

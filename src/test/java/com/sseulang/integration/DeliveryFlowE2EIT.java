@@ -258,12 +258,12 @@ class DeliveryFlowE2EIT {
                 nickname, null
         );
         when(kakaoOAuthProvider.supports()).thenReturn(SocialProvider.KAKAO);
-        when(kakaoOAuthProvider.verifyAndFetch(accessToken)).thenReturn(info);
+        when(kakaoOAuthProvider.exchangeCodeAndFetch(accessToken, "http://test/cb")).thenReturn(info);
 
         MvcResult result = mvc.perform(post("/api/v1/auth/oauth2/kakao")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"accessToken\":\"" + accessToken + "\"}"))
+                        .content("{\"code\":\"" + accessToken + "\",\"redirectUri\":\"http://test/cb\"}"))
                 .andExpect(status().isOk())
                 .andExpect(cookie().exists(CookieUtil.ACCESS_TOKEN_COOKIE))
                 .andReturn();

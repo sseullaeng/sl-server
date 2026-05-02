@@ -8,28 +8,43 @@ import com.sseulang.domain.user.domain.SocialProvider;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import com.sseulang.global.exception.ExternalApiException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 /**
- * 구글 access_token 검증 + 사용자 정보 조회.
+ * 구글 Authorization Code → access_token 교환 + 사용자 정보 조회.
  *
- * <p>API: {@code GET https://www.googleapis.com/oauth2/v3/userinfo} with Bearer token.
- * 응답: {@code sub} (providerId), {@code email}, {@code email_verified}, {@code name}, {@code picture}.</p>
+ * <ol>
+ *   <li>{@code POST https://oauth2.googleapis.com/token} — code/client_id/client_secret/redirect_uri</li>
+ *   <li>{@code GET https://www.googleapis.com/oauth2/v3/userinfo} with Bearer access_token</li>
+ * </ol>
  *
  * <p>{@code email_verified=false} 이면 보안상 인증 실패 처리.</p>
  */
 @Component
 public class GoogleOAuthProvider implements OAuthProvider {
 
+    private static final String TOKEN_URI = "https://oauth2.googleapis.com/token";
     private static final String USER_INFO_URI = "https://www.googleapis.com/oauth2/v3/userinfo";
 
     private final RestClient restClient;
+    private final String clientId;
+    private final String clientSecret;
 
-    public GoogleOAuthProvider(RestClient.Builder builder) {
+    public GoogleOAuthProvider(
+            RestClient.Builder builder,
+            @Value("${app.oauth2.google.client-id:}") String clientId,
+            @Value("${app.oauth2.google.client-secret:}") String clientSecret
+    ) {
         this.restClient = builder.build();
+        this.clientId = clientId;
+        this.clientSecret = clientSecret;
     }
 
     @Override
@@ -38,10 +53,44 @@ public class GoogleOAuthProvider implements OAuthProvider {
     }
 
     @Override
-    public OAuthUserInfo verifyAndFetch(String accessToken) {
-        if (accessToken == null || accessToken.isBlank()) {
+    public OAuthUserInfo exchangeCodeAndFetch(String code, String redirectUri) {
+        if (code == null || code.isBlank() || redirectUri == null || redirectUri.isBlank()) {
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }
+        if (clientId == null || clientId.isBlank() || clientSecret == null || clientSecret.isBlank()) {
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+        }
+
+        String accessToken = exchangeCodeForToken(code, redirectUri);
+        return fetchUserInfo(accessToken);
+    }
+
+    private String exchangeCodeForToken(String code, String redirectUri) {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("grant_type", "authorization_code");
+        form.add("client_id", clientId);
+        form.add("client_secret", clientSecret);
+        form.add("redirect_uri", redirectUri);
+        form.add("code", code);
+
+        TokenResponse res;
+        try {
+            res = restClient.post()
+                    .uri(TOKEN_URI)
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(form)
+                    .retrieve()
+                    .body(TokenResponse.class);
+        } catch (RestClientException e) {
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+        }
+        if (res == null || res.accessToken() == null || res.accessToken().isBlank()) {
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
+        }
+        return res.accessToken();
+    }
+
+    private OAuthUserInfo fetchUserInfo(String accessToken) {
         GoogleUserResponse res;
         try {
             res = restClient.get()
@@ -57,7 +106,6 @@ public class GoogleOAuthProvider implements OAuthProvider {
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }
 
-        // 검증된 이메일만 허용 — null/missing/false 모두 거부 (도용 위험)
         if (!Boolean.TRUE.equals(res.emailVerified())) {
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }
@@ -74,6 +122,14 @@ public class GoogleOAuthProvider implements OAuthProvider {
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }
     }
+
+    record TokenResponse(
+            @JsonProperty("access_token") String accessToken,
+            @JsonProperty("expires_in") Long expiresIn,
+            @JsonProperty("token_type") String tokenType,
+            @JsonProperty("id_token") String idToken,
+            String scope
+    ) {}
 
     record GoogleUserResponse(
             String sub,

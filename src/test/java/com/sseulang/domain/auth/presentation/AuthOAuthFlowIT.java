@@ -44,10 +44,27 @@ class AuthOAuthFlowIT {
         oauthLoginService = mock(OAuthLoginService.class);
         rotationService = mock(RefreshTokenRotationService.class);
         cookieUtil = mock(CookieUtil.class);
+        com.sseulang.global.security.JwtProvider jwtProvider =
+                mock(com.sseulang.global.security.JwtProvider.class);
+        com.sseulang.domain.user.application.UserApplicationService userService =
+                mock(com.sseulang.domain.user.application.UserApplicationService.class);
+        when(jwtProvider.parse(org.mockito.ArgumentMatchers.anyString())).thenReturn(
+                new com.sseulang.global.security.JwtClaims(
+                        100L, "USER", "jti-test", null,
+                        java.time.Instant.now(), java.time.Instant.now().plusSeconds(60)
+                )
+        );
+        when(userService.getById(org.mockito.ArgumentMatchers.anyLong())).thenReturn(
+                com.sseulang.domain.user.domain.User.createSocialUser(
+                        com.sseulang.domain.user.domain.SocialProvider.KAKAO, "kakao-test",
+                        new com.sseulang.domain.user.domain.Email("oauth@test.com"),
+                        "tester", null
+                )
+        );
         AuthController controller = new AuthController(
                 rotationService, oauthLoginService,
                 mock(com.sseulang.domain.auth.application.LocalAuthService.class),
-                cookieUtil
+                cookieUtil, jwtProvider, userService
         );
 
         mvc = MockMvcBuilders.standaloneSetup(controller)
@@ -59,7 +76,7 @@ class AuthOAuthFlowIT {
     @Test
     @DisplayName("oauth2/kakao 정상_200 + X-Trace-Id 헤더 + Set-Cookie 2 + ApiResponse")
     void oauth2_kakao_정상_traceId_헤더() throws Exception {
-        when(oauthLoginService.login(eq(SocialProvider.KAKAO), eq("KAKAO_AT")))
+        when(oauthLoginService.loginWithCode(eq(SocialProvider.KAKAO), eq("KAKAO_AT"), eq("http://test/cb")))
                 .thenReturn(new TokenPair("AT", "RT"));
         when(cookieUtil.accessTokenCookie("AT"))
                 .thenReturn(ResponseCookie.from("at", "AT").path("/").httpOnly(true).build());
@@ -68,7 +85,7 @@ class AuthOAuthFlowIT {
 
         MvcResult result = mvc.perform(post("/api/v1/auth/oauth2/kakao")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"accessToken\":\"KAKAO_AT\"}"))
+                        .content("{\"code\":\"KAKAO_AT\",\"redirectUri\":\"http://test/cb\"}"))
                 .andExpect(status().isOk())
                 .andExpect(header().exists(TraceIdFilter.HEADER))
                 .andExpect(jsonPath("$.success").value(true))
@@ -83,7 +100,7 @@ class AuthOAuthFlowIT {
     void oauth2_unknown_traceId_일관성() throws Exception {
         MvcResult result = mvc.perform(post("/api/v1/auth/oauth2/twitter")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"accessToken\":\"T\"}"))
+                        .content("{\"code\":\"T\",\"redirectUri\":\"http://test/cb\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().exists(TraceIdFilter.HEADER))
                 .andExpect(jsonPath("$.success").value(false))
@@ -106,7 +123,7 @@ class AuthOAuthFlowIT {
         MvcResult result = mvc.perform(post("/api/v1/auth/oauth2/twitter")
                         .header(TraceIdFilter.HEADER, incoming)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"accessToken\":\"T\"}"))
+                        .content("{\"code\":\"T\",\"redirectUri\":\"http://test/cb\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().string(TraceIdFilter.HEADER, incoming))
                 .andReturn();

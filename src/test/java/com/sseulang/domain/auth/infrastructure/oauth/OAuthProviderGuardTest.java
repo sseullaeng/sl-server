@@ -20,29 +20,29 @@ class OAuthProviderGuardTest {
     @Test
     @DisplayName("Kakao supports_KAKAO")
     void kakao_supports() {
-        KakaoOAuthProvider p = new KakaoOAuthProvider(builder);
+        KakaoOAuthProvider p = new KakaoOAuthProvider(builder, "test-client-id", "test-secret");
         assertThat(p.supports()).isEqualTo(SocialProvider.KAKAO);
     }
 
     @Test
     @DisplayName("Google supports_GOOGLE")
     void google_supports() {
-        GoogleOAuthProvider p = new GoogleOAuthProvider(builder);
+        GoogleOAuthProvider p = new GoogleOAuthProvider(builder, "test-client-id", "test-secret");
         assertThat(p.supports()).isEqualTo(SocialProvider.GOOGLE);
     }
 
     @Test
     @DisplayName("Kakao verifyAndFetch null/blank 토큰_AUTH_OAUTH_FAILED")
     void kakao_blank_token() {
-        KakaoOAuthProvider p = new KakaoOAuthProvider(builder);
+        KakaoOAuthProvider p = new KakaoOAuthProvider(builder, "test-client-id", "test-secret");
 
-        assertThatThrownBy(() -> p.verifyAndFetch(null))
+        assertThatThrownBy(() -> p.exchangeCodeAndFetch(null, "http://test/cb"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.AUTH_OAUTH_FAILED);
-        assertThatThrownBy(() -> p.verifyAndFetch(""))
+        assertThatThrownBy(() -> p.exchangeCodeAndFetch("", "http://test/cb"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.AUTH_OAUTH_FAILED);
-        assertThatThrownBy(() -> p.verifyAndFetch("   "))
+        assertThatThrownBy(() -> p.exchangeCodeAndFetch("   ", "http://test/cb"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.AUTH_OAUTH_FAILED);
     }
@@ -50,12 +50,12 @@ class OAuthProviderGuardTest {
     @Test
     @DisplayName("Google verifyAndFetch null/blank 토큰_AUTH_OAUTH_FAILED")
     void google_blank_token() {
-        GoogleOAuthProvider p = new GoogleOAuthProvider(builder);
+        GoogleOAuthProvider p = new GoogleOAuthProvider(builder, "test-client-id", "test-secret");
 
-        assertThatThrownBy(() -> p.verifyAndFetch(null))
+        assertThatThrownBy(() -> p.exchangeCodeAndFetch(null, "http://test/cb"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.AUTH_OAUTH_FAILED);
-        assertThatThrownBy(() -> p.verifyAndFetch(""))
+        assertThatThrownBy(() -> p.exchangeCodeAndFetch("", "http://test/cb"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.AUTH_OAUTH_FAILED);
     }

@@ -19,5 +19,9 @@ public interface OAuthProvider {
 
     SocialProvider supports();
 
-    OAuthUserInfo verifyAndFetch(String accessToken);
+    /**
+     * Authorization Code Grant — code + redirectUri 로 provider token endpoint 호출,
+     * access_token 교환 후 user info 조회. Client Secret 켜져있어도 안전.
+     */
+    OAuthUserInfo exchangeCodeAndFetch(String code, String redirectUri);
 }

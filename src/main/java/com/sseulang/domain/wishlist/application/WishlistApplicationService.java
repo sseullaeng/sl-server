@@ -1,10 +1,13 @@
 package com.sseulang.domain.wishlist.application;
 
 import com.sseulang.domain.item.application.ItemApplicationService;
+import com.sseulang.domain.item.application.dto.ItemSummaryResult;
 import com.sseulang.domain.wishlist.domain.Wishlist;
 import com.sseulang.domain.wishlist.domain.WishlistRepository;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +52,15 @@ public class WishlistApplicationService {
             }
             throw violation;
         }
+    }
+
+    /**
+     * 본인이 찜한 Item 목록 페이징 — 삭제된 Item 자동 제외. 찜한 시간 최신순.
+     * 응답은 ItemSummary 형태로 변환해 controller 에서 ItemSummaryResponse 직렬화.
+     */
+    public Page<ItemSummaryResult> listMyWishlistedItems(Long userId, Pageable pageable) {
+        return wishlistRepository.findWishlistedItemsByUserId(userId, pageable)
+                .map(ItemSummaryResult::from);
     }
 
     /**

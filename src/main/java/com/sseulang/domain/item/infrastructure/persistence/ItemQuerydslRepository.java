@@ -1,11 +1,13 @@
 package com.sseulang.domain.item.infrastructure.persistence;
 
 import com.querydsl.core.BooleanBuilder;
+import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.core.types.dsl.NumberExpression;
 import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.sseulang.domain.item.application.dto.ItemSearchCriteria;
+import com.sseulang.domain.item.application.dto.ItemSort;
 import com.sseulang.domain.item.domain.Item;
 import com.sseulang.domain.item.domain.ItemStatus;
 import com.sseulang.domain.item.domain.QItem;
@@ -85,7 +87,7 @@ public class ItemQuerydslRepository {
         List<Item> content = queryFactory
                 .selectFrom(item)
                 .where(where)
-                .orderBy(item.createdAt.desc(), item.id.desc())
+                .orderBy(orderBy(criteria.sort(), item))
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
                 .fetch();
@@ -97,6 +99,20 @@ public class ItemQuerydslRepository {
                 .fetchOne();
 
         return new PageImpl<>(content, pageable, total == null ? 0L : total);
+    }
+
+    /**
+     * sort 옵션 → QueryDSL OrderSpecifier 배열. 동률 시 createdAt DESC 로 안정적 정렬.
+     * default(LATEST) 는 createdAt DESC + id DESC.
+     */
+    private static OrderSpecifier<?>[] orderBy(ItemSort sort, QItem item) {
+        return switch (sort) {
+            case PRICE_ASC -> new OrderSpecifier<?>[]{ item.price.asc(), item.id.desc() };
+            case PRICE_DESC -> new OrderSpecifier<?>[]{ item.price.desc(), item.id.desc() };
+            case VIEW_DESC -> new OrderSpecifier<?>[]{ item.viewCount.desc(), item.createdAt.desc(), item.id.desc() };
+            case WISHLIST_DESC -> new OrderSpecifier<?>[]{ item.wishlistCount.desc(), item.createdAt.desc(), item.id.desc() };
+            case LATEST -> new OrderSpecifier<?>[]{ item.createdAt.desc(), item.id.desc() };
+        };
     }
 
     /**
