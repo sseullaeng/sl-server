@@ -32,7 +32,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-    networks: [internal]
+    networks: [db-internal]
     # ⚠️ ports 미노출 — 외부 인터넷에서 직접 접근 금지. 동일 host 의 nginx/admin SSH tunnel 만 사용.
 
   redis:
@@ -52,7 +52,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks: [internal]
+    networks: [db-internal]
 
   mongo:
     image: mongo:7
@@ -75,7 +75,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-    networks: [internal]
+    networks: [db-internal]
 
   app:
     image: sseulang-backend:${APP_IMAGE_TAG:-latest}
@@ -127,7 +127,7 @@ services:
       # nginx 가 호스트 80/443 → app 의 8080 으로 reverse proxy.
       # 외부에 8080 직접 노출하려면 "8080:8080" 으로 변경 (권장 X — TLS 없이 노출).
       - "127.0.0.1:8080:8080"
-    networks: [internal]
+    networks: [db-internal, egress]
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/actuator/health"]
       interval: 30s
@@ -140,6 +140,13 @@ volumes:
   redis-data:
   mongo-data:
 
+# 네트워크 분리 (Codex 게이트 2 W9):
+#   db-internal: outbound 차단된 internal network — DB/Redis/Mongo 컨테이너 + app. 호스트 다른 컨테이너 격리.
+#   egress: 일반 bridge — app 만 join. 토스/카카오/AWS/SMTP 등 외부 호출 통로.
+# app 은 두 network 모두 join → DB 통신 + 외부 호출 가능.
 networks:
-  internal:
+  db-internal:
+    driver: bridge
+    internal: true
+  egress:
     driver: bridge

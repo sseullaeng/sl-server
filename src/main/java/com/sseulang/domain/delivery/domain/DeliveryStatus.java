@@ -52,4 +52,17 @@ public enum DeliveryStatus {
     public boolean canRequesterCancel() {
         return this == 모집중;
     }
+
+    /**
+     * 라이더 좌표 publish / 참여자 위치 조회가 의미 있는 상태.
+     * <ul>
+     *   <li>{@code 수락}: 라이더가 픽업 장소 이동 중</li>
+     *   <li>{@code 배송중}: 픽업 후 도착지 이동 중</li>
+     * </ul>
+     * 모집중(아직 라이더 없음) / 배송완료 / 정산완료 / 취소(종료) 는 false — 위치 추적 의미 없음 +
+     * 종료 후 위치 publish/조회 차단으로 개인정보 잔류 방지 (Codex 게이트 2 W1).
+     */
+    public boolean canTrackLocation() {
+        return this == 수락 || this == 배송중;
+    }
 }

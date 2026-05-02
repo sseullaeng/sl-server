@@ -1,9 +1,12 @@
 package com.sseulang.domain.payment.presentation;
 
+import com.sseulang.global.common.TraceIdFilter;
+import com.sseulang.global.exception.ErrorCode;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.MDC;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -45,14 +48,27 @@ public class WebhookBodySizeFilter extends OncePerRequestFilter {
         long contentLength = request.getContentLengthLong();
         // Content-Length 미주입 (chunked 또는 누락) 도 거부 — webhook 은 Content-Length 명시 의무.
         if (contentLength < 0 || contentLength > MAX_BODY_BYTES) {
-            response.setStatus(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
-            response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write(
-                    "{\"success\":false,\"error\":{\"code\":\"PAYLOAD_TOO_LARGE\","
-                  + "\"message\":\"webhook body size limit exceeded\"}}"
-            );
+            writeRejection(response);
             return;
         }
         chain.doFilter(request, response);
+    }
+
+    /**
+     * 공통 ApiResponse 형식과 일치하는 413 응답 + traceId 포함. ErrorCode 와 message 도 enum 에서.
+     * GlobalExceptionHandler 를 거치지 않아 traceId 헤더는 TraceIdFilter 에서 이미 세팅됨 — MDC 에서 가져옴.
+     */
+    private static void writeRejection(HttpServletResponse response) throws IOException {
+        ErrorCode code = ErrorCode.PAYLOAD_TOO_LARGE;
+        response.setStatus(code.getStatus().value());
+        response.setContentType("application/json;charset=UTF-8");
+        String traceId = MDC.get(TraceIdFilter.MDC_KEY);
+        // JSON 수동 직렬화 — traceId/message 모두 안전 문자열만이라 escape 안전.
+        String body = "{\"success\":false,\"error\":{"
+                + "\"code\":\"" + code.name() + "\","
+                + "\"message\":\"" + code.getDefaultMessage() + "\","
+                + "\"traceId\":\"" + (traceId == null ? "" : traceId) + "\""
+                + "}}";
+        response.getWriter().write(body);
     }
 }

@@ -842,7 +842,7 @@ PATCH /api/v1/notifications/{id}/read          → null  (id 는 String — Mong
 ```
 - 본인 알림만 페이징 (createdAt DESC).
 - `read=false` 필터 서버 미지원 (현재 클라이언트 책임 — follow-up).
-- 다른 사용자 알림 markRead 시도 시 무시 (영향 0 row).
+- 다른 사용자 알림 / 미존재 id 의 markRead 시도 시 **silently 무시** (예외 X) — 정보 노출 차단 + 멱등.
 
 #### NotificationResponse
 ```json
@@ -993,22 +993,70 @@ POST /api/v1/deliveries
 | PATCH | `/api/v1/deliveries/{id}/complete` | requester | 배송완료 → 정산완료 | requester 차감 → rider 적립 (id-asc 락). 잔액 부족 → 400 INSUFFICIENT_POINT + 전체 롤백 |
 | PATCH | `/api/v1/deliveries/{id}/cancel` | requester | 모집중 → 취소 | body `{ reason? }`. 수락 이후 취소 시 400 |
 
-#### WebSocket / 실시간 위치 — **❌ 현재 미지원**
-- `/topic/delivery/{id}/location` 같은 destination 미구현
-- DB 에 좌표 컬럼 없음 (`Item.lat/lng`, `DeliveryRequest.lat/lng` 모두 X)
-- GitHub issue #51 로 follow-up 등록 — **5/6 이후** (라이더 모바일 클라이언트 합류 후)
-- 그때까지 진행 상황은 폴링 (`GET /deliveries/{id}` refreshInterval 5초) 또는 status 변경 알림으로 대응
+#### 실시간 위치 추적 — STOMP + REST fallback (closed #51)
+
+**Publish (라이더 → 백엔드)**
+```
+destination: /app/delivery/{deliveryId}/location
+payload    : { latitude, longitude, accuracyM?, recordedAt? }
+```
+- 라이더 본인만 publish (그 외 `DELIVERY_FORBIDDEN`)
+- 추적 가능 상태(`수락` / `배송중`) 에서만. 그 외 상태 → `DELIVERY_INVALID_STATE`
+- 같은 `(deliveryId, riderId)` 최소 publish 간격 **1초** — 초과 시 `DELIVERY_LOCATION_TOO_FREQUENT` (429). 권장 주기 **5초**
+- 좌표 한국 범위(33~39N / 124~132E) 강제. 벗어나면 `DELIVERY_LOCATION_INVALID`
+- `recordedAt` drift 서버 시각 ±60초만 허용 — 초과 시 서버 시각으로 자동 정정
+
+**Subscribe (요청자/라이더)**
+```
+destination: /topic/delivery/{deliveryId}/location
+```
+- 참여자(요청자/라이더) + 추적 가능 상태에서만 SUBSCRIBE 통과. 그 외 `FORBIDDEN`
+- payload: 위와 동일 `DeliveryLocation` JSON
+
+**REST fallback (재연결/최초 진입 — 마지막 좌표 즉시 표시)**
+```
+GET /api/v1/deliveries/{id}/location/last
+  → 200 + DeliveryLocation
+  → 204 No Content (캐시 미존재 / TTL 만료 / 종료 상태)
+```
+
+**저장 정책**
+- DB 저장 X. Redis 휘발 캐시 (TTL 30분, 마지막 1건만)
+- 정산완료(`complete`) / 취소(`cancel`) 시 즉시 evict — 종료 후 위치 잔류 차단
 
 #### 활용 예시
 ```jsx
 // 라이더
 await api.patch(`/deliveries/${id}/accept`);   // → 수락
 await api.patch(`/deliveries/${id}/pickup`);   // → 배송중
+
+// 라이더 — 좌표 publish (5초 주기 권장)
+const stomp = ...;
+setInterval(() => {
+  navigator.geolocation.getCurrentPosition(pos => {
+    stomp.publish({
+      destination: `/app/delivery/${id}/location`,
+      body: JSON.stringify({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        accuracyM: pos.coords.accuracy,
+        recordedAt: new Date().toISOString()
+      })
+    });
+  });
+}, 5000);
+
 await api.patch(`/deliveries/${id}/deliver`);  // → 배송완료
 
 // 요청자
 await api.post('/deliveries', { pickupAddress, dropoffAddress, itemDescription, fee });
-await api.patch(`/deliveries/${id}/complete`); // → 정산완료, 잔액 이동
+
+// 요청자 — 라이더 위치 구독 + REST fallback 으로 초기 표시
+const last = await api.get(`/deliveries/${id}/location/last`);  // 204 면 데이터 없음
+if (last.status === 200) renderMarker(last.data);
+stomp.subscribe(`/topic/delivery/${id}/location`, msg => renderMarker(JSON.parse(msg.body)));
+
+await api.patch(`/deliveries/${id}/complete`); // → 정산완료, 잔액 이동, 위치 캐시 evict
 ```
 
 ---

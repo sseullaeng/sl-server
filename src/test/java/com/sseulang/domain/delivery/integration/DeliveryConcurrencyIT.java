@@ -67,7 +67,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         PointHistoryRepositoryImpl.class,
         PointApplicationService.class,
         DeliveryRepositoryImpl.class,
-        DeliveryApplicationService.class
+        DeliveryApplicationService.class,
+        com.sseulang.domain.delivery.application.NoOpDeliveryLocationCache.class
 })
 @Testcontainers
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
