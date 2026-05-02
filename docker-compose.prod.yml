@@ -1,0 +1,145 @@
+# =============================================================================
+# 쓸랭 prod 배포 compose
+#
+# - 모든 비밀번호 / 키 / DB 접속 정보는 `.env.prod` 에서 (gitignored).
+# - DB/Redis/Mongo 는 외부 노출 X (internal bridge network 만). app → DB 만 접근.
+# - app 컨테이너는 nginx (호스트) reverse proxy 가 8080 → 80/443 으로 노출.
+# - 사용:
+#     1) cp .env.prod.example .env.prod    (값 채움)
+#     2) docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+# =============================================================================
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: sseulang-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?required}
+      MYSQL_USER: ${MYSQL_USER:?required}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?required}
+      TZ: Asia/Seoul
+    command:
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+      - "--default-time-zone=+09:00"
+      - "--ngram_token_size=2"
+    volumes:
+      - "mysql-data:/var/lib/mysql"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+    # ⚠️ ports 미노출 — 외부 인터넷에서 직접 접근 금지. 동일 host 의 nginx/admin SSH tunnel 만 사용.
+
+  redis:
+    image: redis:7-alpine
+    container_name: sseulang-redis
+    restart: unless-stopped
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--requirepass"
+      - "${REDIS_PASSWORD:?required}"
+    volumes:
+      - "redis-data:/data"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+  mongo:
+    image: mongo:7
+    container_name: sseulang-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?required}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?required}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:?required}
+      TZ: Asia/Seoul
+    volumes:
+      - "mongo-data:/data/db"
+    healthcheck:
+      test:
+        - "CMD"
+        - "mongosh"
+        - "--quiet"
+        - "--eval"
+        - "db.adminCommand('ping').ok"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  app:
+    image: sseulang-backend:${APP_IMAGE_TAG:-latest}
+    # 또는 build context — CI 가 image push 안 하면 아래 주석 해제:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    container_name: sseulang-app
+    restart: unless-stopped
+    depends_on:
+      mysql:   { condition: service_healthy }
+      redis:   { condition: service_healthy }
+      mongo:   { condition: service_healthy }
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # === DB (compose 내부 service name 으로 접근) ===
+      DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Seoul&rewriteBatchedStatements=true
+      DB_USERNAME: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      MONGO_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/${MONGO_DATABASE}?authSource=admin
+      # === 보안 (.env.prod 에서 주입) ===
+      JWT_SECRET: ${JWT_SECRET:?required}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:?required}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?required}
+      # === OAuth ===
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:?required}
+      KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?required}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?required}
+      # === AWS S3 ===
+      AWS_ACCESS_KEY: ${AWS_ACCESS_KEY:?required}
+      AWS_SECRET_KEY: ${AWS_SECRET_KEY:?required}
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      S3_BUCKET: ${S3_BUCKET:?required}
+      # === 토스페이먼츠 ===
+      TOSS_CLIENT_KEY: ${TOSS_CLIENT_KEY:?required}
+      TOSS_SECRET_KEY: ${TOSS_SECRET_KEY:?required}
+      TOSS_WEBHOOK_SECRET: ${TOSS_WEBHOOK_SECRET:-}
+      # === SMTP (이메일 인증) ===
+      MAIL_HOST: ${MAIL_HOST:?required}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:?required}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:?required}
+      MAIL_FROM: ${MAIL_FROM:-noreply@sseulang.com}
+    ports:
+      # nginx 가 호스트 80/443 → app 의 8080 으로 reverse proxy.
+      # 외부에 8080 직접 노출하려면 "8080:8080" 으로 변경 (권장 X — TLS 없이 노출).
+      - "127.0.0.1:8080:8080"
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+volumes:
+  mysql-data:
+  redis-data:
+  mongo-data:
+
+networks:
+  internal:
+    driver: bridge
