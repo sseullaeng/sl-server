@@ -2,6 +2,7 @@ package com.sseulang.domain.wishlist.application;
 
 import com.sseulang.domain.item.application.ItemApplicationService;
 import com.sseulang.domain.item.application.dto.ItemSummaryResult;
+import com.sseulang.domain.wishlist.application.dto.WishlistToggleResult;
 import com.sseulang.domain.wishlist.domain.Wishlist;
 import com.sseulang.domain.wishlist.domain.WishlistRepository;
 import org.hibernate.exception.ConstraintViolationException;
@@ -36,42 +37,47 @@ public class WishlistApplicationService {
      * 찜 추가. Item 존재 검증은 {@link ItemApplicationService#requireActiveItem} 위임 (CLAUDE.md
      * §3.3 — 다른 도메인 Repository 직접 호출 금지). 이미 있으면 멱등하게 무시.
      * UNIQUE(user_id, item_id) race 는 catch 후 무시 — 그 외 무결성 위반은 재던지기.
+     *
+     * <p>응답으로 fresh wishlistCount 를 반환 — 프론트가 detail 재조회 없이 즉시 UI 갱신.</p>
      */
     @Transactional
-    public void add(Long userId, Long itemId) {
+    public WishlistToggleResult add(Long userId, Long itemId) {
         itemApplicationService.requireActiveItem(itemId);
         if (wishlistRepository.existsByUserIdAndItemId(userId, itemId)) {
-            return;
+            return new WishlistToggleResult(true, itemApplicationService.getWishlistCount(itemId));
         }
         try {
             wishlistRepository.save(Wishlist.create(userId, itemId));
             itemApplicationService.incrementWishlistCount(itemId);
         } catch (DataIntegrityViolationException violation) {
-            if (isUniqueUserItemConflict(violation)) {
-                return;
+            if (!isUniqueUserItemConflict(violation)) {
+                throw violation;
             }
-            throw violation;
+            // race — 다른 트랜잭션이 먼저 추가. 멱등 처리하고 fresh count 만 응답.
         }
+        return new WishlistToggleResult(true, itemApplicationService.getWishlistCount(itemId));
     }
 
     /**
      * 본인이 찜한 Item 목록 페이징 — 삭제된 Item 자동 제외. 찜한 시간 최신순.
-     * 응답은 ItemSummary 형태로 변환해 controller 에서 ItemSummaryResponse 직렬화.
+     * 본인 찜 목록이라 isWishlisted 는 모두 true — DB 조회 없이 ItemSummaryResult 직접 매핑.
      */
     public Page<ItemSummaryResult> listMyWishlistedItems(Long userId, Pageable pageable) {
         return wishlistRepository.findWishlistedItemsByUserId(userId, pageable)
-                .map(ItemSummaryResult::from);
+                .map(item -> ItemSummaryResult.from(item, true));
     }
 
     /**
      * 멱등 삭제. 실제 삭제된 row 가 1 건일 때만 wishlist_count 감소 — 동시 remove 시 underflow 방지.
+     * 응답으로 fresh wishlistCount 반환 — 호출 후 상태는 wishlisted=false.
      */
     @Transactional
-    public void remove(Long userId, Long itemId) {
+    public WishlistToggleResult remove(Long userId, Long itemId) {
         int deleted = wishlistRepository.deleteByUserIdAndItemId(userId, itemId);
         if (deleted > 0) {
             itemApplicationService.decrementWishlistCount(itemId);
         }
+        return new WishlistToggleResult(false, itemApplicationService.getWishlistCount(itemId));
     }
 
     /**

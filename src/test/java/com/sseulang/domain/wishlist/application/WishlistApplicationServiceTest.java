@@ -29,7 +29,7 @@ class WishlistApplicationServiceTest {
         wishRepo = new InMemoryFakeWishlistRepository();
         itemRepo = new InMemoryFakeItemRepository();
         CategoryApplicationService catSvc = new CategoryApplicationService(new InMemoryFakeCategoryRepository());
-        ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class), new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator());
+        ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class), new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(), new com.sseulang.domain.item.application.NoOpWishlistView());
         service = new WishlistApplicationService(wishRepo, itemSvc);
 
         Item item = itemRepo.save(Item.create(

@@ -3,6 +3,7 @@ package com.sseulang.domain.item.infrastructure.persistence;
 import com.sseulang.domain.item.application.dto.ItemSearchCriteria;
 import com.sseulang.domain.item.domain.Item;
 import com.sseulang.domain.item.domain.ItemRepository;
+import com.sseulang.domain.item.domain.ItemStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
@@ -36,6 +37,14 @@ public class ItemRepositoryImpl implements ItemRepository {
     }
 
     @Override
+    public Page<Item> findBySellerIdAndStatus(Long sellerId, ItemStatus status, Pageable pageable) {
+        if (status == null) {
+            return jpa.findBySellerIdExcludingDeleted(sellerId, pageable);
+        }
+        return jpa.findBySellerIdAndStatus(sellerId, status, pageable);
+    }
+
+    @Override
     public Item save(Item item) {
         return jpa.save(item);
     }
@@ -53,5 +62,10 @@ public class ItemRepositoryImpl implements ItemRepository {
     @Override
     public int decrementWishlistCount(Long itemId) {
         return jpa.decrementWishlistCount(itemId);
+    }
+
+    @Override
+    public Optional<Integer> getWishlistCount(Long itemId) {
+        return jpa.getWishlistCount(itemId);
     }
 }

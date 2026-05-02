@@ -59,6 +59,7 @@ public class ItemController {
                     + "sort 옵션: latest(default) / price_asc / price_desc / view_desc / wishlist_desc. 인증 불필요.")
     @GetMapping
     public ApiResponse<PageResponse<ItemSummaryResponse>> list(
+            @AuthenticationPrincipal(errorOnInvalidType = false) Long viewerId,
             @RequestParam(name = "q", required = false) String q,
             @RequestParam(name = "categoryId", required = false) Long categoryId,
             @RequestParam(name = "tradeType", required = false) TradeType tradeType,
@@ -76,7 +77,8 @@ public class ItemController {
                 q, categoryId, tradeType, minPrice, maxPrice, tag,
                 com.sseulang.domain.item.application.dto.ItemSort.parse(sort));
 
-        Page<ItemSummaryResponse> result = itemService.search(criteria, pageable)
+        // 비로그인 — viewerId null → isWishlisted 항상 false. 로그인 시 단일 SELECT 로 enrich.
+        Page<ItemSummaryResponse> result = itemService.search(criteria, pageable, viewerId)
                 .map(ItemSummaryResponse::from);
         return ApiResponse.ok(PageResponse.from(result));
     }

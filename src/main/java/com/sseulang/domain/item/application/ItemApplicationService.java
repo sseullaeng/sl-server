@@ -12,6 +12,7 @@ import com.sseulang.domain.item.application.dto.ItemUpdateCommand;
 import com.sseulang.domain.item.domain.Item;
 import com.sseulang.domain.item.domain.ItemRepository;
 import com.sseulang.domain.item.domain.ItemStatus;
+import com.sseulang.domain.item.domain.WishlistView;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
 import org.springframework.data.domain.Page;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @Transactional(readOnly = true)
@@ -30,17 +32,20 @@ public class ItemApplicationService {
     private final CategoryApplicationService categoryApplicationService;
     private final UserApplicationService userApplicationService;
     private final PresignedUrlGenerator presignedUrlGenerator;
+    private final WishlistView wishlistView;
 
     public ItemApplicationService(
             ItemRepository itemRepository,
             CategoryApplicationService categoryApplicationService,
             UserApplicationService userApplicationService,
-            PresignedUrlGenerator presignedUrlGenerator
+            PresignedUrlGenerator presignedUrlGenerator,
+            WishlistView wishlistView
     ) {
         this.itemRepository = itemRepository;
         this.categoryApplicationService = categoryApplicationService;
         this.userApplicationService = userApplicationService;
         this.presignedUrlGenerator = presignedUrlGenerator;
+        this.wishlistView = wishlistView;
     }
 
     @Transactional
@@ -74,8 +79,34 @@ public class ItemApplicationService {
         return ItemDetailResult.from(item);
     }
 
+    /**
+     * 공개 검색·필터. viewerId 가 null 이면 비로그인 — isWishlisted 는 항상 false.
+     * Page 결과의 itemId 들에 대해 단일 SELECT 로 viewer 의 찜 여부 enrich (N+1 회피).
+     */
+    public Page<ItemSummaryResult> search(ItemSearchCriteria criteria, Pageable pageable, Long viewerId) {
+        return enrich(itemRepository.search(criteria, pageable), viewerId);
+    }
+
+    /** viewer 모름 — 비로그인 entry / 시스템 호출용. */
     public Page<ItemSummaryResult> search(ItemSearchCriteria criteria, Pageable pageable) {
-        return itemRepository.search(criteria, pageable).map(ItemSummaryResult::from);
+        return search(criteria, pageable, null);
+    }
+
+    /**
+     * 마이페이지용 본인 물품 목록. status null = 삭제 제외 전체. viewer = sellerId 본인이므로
+     * 본인이 찜한 자기 물품은 표시 (서비스 정책상 가능). viewerId 명시로 isWishlisted 계산.
+     */
+    public Page<ItemSummaryResult> findMyItems(Long sellerId, ItemStatus status, Pageable pageable) {
+        return enrich(itemRepository.findBySellerIdAndStatus(sellerId, status, pageable), sellerId);
+    }
+
+    private Page<ItemSummaryResult> enrich(Page<Item> page, Long viewerId) {
+        if (page.isEmpty()) {
+            return page.map(item -> ItemSummaryResult.from(item, false));
+        }
+        List<Long> ids = page.getContent().stream().map(Item::getId).toList();
+        Set<Long> wishlisted = wishlistView.findWishlistedItemIds(viewerId, ids);
+        return page.map(item -> ItemSummaryResult.from(item, wishlisted.contains(item.getId())));
     }
 
     @Transactional
@@ -203,6 +234,15 @@ public class ItemApplicationService {
     @Transactional
     public void decrementWishlistCount(Long itemId) {
         itemRepository.decrementWishlistCount(itemId);
+    }
+
+    /**
+     * Fresh wishlist_count 조회 — bulk update 직후 호출해도 정확한 DB 값. 본인 토글 응답에 즉시 반영용.
+     * row 가 없으면 ITEM_NOT_FOUND.
+     */
+    public int getWishlistCount(Long itemId) {
+        return itemRepository.getWishlistCount(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
     }
 
     private Item findOrThrow(Long id) {
