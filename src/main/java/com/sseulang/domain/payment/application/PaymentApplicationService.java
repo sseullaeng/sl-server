@@ -108,7 +108,17 @@ public class PaymentApplicationService {
         }
 
         // 1차 검증 — 클라가 보낸 amount 와 저장 amount 일치 (위변조 방지).
-        payment.verifyAmount(cmd.amount());
+        try {
+            payment.verifyAmount(cmd.amount());
+        } catch (BusinessException e) {
+            if (e.getErrorCode() == ErrorCode.PAYMENT_AMOUNT_MISMATCH) {
+                log.error("[toss-confirm][AUDIT-AMOUNT-MISMATCH-1] paymentId={} merchantUid={} "
+                        + "expectedAmount={} clientAmount={} requesterId={}",
+                        payment.getId(), payment.getMerchantUid(),
+                        payment.getAmount(), cmd.amount(), cmd.requesterId());
+            }
+            throw e;
+        }
 
         // 멱등 — 이미 완료된 결제는 토스 호출 없이 그대로 반환.
         if (payment.getStatus().isPaid()) {
@@ -134,7 +144,17 @@ public class PaymentApplicationService {
         if (!payment.getMerchantUid().equals(result.orderId())) {
             throw new BusinessException(ErrorCode.PAYMENT_VERIFY_FAILED);
         }
-        payment.verifyAmount(result.amount());
+        try {
+            payment.verifyAmount(result.amount());
+        } catch (BusinessException e) {
+            if (e.getErrorCode() == ErrorCode.PAYMENT_AMOUNT_MISMATCH) {
+                log.error("[toss-confirm][AUDIT-AMOUNT-MISMATCH-2] paymentId={} merchantUid={} "
+                        + "expectedAmount={} tossAmount={} paymentKey={}",
+                        payment.getId(), payment.getMerchantUid(),
+                        payment.getAmount(), result.amount(), result.paymentKey());
+            }
+            throw e;
+        }
 
         boolean newlyPaid = payment.markAsPaid(
                 result.paymentKey(),
@@ -298,7 +318,19 @@ public class PaymentApplicationService {
             return true;  // confirm 흐름으로 이미 처리. 멱등 정상.
         }
         // amount 위변조 검증 — lookup amount 와 우리 저장 amount 일치 확인.
-        payment.verifyAmount(lookup.amount());
+        // mismatch 시 명시적 ERROR 로깅 — audit row 는 트랜잭션 롤백되므로 운영 모니터링이
+        // ERROR level 로그를 잡아 알림으로 활용 (follow-up #53 round 1).
+        try {
+            payment.verifyAmount(lookup.amount());
+        } catch (BusinessException e) {
+            if (e.getErrorCode() == ErrorCode.PAYMENT_AMOUNT_MISMATCH) {
+                log.error("[toss-webhook][AUDIT-AMOUNT-MISMATCH] paymentId={} merchantUid={} "
+                        + "expectedAmount={} lookupAmount={} paymentKey={}",
+                        payment.getId(), payment.getMerchantUid(),
+                        payment.getAmount(), lookup.amount(), lookup.paymentKey());
+            }
+            throw e;
+        }
         boolean newlyPaid = payment.markAsPaid(
                 lookup.paymentKey(), lookup.method(), lookup.approvedAt(), lookup.rawResponse()
         );
