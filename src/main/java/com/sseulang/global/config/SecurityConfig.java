@@ -169,6 +169,8 @@ public class SecurityConfig {
                         .requestMatchers(PUBLIC_AUTH_ENDPOINTS).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/items/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
+                        // 다른 사용자 공개 프로필 — ItemDetail 의 sellerId 등 비로그인 접근 허용.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/*/profile").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook/**").permitAll()
                         // WebSocket handshake 는 인증 없이 통과 — STOMP CONNECT 단계의 ChannelInterceptor 가
                         // Authorization 헤더 검증으로 인증 책임 (follow-up #19 native 토큰 인증).

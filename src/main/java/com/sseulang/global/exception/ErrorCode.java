@@ -40,6 +40,8 @@ public enum ErrorCode {
     ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "물품을 찾을 수 없습니다."),
     ITEM_FORBIDDEN(HttpStatus.FORBIDDEN, "물품에 대한 권한이 없습니다."),
     ITEM_IMAGE_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "이미지는 최대 5장까지 등록할 수 있습니다."),
+    ITEM_IMAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "지정한 이미지를 찾을 수 없습니다."),
+    ITEM_IMAGE_ORDER_MISMATCH(HttpStatus.BAD_REQUEST, "재배치 입력이 기존 이미지 set 과 일치하지 않습니다."),
     ITEM_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서 수행할 수 없는 동작입니다."),
 
     // 거래

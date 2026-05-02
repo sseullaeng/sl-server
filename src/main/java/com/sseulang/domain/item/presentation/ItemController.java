@@ -5,6 +5,9 @@ import com.sseulang.domain.item.application.dto.ItemSearchCriteria;
 import com.sseulang.domain.item.domain.TradeType;
 import com.sseulang.domain.item.presentation.dto.ItemDetailResponse;
 import com.sseulang.domain.item.presentation.dto.ItemIdResponse;
+import com.sseulang.domain.item.presentation.dto.ItemImagesAppendRequest;
+import com.sseulang.domain.item.presentation.dto.ItemImagesReorderRequest;
+import com.sseulang.domain.item.presentation.dto.ItemImagesResponse;
 import com.sseulang.domain.item.presentation.dto.ItemRegisterRequest;
 import com.sseulang.domain.item.presentation.dto.ItemSummaryResponse;
 import com.sseulang.domain.item.presentation.dto.ItemUpdateRequest;
@@ -111,5 +114,47 @@ public class ItemController {
     ) {
         itemService.delete(id, requesterId);
         return ApiResponse.ok();
+    }
+
+    @Operation(summary = "물품 이미지 부분 추가",
+            description = "본인 + 이메일 인증 필수. 합산 5장 한도. 임시 폴더(items/{userId}/) 자동 promote. "
+                    + "기존이 비었으면 첫 번째 새 url 이 썸네일. PATCH 전체교체보다 효율적.")
+    @PostMapping("/{id}/images")
+    public ApiResponse<ItemImagesResponse> appendImages(
+            @AuthenticationPrincipal Long requesterId,
+            @PathVariable("id") Long id,
+            @Valid @RequestBody ItemImagesAppendRequest request
+    ) {
+        return ApiResponse.ok(ItemImagesResponse.of(
+                itemService.appendImages(id, requesterId, request.imageUrls())
+        ));
+    }
+
+    @Operation(summary = "물품 이미지 단건 제거",
+            description = "본인 + 이메일 인증 필수. 미존재 url 은 404 ITEM_IMAGE_NOT_FOUND. "
+                    + "제거 후 sortOrder 1..N 재정렬 + 첫 번째를 새 썸네일로 자동 지정. S3 best-effort delete.")
+    @DeleteMapping("/{id}/images")
+    public ApiResponse<ItemImagesResponse> removeImage(
+            @AuthenticationPrincipal Long requesterId,
+            @PathVariable("id") Long id,
+            @RequestParam("imageUrl") String imageUrl
+    ) {
+        return ApiResponse.ok(ItemImagesResponse.of(
+                itemService.removeImage(id, requesterId, imageUrl)
+        ));
+    }
+
+    @Operation(summary = "물품 이미지 순서 변경",
+            description = "본인 + 이메일 인증 필수. imageUrls 가 기존 set 과 정확히 일치해야 함 (중복/누락 X). "
+                    + "다르면 400 ITEM_IMAGE_ORDER_MISMATCH. 첫 번째가 새 썸네일.")
+    @PatchMapping("/{id}/images/order")
+    public ApiResponse<ItemImagesResponse> reorderImages(
+            @AuthenticationPrincipal Long requesterId,
+            @PathVariable("id") Long id,
+            @Valid @RequestBody ItemImagesReorderRequest request
+    ) {
+        return ApiResponse.ok(ItemImagesResponse.of(
+                itemService.reorderImages(id, requesterId, request.imageUrls())
+        ));
     }
 }

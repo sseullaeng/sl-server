@@ -22,4 +22,14 @@ public interface PresignedUrlGenerator {
      * @return 승격된 정식 GET URL (sourceUrl 의 prefix 만 toPrefix 로 치환). 비매칭 시 sourceUrl 반환.
      */
     String promote(String sourceUrl, String fromPrefix, String toPrefix);
+
+    /**
+     * 단건 객체 삭제 — best-effort. Item 이미지 부분 제거 시 S3 정리용.
+     *
+     * <p>S3 미존재(이미 삭제됨) 또는 네트워크 오류는 예외를 삼키고 로깅만 — DB 트랜잭션은 이미
+     * 커밋되어야 사용자 의도가 보존된다. 잔여 객체는 lifecycle 정책으로 정리.</p>
+     *
+     * @param sourceUrl 정식 폴더 GET URL (또는 key 자체)
+     */
+    void delete(String sourceUrl);
 }
