@@ -213,6 +213,22 @@ public class TransactionApplicationService {
     }
 
     /**
+     * Admin 거래 검색 (round 9). 모든 필터 nullable, 최신순. cross-aggregate join 부담 회피로
+     * keyword 는 itemId/transactionId 숫자 매칭만 (email/nickname LIKE 는 follow-up).
+     */
+    public Page<TransactionResult> adminSearch(
+            java.time.LocalDateTime startDate,
+            java.time.LocalDateTime endDate,
+            com.sseulang.domain.item.domain.TradeType tradeType,
+            TransactionStatus status,
+            String keyword,
+            Pageable pageable
+    ) {
+        return transactionRepository.adminSearch(startDate, endDate, tradeType, status, keyword, pageable)
+                .map(TransactionResult::from);
+    }
+
+    /**
      * 본인이 reviewer 로 아직 작성하지 않은 거래완료 거래 페이징 (follow-up #56).
      *
      * <p>completedAt 이 7일 이내인 것만 — 작성 가능 기간이 지난 거래는 제외 (가이드 §5.5).

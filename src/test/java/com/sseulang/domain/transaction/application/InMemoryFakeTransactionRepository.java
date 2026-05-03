@@ -131,4 +131,31 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
         }
         return result;
     }
+
+    @Override
+    public Page<Transaction> adminSearch(
+            LocalDateTime startDate,
+            LocalDateTime endDate,
+            com.sseulang.domain.item.domain.TradeType tradeType,
+            TransactionStatus status,
+            String keyword,
+            Pageable pageable
+    ) {
+        Long keywordId = null;
+        if (keyword != null && !keyword.isBlank()) {
+            try { keywordId = Long.parseLong(keyword.trim()); } catch (NumberFormatException ignored) { }
+        }
+        final Long kId = keywordId;
+        List<Transaction> filtered = store.values().stream()
+                .filter(t -> startDate == null || t.getCreatedAt() == null || !t.getCreatedAt().isBefore(startDate))
+                .filter(t -> endDate == null || t.getCreatedAt() == null || !t.getCreatedAt().isAfter(endDate))
+                .filter(t -> tradeType == null || t.getTradeType() == tradeType)
+                .filter(t -> status == null || t.getStatus() == status)
+                .filter(t -> kId == null || kId.equals(t.getId()) || kId.equals(t.getItemId()))
+                .sorted(Comparator.comparingLong(Transaction::getId).reversed())
+                .toList();
+        int start = Math.min((int) pageable.getOffset(), filtered.size());
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        return new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
+    }
 }

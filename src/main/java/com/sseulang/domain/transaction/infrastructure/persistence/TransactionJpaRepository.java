@@ -33,6 +33,28 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
             """)
     List<TransactionStatusCount> countGroupByStatusJpql();
 
+    /**
+     * Admin 거래 검색 (round 9). created_at [start, end] + tradeType / status / keywordId 필터.
+     * 모두 nullable. keywordId 는 t.id 또는 t.itemId 정확 매칭. 최신순.
+     */
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE (:start IS NULL OR t.createdAt >= :start)
+               AND (:end   IS NULL OR t.createdAt <= :end)
+               AND (:tradeType IS NULL OR t.tradeType = :tradeType)
+               AND (:status    IS NULL OR t.status    = :status)
+               AND (:keywordId IS NULL OR t.id = :keywordId OR t.itemId = :keywordId)
+             ORDER BY t.id DESC
+            """)
+    Page<Transaction> adminSearchJpql(
+            @Param("start") java.time.LocalDateTime start,
+            @Param("end")   java.time.LocalDateTime end,
+            @Param("tradeType") com.sseulang.domain.item.domain.TradeType tradeType,
+            @Param("status")    TransactionStatus status,
+            @Param("keywordId") Long keywordId,
+            Pageable pageable
+    );
+
     /** Admin 회원 카드용 — sellerId 로 참여한 거래 (sellerId, count). */
     @Query("""
             SELECT t.sellerId AS userId, COUNT(t) AS cnt FROM Transaction t
