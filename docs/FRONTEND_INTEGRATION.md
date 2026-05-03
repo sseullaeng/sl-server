@@ -280,6 +280,14 @@ export const parseKst = (iso) => dayjs.tz(iso, 'Asia/Seoul');
 | `DELIVERY_SELF_NOT_ALLOWED` | 400 | 본인 요청 수락 시도 |
 | `DELIVERY_INVALID_STATE` | 400 | 상태 머신 위반 |
 
+### 고객지원
+| code | HTTP | 의미 |
+|---|---|---|
+| `INQUIRY_NOT_FOUND` | 404 | 1:1 문의 없음 |
+| `INQUIRY_FORBIDDEN` | 403 | 본인 문의가 아님 |
+| `INQUIRY_INVALID_STATE` | 400 | PENDING 아닌 문의 삭제 시도 / 답변 없이 DONE 변경 등 |
+| `SUPPORT_POST_NOT_FOUND` | 404 | FAQ/QNA 게시글 없음 |
+
 ### 시스템
 | code | HTTP | 의미 |
 |---|---|---|
@@ -461,6 +469,7 @@ POST /api/v1/withdrawals
 | `PROFILE` | `profiles/{userId}/...` | 본인 프로필 이미지 | 로그인만 (이메일 인증 우회) |
 | `ITEM` | `items/{userId}/...` (임시) → `items/{itemId}/...` (등록 후) | 물품 이미지 | 이메일 인증 |
 | `MESSAGE` | `messages/{userId}/...` | 채팅 첨부 이미지 | 이메일 인증 |
+| `SUPPORT` | `support/{userId}/...` | 1:1 문의 첨부 이미지 | 이메일 인증 |
 | `NOTICE` / `BANNER` | 도메인 전용 | 관리자 |
 
 ### 룰
@@ -1059,6 +1068,62 @@ stomp.subscribe(`/topic/delivery/${id}/location`, msg => renderMarker(JSON.parse
 await api.patch(`/deliveries/${id}/complete`); // → 정산완료, 잔액 이동, 위치 캐시 evict
 ```
 
+### 10.14 Inquiry (1:1 문의 — 본인)
+
+비공개 1:1 문의. 본인이 작성·삭제, 본인만 조회. 관리자가 답변. 첨부 이미지 최대 5장 (presigned `purpose=SUPPORT`).
+
+**Schema (`InquiryResponse`)**
+```jsonc
+{
+  "id": 12,
+  "userId": 5,
+  "category": "결제",                   // 계정 / 거래 / 결제 / 배송 / 기타
+  "title": "환불 처리가 안 됩니다",
+  "content": "어제 17시쯤 결제했는데 ...",
+  "email": "user@example.com",          // 답변 받을 이메일 (작성 시점 본인 이메일 스냅샷)
+  "status": "PENDING",                  // PENDING / PROCESSING / DONE
+  "imageUrls": [],                      // 최대 5장
+  "adminReply": null,                   // 답변 전이면 null
+  "repliedAt": null,
+  "createdAt": "2026-05-03T18:00:00",
+  "updatedAt": "2026-05-03T18:00:00"
+}
+```
+
+**Endpoints (사용자)**
+- `POST /api/v1/support/inquiries` — 작성. body: `{category, title, content, email, imageUrls?}` → 201 `data: id`.
+- `GET /api/v1/support/inquiries/me?status=&page=&size=` — 본인 목록 (최신순).
+- `GET /api/v1/support/inquiries/{id}` — 단건. 본인 것 아니면 `INQUIRY_FORBIDDEN`.
+- `DELETE /api/v1/support/inquiries/{id}` — PENDING 상태일 때만. 답변 시작 후엔 `INQUIRY_INVALID_STATE`.
+
+**삭제 정책**
+- `PENDING` → 본인 삭제 가능
+- `PROCESSING` / `DONE` → 본인 삭제 불가 (감사 추적). 관리자만 hard-delete 가능.
+
+### 10.15 SupportPost (FAQ / QNA — 공개)
+
+관리자가 작성하는 공개 게시글. 비로그인 포함 누구나 GET 조회.
+
+**Schema (`SupportPostResponse`)**
+```jsonc
+{
+  "id": 7,
+  "postType": "FAQ",                    // FAQ / QNA
+  "category": "결제",
+  "question": "결제 후 영수증은 어디서 받을 수 있나요?",
+  "answer": "마이페이지 > 결제 내역에서 다운로드 가능합니다.",
+  "imageUrls": [],
+  "createdAt": "...",
+  "updatedAt": "..."
+}
+```
+
+**Endpoints (공개)**
+- `GET /api/v1/support/posts?type=FAQ|QNA&category=&page=&size=` — type 필수 (FAQ 또는 QNA), category 선택. 최신순.
+- `GET /api/v1/support/posts/{id}` — 단건.
+
+**카테고리 enum**: `계정 / 거래 / 결제 / 배송 / 기타` (한글 그대로). Inquiry 와 공유.
+
 ---
 
 ## 11. 관리자 (Admin) 영역
@@ -1242,7 +1307,25 @@ GET /api/v1/admin/stats/dashboard               → AdminDashboardResponse
 }
 ```
 
-### 11.8 admin 호출 시 흔한 함정
+### 11.8 AdminInquiry — 1:1 문의 답변/관리
+
+본 도메인은 `Inquiry` (사용자용 §10.14) 와 동일 데이터. 응답 schema 동일.
+
+- `GET /api/v1/admin/inquiries?status=&page=&size=` — 전체 목록 (status 필터 선택, 최신순)
+- `GET /api/v1/admin/inquiries/{id}` — 단건
+- `PATCH /api/v1/admin/inquiries/{id}/reply` — 답변 작성. body: `{adminReply, status?}`. status 미지정 시 자동 `DONE`.
+- `PATCH /api/v1/admin/inquiries/{id}/status` — body: `{status}`. 답변 없이 `DONE` 시도 시 400.
+- `DELETE /api/v1/admin/inquiries/{id}` — hard delete. 사용자 본인 삭제와 달리 상태 제약 없음.
+
+### 11.9 AdminSupportPost — FAQ/QNA CRUD
+
+- `POST /api/v1/admin/support/posts` — body: `{postType, category, question, answer, imageUrls?}` → 201 `data: id`
+- `PUT /api/v1/admin/support/posts/{id}` — 전체 수정 (body 동일)
+- `DELETE /api/v1/admin/support/posts/{id}` — hard delete
+
+조회는 사용자 endpoint (`GET /api/v1/support/posts`, §10.15) 를 그대로 사용.
+
+### 11.10 admin 호출 시 흔한 함정
 
 | 증상 | 원인 |
 |---|---|
@@ -1330,6 +1413,7 @@ PM·프론트 합의 후 본 문서 갱신 + `application-prod.yml` 환경변수
 
 ## 17. 변경 이력
 
+- **2026-05-03 (라운드 7)** — 고객지원 도메인 추가: §10.14 Inquiry / §10.15 SupportPost (FAQ·QNA), §11.8 AdminInquiry / §11.9 AdminSupportPost. presigned `purpose=SUPPORT` 추가, ErrorCode `INQUIRY_NOT_FOUND/FORBIDDEN/INVALID_STATE` + `SUPPORT_POST_NOT_FOUND` 추가. §11.8 흔한 함정 → §11.10.
 - **2026-05-03 (라운드 6)** — §11 관리자(Admin) 영역 신설 — AdminAuth/User/Banner/Notice/Report/Withdrawal/Stats 7개 endpoint group + Dashboard schema. 페이징/환경/트러블슈팅 §12~17 재번호.
 - **2026-05-03 (라운드 5 보강)** — §10 도메인 schema 누락분 추가 (Banner/Notice/Notification/UserBlock/Review/Delivery 6개).
 - **2026-05-03 (라운드 5)** — 채팅 도메인 schema 정확성 보강, STOMP destination 잘못된 매핑 수정, Item/ChatRoom 부분 편집 endpoint 추가, 도메인 schema 통합 §10 신설.

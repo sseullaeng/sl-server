@@ -47,7 +47,8 @@ public class FileApplicationService {
     /** 일반 사용자가 직접 호출 가능한 purpose. 그 외는 도메인 전용 엔드포인트로 분리. */
     private static final Set<FilePurpose> USER_ALLOWED_PURPOSES = EnumSet.of(
             FilePurpose.PROFILE,
-            FilePurpose.ITEM
+            FilePurpose.ITEM,
+            FilePurpose.SUPPORT
     );
 
     private static final Map<String, String> EXTENSION_BY_CONTENT_TYPE = Map.of(
