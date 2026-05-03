@@ -41,13 +41,22 @@ public class SmtpEmailSender implements EmailSender {
 
     @Override
     public void sendVerificationEmail(String toEmail, String verificationUrl) {
+        sendHtml(toEmail, SUBJECT, buildHtml(verificationUrl));
+    }
+
+    @Override
+    public void sendInquiryReplyEmail(String toEmail, String subject, String html) {
+        sendHtml(toEmail, subject, html);
+    }
+
+    private void sendHtml(String toEmail, String subject, String html) {
         MimeMessage message = mailSender.createMimeMessage();
         try {
             MimeMessageHelper helper = new MimeMessageHelper(message, false, StandardCharsets.UTF_8.name());
             helper.setFrom(fromAddress);
             helper.setTo(toEmail);
-            helper.setSubject(SUBJECT);
-            helper.setText(buildHtml(verificationUrl), true);
+            helper.setSubject(subject);
+            helper.setText(html, true);
         } catch (MessagingException e) {
             throw new RuntimeException("이메일 메시지 빌드 실패: " + e.getMessage(), e);
         }

@@ -25,7 +25,7 @@ class NotificationApplicationServiceTest {
     @BeforeEach
     void setUp() {
         repo = new InMemoryFakeNotificationRepository();
-        service = new NotificationApplicationService(repo);
+        service = new NotificationApplicationService(repo, new com.sseulang.domain.user.application.InMemoryFakeUserRepository());
     }
 
     @Test

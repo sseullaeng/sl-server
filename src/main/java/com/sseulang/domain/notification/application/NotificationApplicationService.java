@@ -15,10 +15,18 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class NotificationApplicationService {
 
-    private final NotificationRepository notificationRepository;
+    /** Admin broadcast 청크 크기 — 활성 사용자 id 청크 페이징 + 배치 INSERT 단위. */
+    private static final int BROADCAST_CHUNK_SIZE = 500;
 
-    public NotificationApplicationService(NotificationRepository notificationRepository) {
+    private final NotificationRepository notificationRepository;
+    private final com.sseulang.domain.user.domain.UserRepository userRepository;
+
+    public NotificationApplicationService(
+            NotificationRepository notificationRepository,
+            com.sseulang.domain.user.domain.UserRepository userRepository
+    ) {
         this.notificationRepository = notificationRepository;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -60,5 +68,35 @@ public class NotificationApplicationService {
     /** 본인 unread 알림 모두 read 처리 (atomic UPDATE multi). 처리 건수 반환 — 0 도 정상. */
     public long markAllAsRead(Long userId) {
         return notificationRepository.markAllAsReadByUserId(userId);
+    }
+
+    /**
+     * Admin broadcast — 활성 사용자(blocked/deleted 제외) 전원에게 동일 알림 발송.
+     * 청크 페이징 + Mongo 단위 INSERT 로 OOM 방지. 처리 건수 반환.
+     *
+     * <p>type 은 {@link NotificationType#공지} 고정. linkType=null, linkId=null (특정 자원 아님).</p>
+     */
+    public long broadcast(String title, String content) {
+        if (title == null || title.isBlank()) {
+            throw new IllegalArgumentException("title 은 필수입니다");
+        }
+        if (content == null || content.isBlank()) {
+            throw new IllegalArgumentException("content 는 필수입니다");
+        }
+        long total = 0;
+        long afterId = 0;
+        while (true) {
+            java.util.List<Long> chunk = userRepository.findActiveIdsAfter(afterId, BROADCAST_CHUNK_SIZE);
+            if (chunk.isEmpty()) break;
+            for (Long uid : chunk) {
+                notificationRepository.save(
+                        Notification.create(uid, NotificationType.공지, title, content, null, null)
+                );
+            }
+            total += chunk.size();
+            afterId = chunk.get(chunk.size() - 1);
+            if (chunk.size() < BROADCAST_CHUNK_SIZE) break;
+        }
+        return total;
     }
 }
