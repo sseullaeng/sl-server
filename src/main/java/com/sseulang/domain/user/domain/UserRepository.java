@@ -75,4 +75,13 @@ public interface UserRepository {
      * 게이트 2 보강 — total - blocked - deleted 의 이중 차감 회피.
      */
     long countActive();
+
+    /**
+     * Admin broadcast 용 — 활성 사용자 id 청크 페이징. blocked/deleted 제외.
+     * 큰 사용자 수에서 OOM 방지를 위해 호출자가 청크 단위로 호출. id ASC 안정 정렬.
+     *
+     * @param afterId 이전 호출의 마지막 id (처음 호출은 0)
+     * @param limit   페이지 크기
+     */
+    java.util.List<Long> findActiveIdsAfter(long afterId, int limit);
 }

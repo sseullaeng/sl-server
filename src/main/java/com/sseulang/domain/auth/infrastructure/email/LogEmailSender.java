@@ -29,4 +29,9 @@ public class LogEmailSender implements EmailSender {
     public void sendVerificationEmail(String toEmail, String verificationUrl) {
         log.info("[email-verification] to={} url={}", toEmail, verificationUrl);
     }
+
+    @Override
+    public void sendInquiryReplyEmail(String toEmail, String subject, String html) {
+        log.info("[inquiry-reply] to={} subject={} (html len={})", toEmail, subject, html == null ? 0 : html.length());
+    }
 }

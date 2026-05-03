@@ -105,4 +105,10 @@ public class UserRepositoryImpl implements UserRepository {
     public long countActive() {
         return jpa.countActive();
     }
+
+    @Override
+    public java.util.List<Long> findActiveIdsAfter(long afterId, int limit) {
+        if (limit <= 0) return java.util.Collections.emptyList();
+        return jpa.findActiveIdsAfter(afterId, org.springframework.data.domain.PageRequest.of(0, limit));
+    }
 }

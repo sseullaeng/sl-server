@@ -122,4 +122,15 @@ public class InMemoryFakeUserRepository implements UserRepository {
         // 테스트 fake — 검색·필터 미구현. 기존 findAllForAdmin 으로 대체 위임.
         return findAllForAdmin(pageable);
     }
+
+    @Override
+    public java.util.List<Long> findActiveIdsAfter(long afterId, int limit) {
+        return store.values().stream()
+                .filter(u -> !u.isBlocked() && !u.isDeleted())
+                .map(User::getId)
+                .filter(id -> id > afterId)
+                .sorted()
+                .limit(limit)
+                .toList();
+    }
 }

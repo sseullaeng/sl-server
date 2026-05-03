@@ -151,4 +151,8 @@ interface UserJpaRepository extends JpaRepository<User, Long> {
      */
     @Query("SELECT COUNT(u) FROM User u WHERE u.blocked = false AND u.deleted = false")
     long countActive();
+
+    /** Admin broadcast — 활성 사용자 id 만 청크 페이징. id ASC. */
+    @Query("SELECT u.id FROM User u WHERE u.blocked = false AND u.deleted = false AND u.id > :afterId ORDER BY u.id ASC")
+    java.util.List<Long> findActiveIdsAfter(@Param("afterId") long afterId, org.springframework.data.domain.Pageable pageable);
 }
