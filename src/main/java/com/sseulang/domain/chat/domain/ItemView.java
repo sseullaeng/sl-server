@@ -17,6 +17,6 @@ public interface ItemView {
      */
     Map<Long, ItemProjection> findByIds(Collection<Long> itemIds);
 
-    /** 채팅 응답용 아이템 최소 projection. 제목 + 썸네일 URL 만. */
-    record ItemProjection(Long id, String title, String thumbnailUrl) { }
+    /** 채팅 응답용 아이템 최소 projection. 제목 + 썸네일 + 판매자 id (viewer 본인=isSeller 판정용). */
+    record ItemProjection(Long id, String title, String thumbnailUrl, Long sellerId) { }
 }

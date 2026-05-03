@@ -46,4 +46,16 @@ public class InMemoryFakeNotificationRepository implements NotificationRepositor
         int end = Math.min(start + pageable.getPageSize(), mine.size());
         return new PageImpl<>(mine.subList(start, end), pageable, mine.size());
     }
+
+    @Override
+    public long markAllAsReadByUserId(Long userId) {
+        long count = 0;
+        for (Notification n : store.values()) {
+            if (n.getUserId().equals(userId) && !n.isRead()) {
+                n.markAsRead();
+                count++;
+            }
+        }
+        return count;
+    }
 }

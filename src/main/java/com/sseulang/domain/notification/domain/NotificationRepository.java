@@ -13,4 +13,9 @@ public interface NotificationRepository {
 
     /** userId 기준 최신순 페이징. */
     Page<Notification> findByUserId(Long userId, Pageable pageable);
+
+    /**
+     * 본인 unread 알림 모두 read 처리 (atomic UPDATE). 처리된 건수 반환 — 0 도 정상.
+     */
+    long markAllAsReadByUserId(Long userId);
 }

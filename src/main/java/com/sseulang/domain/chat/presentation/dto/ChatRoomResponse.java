@@ -16,6 +16,7 @@ public record ChatRoomResponse(
         @Schema(example = "3", description = "viewer 의 미읽음 카운트") int myUnread,
         @Schema(example = "아이폰 14 Pro", description = "아이템 제목") String itemTitle,
         @Schema(description = "아이템 썸네일 URL (없으면 null)") String itemThumbnailUrl,
+        @Schema(example = "true", description = "viewer 가 이 채팅방의 아이템 판매자인지") boolean isSeller,
         // 메타
         @Schema(example = "안녕하세요...", description = "최근 메시지 미리보기") String lastMessage,
         LocalDateTime lastMessageAt,
@@ -33,7 +34,7 @@ public record ChatRoomResponse(
                 r.id(), r.itemId(),
                 r.opponentId(), r.opponentNickname(), r.opponentProfileImage(),
                 r.myUnread(),
-                r.itemTitle(), r.itemThumbnailUrl(),
+                r.itemTitle(), r.itemThumbnailUrl(), r.isSeller(),
                 r.lastMessage(), r.lastMessageAt(), r.active(),
                 r.user1Id(), r.user2Id(), r.user1Unread(), r.user2Unread(),
                 r.createdAt(), r.updatedAt()

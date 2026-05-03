@@ -15,6 +15,7 @@ public record ItemSearchCriteria(
         Long minPrice,
         Long maxPrice,
         String tag,
+        Long sellerId,
         ItemSort sort
 ) {
     public ItemSearchCriteria {
@@ -22,6 +23,6 @@ public record ItemSearchCriteria(
     }
 
     public static ItemSearchCriteria empty() {
-        return new ItemSearchCriteria(null, null, null, null, null, null, ItemSort.LATEST);
+        return new ItemSearchCriteria(null, null, null, null, null, null, null, ItemSort.LATEST);
     }
 }

@@ -28,7 +28,7 @@ class ItemViewAdapter implements ItemView {
         }
         Map<Long, ItemProjection> result = new HashMap<>();
         for (Item i : jpa.findAllById(itemIds)) {
-            result.put(i.getId(), new ItemProjection(i.getId(), i.getTitle(), i.getThumbnailUrl()));
+            result.put(i.getId(), new ItemProjection(i.getId(), i.getTitle(), i.getThumbnailUrl(), i.getSellerId()));
         }
         return result;
     }

@@ -56,4 +56,9 @@ public class NotificationApplicationService {
             notificationRepository.save(n);
         }
     }
+
+    /** 본인 unread 알림 모두 read 처리 (atomic UPDATE multi). 처리 건수 반환 — 0 도 정상. */
+    public long markAllAsRead(Long userId) {
+        return notificationRepository.markAllAsReadByUserId(userId);
+    }
 }
