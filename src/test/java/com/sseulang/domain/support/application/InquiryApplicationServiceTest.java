@@ -33,7 +33,17 @@ class InquiryApplicationServiceTest {
     void setUp() {
         repo = new InMemoryFakeInquiryRepository();
         Clock clock = Clock.fixed(NOW.atZone(KST).toInstant(), KST);
-        service = new InquiryApplicationService(repo, clock);
+        // 테스트는 알림/이메일 사이드 이펙트를 검증하지 않음 — no-op fake 주입.
+        com.sseulang.domain.notification.application.NotificationApplicationService notifSvc =
+                new com.sseulang.domain.notification.application.NotificationApplicationService(
+                        new com.sseulang.domain.notification.application.InMemoryFakeNotificationRepository(),
+                        new com.sseulang.domain.user.application.InMemoryFakeUserRepository()
+                );
+        com.sseulang.domain.auth.domain.EmailSender emailSender = new com.sseulang.domain.auth.domain.EmailSender() {
+            @Override public void sendVerificationEmail(String t, String u) { }
+            @Override public void sendInquiryReplyEmail(String t, String s, String h) { }
+        };
+        service = new InquiryApplicationService(repo, notifSvc, emailSender, clock);
     }
 
     private InquiryCreateCommand cmd() {

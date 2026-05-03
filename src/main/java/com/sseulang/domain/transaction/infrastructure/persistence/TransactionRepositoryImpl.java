@@ -58,6 +58,29 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public Page<Transaction> adminSearch(
+            java.time.LocalDateTime startDate,
+            java.time.LocalDateTime endDate,
+            com.sseulang.domain.item.domain.TradeType tradeType,
+            TransactionStatus status,
+            String keyword,
+            Pageable pageable
+    ) {
+        Long keywordId = parseKeywordId(keyword);
+        return jpa.adminSearchJpql(startDate, endDate, tradeType, status, keywordId, pageable);
+    }
+
+    /** keyword 가 숫자면 long, 아니면 null (LIKE 검색은 미지원, follow-up). */
+    private static Long parseKeywordId(String keyword) {
+        if (keyword == null || keyword.isBlank()) return null;
+        try {
+            return Long.parseLong(keyword.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    @Override
     public List<com.sseulang.domain.transaction.domain.TransactionMonthlyStat> countCompletedMonthly(
             java.time.YearMonth from, java.time.YearMonth to) {
         if (from == null || to == null) {

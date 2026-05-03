@@ -43,6 +43,20 @@ public interface TransactionRepository {
      */
     List<TransactionMonthlyStat> countCompletedMonthly(java.time.YearMonth from, java.time.YearMonth to);
 
+    /**
+     * Admin 거래 검색 (round 9). created_at 기준 [start, end] 범위 + tradeType / status 필터 + keyword.
+     * keyword 는 buyer/seller email 또는 nickname LIKE 가 이상적이지만, 현재는 cross-aggregate 부담
+     * 회피 위해 itemId/transactionId 숫자 매칭만 (확장은 follow-up). 모든 필터 nullable. 최신순.
+     */
+    org.springframework.data.domain.Page<Transaction> adminSearch(
+            java.time.LocalDateTime startDate,
+            java.time.LocalDateTime endDate,
+            com.sseulang.domain.item.domain.TradeType tradeType,
+            TransactionStatus status,
+            String keyword,
+            org.springframework.data.domain.Pageable pageable
+    );
+
     // ───────── Review pending (follow-up #56) ─────────
 
     /**
