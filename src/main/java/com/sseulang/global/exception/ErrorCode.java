@@ -89,6 +89,12 @@ public enum ErrorCode {
     FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "파일 업로드에 실패했습니다."),
     FILE_VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "파일 검증에 실패했습니다."),
 
+    // 고객지원 (1:1 문의 / FAQ·QNA)
+    INQUIRY_NOT_FOUND(HttpStatus.NOT_FOUND, "문의를 찾을 수 없습니다."),
+    INQUIRY_FORBIDDEN(HttpStatus.FORBIDDEN, "본인 문의에서만 가능합니다."),
+    INQUIRY_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서 수행할 수 없는 동작입니다."),
+    SUPPORT_POST_NOT_FOUND(HttpStatus.NOT_FOUND, "게시글을 찾을 수 없습니다."),
+
     // 배달대행
     DELIVERY_NOT_FOUND(HttpStatus.NOT_FOUND, "배달 요청을 찾을 수 없습니다."),
     DELIVERY_FORBIDDEN(HttpStatus.FORBIDDEN, "배달 요청에 대한 권한이 없습니다."),
