@@ -128,10 +128,23 @@ public class Inquiry extends BaseEntity {
         this.repliedAt = now;
     }
 
-    /** 답변 없이 status 만 변경 — 보통 PENDING → PROCESSING. */
+    /**
+     * 답변 없이 status 만 변경 — 보통 PENDING → PROCESSING.
+     *
+     * <p>전이 룰 (단방향): {@code PENDING → PROCESSING → DONE}. 역방향 (PROCESSING/DONE → PENDING)
+     * 은 거부 — 상태머신 정합 (Codex round 9 hotfix).</p>
+     * <p>DONE 으로 가려면 admin_reply 가 있어야 함.</p>
+     */
     public void changeStatus(InquiryStatus newStatus) {
         if (newStatus == null) {
             throw new IllegalArgumentException("status 는 필수입니다");
+        }
+        // 역방향 전이 거부 — 정상적인 상태머신은 단방향.
+        if (newStatus == InquiryStatus.PENDING && this.status != InquiryStatus.PENDING) {
+            throw new IllegalArgumentException("PENDING 으로 되돌릴 수 없습니다");
+        }
+        if (newStatus == InquiryStatus.PROCESSING && this.status == InquiryStatus.DONE) {
+            throw new IllegalArgumentException("DONE 에서 PROCESSING 으로 되돌릴 수 없습니다");
         }
         // DONE 으로 가려면 admin_reply 가 있어야 함.
         if (newStatus == InquiryStatus.DONE && (adminReply == null || adminReply.isBlank())) {

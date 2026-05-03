@@ -64,6 +64,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         JpaAuditingConfig.class,
         UserRepositoryImpl.class,
         UserApplicationService.class,
+        com.sseulang.domain.auth.application.NoOpRefreshTokenStore.class,
         // UserApplicationService 가 v8b 부터 Transaction/UserReport repo 의존 — slice 에 명시 추가.
         // (Clock 은 SseulangApplication @Bean 이 자동 제공)
         com.sseulang.domain.transaction.infrastructure.persistence.TransactionRepositoryImpl.class,

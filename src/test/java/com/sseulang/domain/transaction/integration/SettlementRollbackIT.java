@@ -82,6 +82,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         CategoryApplicationService.class,
         UserRepositoryImpl.class,
         UserApplicationService.class,
+        com.sseulang.domain.auth.application.NoOpRefreshTokenStore.class,
         PointHistoryRepositoryImpl.class,
         PointApplicationService.class,
         TransactionRepositoryImpl.class,

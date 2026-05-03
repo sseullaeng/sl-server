@@ -39,17 +39,20 @@ public class InquiryApplicationService {
     private final InquiryRepository inquiryRepository;
     private final NotificationApplicationService notificationService;
     private final EmailSender emailSender;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public InquiryApplicationService(
             InquiryRepository inquiryRepository,
             NotificationApplicationService notificationService,
             EmailSender emailSender,
+            org.springframework.context.ApplicationEventPublisher eventPublisher,
             Clock clock
     ) {
         this.inquiryRepository = inquiryRepository;
         this.notificationService = notificationService;
         this.emailSender = emailSender;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
@@ -102,48 +105,60 @@ public class InquiryApplicationService {
     }
 
     /**
-     * 답변 작성. status null 이면 DONE 으로 자동 — 명세대로.
-     * 빈 문자열은 도메인에서 reject.
+     * 답변 작성. status null 이면 DONE 으로 자동 — 명세대로. status=PENDING 은 거부 (INVALID_STATE).
      *
-     * <p><b>알림 흐름</b> (round 9):
+     * <p><b>알림 흐름</b> (Codex round 9 hotfix):
      * <ol>
-     *   <li>Notification INSERT — 사용자가 SideDrawer / NotificationPage 에서 즉시 확인</li>
-     *   <li>Email 발송 — best-effort. SMTP 실패해도 트랜잭션 롤백 X (답변 자체는 저장됨).
-     *       예외는 WARN 로그만, 사용자에게 영향 없음.</li>
+     *   <li>Inquiry.writeAdminReply — JPA write</li>
+     *   <li>Notification + Email 은 {@code AFTER_COMMIT} 이벤트로 분리 — JPA commit 실패 시 알림/메일도
+     *       함께 롤백 (dangling 차단). Email 은 best-effort (예외는 WARN).</li>
      * </ol>
-     * 메일 발송이 트랜잭션 안에 있어 SMTP latency 가 응답 시간에 포함됨 — 5/6 이후 outbox 패턴
-     * 도입 시 비동기로 전환 (현재는 단순화 우선).</p>
      */
     @Transactional
     public void adminReply(Long inquiryId, InquiryReplyCommand cmd) {
+        if (cmd.status() == InquiryStatus.PENDING) {
+            throw new BusinessException(ErrorCode.INQUIRY_INVALID_STATE);
+        }
         Inquiry inquiry = findOrThrow(inquiryId);
         InquiryStatus next = cmd.status() == null ? InquiryStatus.DONE : cmd.status();
-        inquiry.writeAdminReply(cmd.adminReply(), next, LocalDateTime.now(clock));
+        try {
+            inquiry.writeAdminReply(cmd.adminReply(), next, LocalDateTime.now(clock));
+        } catch (IllegalArgumentException e) {
+            // 도메인 검증 (PENDING 거부 등) 은 비즈니스 예외로 변환 — 500 회귀 차단.
+            throw new BusinessException(ErrorCode.INQUIRY_INVALID_STATE);
+        }
+        // AFTER_COMMIT 이벤트 등록 — 트랜잭션 commit 후 listener 가 알림/메일 발송.
+        eventPublisher.publishEvent(new InquiryRepliedEvent(
+                inquiry.getId(), inquiry.getUserId(), inquiry.getEmail(),
+                inquiry.getTitle(), cmd.adminReply()
+        ));
+    }
 
-        // 1) Notification — 푸시 알림 (SideDrawer)
+    /** Round 9 hotfix — JPA commit 후 알림/메일 발송 (dangling 차단). */
+    @org.springframework.transaction.event.TransactionalEventListener(
+            phase = org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT)
+    public void onInquiryReplied(InquiryRepliedEvent event) {
         notificationService.notify(
-                inquiry.getUserId(),
-                NotificationType.시스템,
-                "문의 답변이 도착했어요",
-                inquiry.getTitle(),
-                "inquiry",
-                inquiry.getId()
+                event.userId(), NotificationType.시스템,
+                "문의 답변이 도착했어요", event.title(),
+                "inquiry", event.inquiryId()
         );
-
-        // 2) Email — best-effort. SMTP 실패해도 답변/알림은 보존.
         try {
             emailSender.sendInquiryReplyEmail(
-                    inquiry.getEmail(),
+                    event.email(),
                     "[쓸랭] 문의 답변이 도착했습니다",
-                    buildReplyEmailHtml(inquiry, cmd.adminReply())
+                    buildReplyEmailHtml(event.title(), event.adminReply())
             );
         } catch (RuntimeException e) {
             log.warn("Inquiry reply email 발송 실패 — inquiryId={}, email={}, cause={}",
-                    inquiry.getId(), inquiry.getEmail(), e.getMessage());
+                    event.inquiryId(), event.email(), e.getMessage());
         }
     }
 
-    private static String buildReplyEmailHtml(Inquiry inquiry, String adminReply) {
+    /** AFTER_COMMIT 이벤트 payload — Inquiry entity 직접 들고가지 않음 (lazy init / 컨텍스트 밖 회귀 차단). */
+    public record InquiryRepliedEvent(Long inquiryId, Long userId, String email, String title, String adminReply) { }
+
+    private static String buildReplyEmailHtml(String title, String adminReply) {
         return """
                 <!doctype html>
                 <html>
@@ -156,7 +171,7 @@ public class InquiryApplicationService {
                     <p style="color:#888;font-size:12px">마이페이지 &gt; 1:1 문의에서도 확인하실 수 있어요.</p>
                   </body>
                 </html>
-                """.formatted(escapeHtml(inquiry.getTitle()), escapeHtml(adminReply));
+                """.formatted(escapeHtml(title), escapeHtml(adminReply));
     }
 
     private static String escapeHtml(String s) {
@@ -167,7 +182,12 @@ public class InquiryApplicationService {
     @Transactional
     public void adminChangeStatus(Long inquiryId, InquiryStatus newStatus) {
         Inquiry inquiry = findOrThrow(inquiryId);
-        inquiry.changeStatus(newStatus);
+        try {
+            inquiry.changeStatus(newStatus);
+        } catch (IllegalArgumentException e) {
+            // 도메인 검증 (역방향 전이 / 답변 없이 DONE 등) 은 비즈니스 예외로 변환 — 500 회귀 차단.
+            throw new BusinessException(ErrorCode.INQUIRY_INVALID_STATE);
+        }
     }
 
     @Transactional

@@ -27,9 +27,12 @@ import java.time.Duration;
 @Transactional
 public class RefreshTokenRotationService {
 
+    private static final String USER_ROLE = "USER";
+
     private final JwtProvider jwtProvider;
     private final RefreshTokenStore refreshTokenStore;
     private final AccessTokenBlacklist accessTokenBlacklist;
+    private final com.sseulang.domain.user.domain.UserRepository userRepository;
     private final Clock clock;
     private final Duration refreshTokenTtl;
 
@@ -37,12 +40,14 @@ public class RefreshTokenRotationService {
             JwtProvider jwtProvider,
             RefreshTokenStore refreshTokenStore,
             AccessTokenBlacklist accessTokenBlacklist,
+            com.sseulang.domain.user.domain.UserRepository userRepository,
             Clock clock,
             JwtProperties jwtProperties
     ) {
         this.jwtProvider = jwtProvider;
         this.refreshTokenStore = refreshTokenStore;
         this.accessTokenBlacklist = accessTokenBlacklist;
+        this.userRepository = userRepository;
         this.clock = clock;
         this.refreshTokenTtl = Duration.ofSeconds(jwtProperties.refreshTokenValiditySeconds());
     }
@@ -63,6 +68,17 @@ public class RefreshTokenRotationService {
         if (!refreshTokenStore.consume(role, userId, oldJti, claimTv)) {
             refreshTokenStore.revokeAll(role, userId);
             throw new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_INVALID);
+        }
+
+        // SUSPENDED/blocked/deleted 사용자의 RT 재사용 차단 — Codex round 9 hotfix.
+        // ROLE_USER 만 검사 (admin 은 admins 테이블 + 정지 메커니즘 없음). user 미존재는 무시 —
+        // RT consume 통과한 시점이라 race 외엔 정상 미존재 케이스 없음. accessible=false 일 때만 차단.
+        if (USER_ROLE.equals(role)) {
+            var userOpt = userRepository.findById(userId);
+            if (userOpt.isPresent() && !userOpt.get().isAccessibleAt(java.time.LocalDateTime.now(clock))) {
+                refreshTokenStore.revokeAll(role, userId);
+                throw new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_INVALID);
+            }
         }
 
         String newAccessToken = jwtProvider.issueAccessToken(userId, role);

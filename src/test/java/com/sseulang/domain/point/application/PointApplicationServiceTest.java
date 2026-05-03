@@ -35,7 +35,7 @@ class PointApplicationServiceTest {
     void setUp() {
         userRepo = new InMemoryFakeUserRepository();
         historyRepo = new InMemoryFakePointHistoryRepository();
-        UserApplicationService userSvc = new UserApplicationService(userRepo, new com.sseulang.domain.transaction.application.InMemoryFakeTransactionRepository(), new com.sseulang.domain.report.application.InMemoryFakeUserReportRepository(), java.time.Clock.systemDefaultZone());
+        UserApplicationService userSvc = new UserApplicationService(userRepo, new com.sseulang.domain.transaction.application.InMemoryFakeTransactionRepository(), new com.sseulang.domain.report.application.InMemoryFakeUserReportRepository(), new com.sseulang.domain.auth.application.NoOpRefreshTokenStore(), java.time.Clock.systemDefaultZone());
         service = new PointApplicationService(userSvc, historyRepo);
 
         buyerId = userRepo.save(User.createSocialUser(

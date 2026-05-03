@@ -21,21 +21,25 @@ public class UserApplicationService {
 
     /** 휴면 판정 — 90일 이상 미접속이면 dormant. status derive 와 search 양쪽에서 공유. */
     private static final int DORMANT_THRESHOLD_DAYS = 90;
+    private static final String USER_ROLE = "USER";
 
     private final UserRepository userRepository;
     private final com.sseulang.domain.transaction.domain.TransactionRepository transactionRepository;
     private final com.sseulang.domain.report.domain.UserReportRepository userReportRepository;
+    private final com.sseulang.domain.auth.domain.RefreshTokenStore refreshTokenStore;
     private final java.time.Clock clock;
 
     public UserApplicationService(
             UserRepository userRepository,
             com.sseulang.domain.transaction.domain.TransactionRepository transactionRepository,
             com.sseulang.domain.report.domain.UserReportRepository userReportRepository,
+            com.sseulang.domain.auth.domain.RefreshTokenStore refreshTokenStore,
             java.time.Clock clock
     ) {
         this.userRepository = userRepository;
         this.transactionRepository = transactionRepository;
         this.userReportRepository = userReportRepository;
+        this.refreshTokenStore = refreshTokenStore;
         this.clock = clock;
     }
 
@@ -101,9 +105,15 @@ public class UserApplicationService {
     /**
      * 민감 기능 진입 가드 — 이메일 인증 미완료 시 {@link ErrorCode#AUTH_EMAIL_NOT_VERIFIED} (FORBIDDEN).
      * 거래 시작 / 결제 / 출금 / Item 등록 등 자금·신뢰 영향 흐름의 첫 진입점에서 호출.
+     *
+     * <p>Codex round 9 hotfix — blocked / deleted / suspended 도 함께 차단. 정지된 사용자가
+     * 이미 발급된 AT 로 거래/결제/출금 진입하던 회귀 차단.</p>
      */
     public void requireVerified(Long userId) {
         User user = getById(userId);
+        if (!user.isAccessibleAt(java.time.LocalDateTime.now(clock))) {
+            throw new BusinessException(ErrorCode.USER_BLOCKED);
+        }
         if (!user.isEmailVerified()) {
             throw new BusinessException(ErrorCode.AUTH_EMAIL_NOT_VERIFIED);
         }
@@ -213,14 +223,21 @@ public class UserApplicationService {
     @Transactional
     public void adminSetBlocked(Long userId, boolean blocked) {
         User u = getById(userId);
-        if (blocked) u.block(); else u.unblock();
+        if (blocked) {
+            u.block();
+            // 즉시 RT 무효화 — 기존 세션이 refresh 로 살아남는 회귀 차단 (Codex round 9 hotfix).
+            refreshTokenStore.revokeAll(USER_ROLE, userId);
+        } else {
+            u.unblock();
+        }
     }
 
-    /** 관리자 시한부 활동정지 — N일 동안. days >= 1. */
+    /** 관리자 시한부 활동정지 — N일 동안. days >= 1. RT 즉시 무효화. */
     @Transactional
     public void adminSuspend(Long userId, int days) {
         User u = getById(userId);
         u.suspend(days, java.time.LocalDateTime.now(clock));
+        refreshTokenStore.revokeAll(USER_ROLE, userId);
     }
 
     /** 관리자 활동정지 즉시 해제. */
