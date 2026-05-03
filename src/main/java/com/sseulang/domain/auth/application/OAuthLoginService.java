@@ -86,6 +86,9 @@ public class OAuthLoginService {
             throw new BusinessException(ErrorCode.USER_BLOCKED);
         }
 
+        // 휴면 판정 기준 — 응답 status 가 ACTIVE 로 자동 복귀.
+        userService.recordLogin(user.getId());
+
         String at = jwtProvider.issueAccessToken(user.getId(), DEFAULT_ROLE);
         // tv: store 의 현재 버전을 RT claim 에 박는다. 이후 revokeAll → INCR 시 본 RT 는 mismatch 로 거부됨.
         long tv = refreshTokenStore.currentTokenVersion(DEFAULT_ROLE, user.getId());

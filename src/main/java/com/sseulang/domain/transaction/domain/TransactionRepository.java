@@ -31,6 +31,12 @@ public interface TransactionRepository {
     /** 단일 GROUP BY 집계 — (status, count) 행 리스트 (가능한 모든 status 행 포함, 0 인 status 는 없음). */
     List<TransactionStatusCount> countGroupByStatus();
 
+    /**
+     * Admin 회원 카드용 — userId 가 buyer 또는 seller 로 참여한 transaction 의 (userId → count) 맵.
+     * 빈 입력은 빈 맵. 단일 GROUP BY 쿼리 — N+1 회피.
+     */
+    java.util.Map<Long, Long> countByUserIdsAsParticipant(java.util.Collection<Long> userIds);
+
     // ───────── Review pending (follow-up #56) ─────────
 
     /**

@@ -43,6 +43,21 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public java.util.Map<Long, Long> countByUserIdsAsParticipant(java.util.Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        java.util.Map<Long, Long> result = new java.util.HashMap<>();
+        for (TransactionJpaRepository.UserCountRow row : jpa.countAsSellerRaw(userIds)) {
+            result.merge(row.getUserId(), row.getCnt(), Long::sum);
+        }
+        for (TransactionJpaRepository.UserCountRow row : jpa.countAsBuyerRaw(userIds)) {
+            result.merge(row.getUserId(), row.getCnt(), Long::sum);
+        }
+        return result;
+    }
+
+    @Override
     public Page<Transaction> findPendingReviewable(Long userId, LocalDateTime since, Pageable pageable) {
         return jpa.findPendingReviewableJpql(userId, since, pageable);
     }

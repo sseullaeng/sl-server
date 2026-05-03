@@ -45,6 +45,28 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     @Override
+    public Page<User> searchForAdmin(
+            com.sseulang.domain.user.application.dto.AdminUserSearchCriteria criteria,
+            java.time.LocalDateTime now,
+            int dormantThresholdDays,
+            Pageable pageable
+    ) {
+        String kw = (criteria.keyword() == null || criteria.keyword().isBlank())
+                ? null : criteria.keyword().strip();
+        String status = criteria.status() == null ? null : criteria.status().name();
+        java.time.LocalDateTime dormantThreshold = now.minusDays(dormantThresholdDays);
+        return jpa.searchAdmin(
+                kw,
+                criteria.createdAfter(),
+                criteria.createdBefore(),
+                status,
+                dormantThreshold,
+                now,
+                pageable
+        );
+    }
+
+    @Override
     public int recordReviewFor(Long revieweeId, int rating) {
         return jpa.recordReviewFor(revieweeId, rating);
     }

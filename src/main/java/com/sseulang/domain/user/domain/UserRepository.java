@@ -23,6 +23,18 @@ public interface UserRepository {
     Page<User> findAllForAdmin(Pageable pageable);
 
     /**
+     * Admin 회원 검색 — keyword(nickname/email LIKE), status filter, created_at 범위.
+     * status 는 derive 기반 — DB 컬럼 직접 매칭 대신 SQL 조건으로 변환.
+     * dormantThresholdDays / now 는 DORMANT/SUSPENDED 계산 기준.
+     */
+    Page<User> searchForAdmin(
+            com.sseulang.domain.user.application.dto.AdminUserSearchCriteria criteria,
+            java.time.LocalDateTime now,
+            int dormantThresholdDays,
+            Pageable pageable
+    );
+
+    /**
      * 가이드 §4.7 — 리뷰 작성 시점에 review_count / rating_sum 을 단일 원자 UPDATE 로 누적하고
      * trust_score 를 즉시 재계산. Codex 게이트 2 (2026-04-29) 보강 — REPEATABLE_READ + AVG 서브쿼리
      * 의 stale read view 회귀를 누적 컬럼으로 차단.

@@ -111,4 +111,15 @@ public class InMemoryFakeUserRepository implements UserRepository {
     public long countActive() {
         return store.values().stream().filter(u -> !u.isBlocked() && !u.isDeleted()).count();
     }
+
+    @Override
+    public Page<User> searchForAdmin(
+            com.sseulang.domain.user.application.dto.AdminUserSearchCriteria criteria,
+            java.time.LocalDateTime now,
+            int dormantThresholdDays,
+            Pageable pageable
+    ) {
+        // 테스트 fake — 검색·필터 미구현. 기존 findAllForAdmin 으로 대체 위임.
+        return findAllForAdmin(pageable);
+    }
 }
