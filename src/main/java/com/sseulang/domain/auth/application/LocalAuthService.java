@@ -128,7 +128,10 @@ public class LocalAuthService {
         String hashToCompare = (user != null && user.hasPassword()) ? user.getPassword() : dummyPasswordHash;
         boolean passwordOk = passwordEncoder.matches(rawPassword, hashToCompare);
 
-        if (user == null || !user.hasPassword() || user.isBlocked() || user.isDeleted() || !passwordOk) {
+        // SUSPENDED (시한부 정지) 도 LOGIN_FAILED 로 통합 — 정지 사실 leak 방지 + 기존 패스워드로 우회 차단
+        // (Codex round 9 hotfix). isAccessibleAt 은 blocked/deleted/suspended 통합 가드.
+        boolean accessible = user != null && user.isAccessibleAt(java.time.LocalDateTime.now());
+        if (user == null || !user.hasPassword() || !accessible || !passwordOk) {
             throw new BusinessException(ErrorCode.AUTH_LOGIN_FAILED);
         }
         // 휴면 판정 기준 — 응답 status 가 ACTIVE 로 자동 복귀.

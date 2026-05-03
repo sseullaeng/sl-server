@@ -79,6 +79,8 @@ class OAuthLoginServiceTest {
         when(u.getId()).thenReturn(id);
         when(u.isBlocked()).thenReturn(blocked);
         when(u.isDeleted()).thenReturn(deleted);
+        // round 9 hotfix — OAuth login 이 isAccessibleAt 으로 통합 가드. mock 기본 false 회피.
+        when(u.isAccessibleAt(any(java.time.LocalDateTime.class))).thenReturn(!blocked && !deleted);
         return u;
     }
 

@@ -66,11 +66,17 @@ public class TransactionRepositoryImpl implements TransactionRepository {
             String keyword,
             Pageable pageable
     ) {
+        // keyword 입력이 있으면 숫자만 매칭 — 비숫자 (영문/이메일 등) 는 빈 결과 반환 (Codex round 9 hotfix).
+        // null/blank 는 필터 미적용. NUMBER 매칭만이 현 범위 — LIKE 는 follow-up.
+        boolean hasKeyword = keyword != null && !keyword.isBlank();
         Long keywordId = parseKeywordId(keyword);
+        if (hasKeyword && keywordId == null) {
+            return new org.springframework.data.domain.PageImpl<>(java.util.Collections.emptyList(), pageable, 0);
+        }
         return jpa.adminSearchJpql(startDate, endDate, tradeType, status, keywordId, pageable);
     }
 
-    /** keyword 가 숫자면 long, 아니면 null (LIKE 검색은 미지원, follow-up). */
+    /** keyword 가 숫자면 long, 아니면 null. */
     private static Long parseKeywordId(String keyword) {
         if (keyword == null || keyword.isBlank()) return null;
         try {

@@ -299,4 +299,12 @@ public class User extends BaseEntity {
         if (isDormantAt(now, dormantThresholdDays)) return UserStatus.DORMANT;
         return UserStatus.ACTIVE;
     }
+
+    /**
+     * 인증/민감 기능 진입 가능한 상태인지. blocked / deleted / suspended (만료 전) 모두 차단.
+     * Codex 게이트 2 (round 9 hotfix) — 정지된 사용자가 기존 AT/RT 로 거래/결제/출금 진입하던 회귀 차단.
+     */
+    public boolean isAccessibleAt(LocalDateTime now) {
+        return !blocked && !deleted && !isSuspendedAt(now);
+    }
 }

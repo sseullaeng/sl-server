@@ -33,7 +33,6 @@ class InquiryApplicationServiceTest {
     void setUp() {
         repo = new InMemoryFakeInquiryRepository();
         Clock clock = Clock.fixed(NOW.atZone(KST).toInstant(), KST);
-        // 테스트는 알림/이메일 사이드 이펙트를 검증하지 않음 — no-op fake 주입.
         com.sseulang.domain.notification.application.NotificationApplicationService notifSvc =
                 new com.sseulang.domain.notification.application.NotificationApplicationService(
                         new com.sseulang.domain.notification.application.InMemoryFakeNotificationRepository(),
@@ -43,7 +42,9 @@ class InquiryApplicationServiceTest {
             @Override public void sendVerificationEmail(String t, String u) { }
             @Override public void sendInquiryReplyEmail(String t, String s, String h) { }
         };
-        service = new InquiryApplicationService(repo, notifSvc, emailSender, clock);
+        // 단위 테스트용 — AFTER_COMMIT 이벤트는 트랜잭션 밖이라 fire 안 됨. 알림/메일 사이드 이펙트는 별도 IT.
+        org.springframework.context.ApplicationEventPublisher eventPublisher = event -> { };
+        service = new InquiryApplicationService(repo, notifSvc, emailSender, eventPublisher, clock);
     }
 
     private InquiryCreateCommand cmd() {
@@ -127,12 +128,35 @@ class InquiryApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("adminChangeStatus_답변 없이 DONE_도메인 검증 거부 (IllegalArgumentException)")
+    @DisplayName("adminChangeStatus_답변 없이 DONE_INQUIRY_INVALID_STATE (round 9 hotfix)")
     void adminChangeStatus_DONE_답변없음_거부() {
         Long id = service.create(USER, cmd());
 
         assertThatThrownBy(() -> service.adminChangeStatus(id, InquiryStatus.DONE))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INQUIRY_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("adminChangeStatus_역방향 PENDING 으로 되돌리기_INQUIRY_INVALID_STATE (round 9 hotfix)")
+    void adminChangeStatus_역방향_거부() {
+        Long id = service.create(USER, cmd());
+        service.adminChangeStatus(id, InquiryStatus.PROCESSING);
+
+        assertThatThrownBy(() -> service.adminChangeStatus(id, InquiryStatus.PENDING))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INQUIRY_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("adminReply_status=PENDING 명시_INQUIRY_INVALID_STATE (round 9 hotfix)")
+    void adminReply_PENDING_거부() {
+        Long id = service.create(USER, cmd());
+
+        assertThatThrownBy(() -> service.adminReply(id,
+                new com.sseulang.domain.support.application.dto.InquiryReplyCommand("답변", InquiryStatus.PENDING)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INQUIRY_INVALID_STATE);
     }
 
     @Test

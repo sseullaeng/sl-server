@@ -57,6 +57,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         JpaAuditingConfig.class,
         UserRepositoryImpl.class,
         UserApplicationService.class,
+        com.sseulang.domain.auth.application.NoOpRefreshTokenStore.class,
         PointHistoryRepositoryImpl.class,
         PointApplicationService.class,
         WithdrawalRepositoryImpl.class,

@@ -41,7 +41,7 @@ class RefreshTokenRotationServiceTest {
         jwt = new JwtProvider(props, fixedClock);
         store = new InMemoryFakeRefreshTokenStore();
         blacklist = new InMemoryFakeAccessTokenBlacklist();
-        service = new RefreshTokenRotationService(jwt, store, blacklist, fixedClock, props);
+        service = new RefreshTokenRotationService(jwt, store, blacklist, new com.sseulang.domain.user.application.InMemoryFakeUserRepository(), fixedClock, props);
     }
 
     /** login 시점 시뮬레이션: tv 조회 → 토큰 발급 + store 등록. */
@@ -119,7 +119,7 @@ class RefreshTokenRotationServiceTest {
 
         Clock laterClock = Clock.fixed(FIXED_NOW.plusSeconds(RT_VALIDITY + 1), ZoneOffset.UTC);
         JwtProvider laterJwt = new JwtProvider(props, laterClock);
-        RefreshTokenRotationService laterService = new RefreshTokenRotationService(laterJwt, store, blacklist, laterClock, props);
+        RefreshTokenRotationService laterService = new RefreshTokenRotationService(laterJwt, store, blacklist, new com.sseulang.domain.user.application.InMemoryFakeUserRepository(), laterClock, props);
 
         assertThatThrownBy(() -> laterService.rotate(rt))
                 .isInstanceOf(BusinessException.class)
@@ -163,7 +163,7 @@ class RefreshTokenRotationServiceTest {
 
         Clock laterClock = Clock.fixed(FIXED_NOW.plusSeconds(RT_VALIDITY + 1), ZoneOffset.UTC);
         JwtProvider laterJwt = new JwtProvider(props, laterClock);
-        RefreshTokenRotationService laterService = new RefreshTokenRotationService(laterJwt, store, blacklist, laterClock, props);
+        RefreshTokenRotationService laterService = new RefreshTokenRotationService(laterJwt, store, blacklist, new com.sseulang.domain.user.application.InMemoryFakeUserRepository(), laterClock, props);
 
         assertThatCode(() -> laterService.revoke(rt))
                 .doesNotThrowAnyException();
@@ -192,7 +192,7 @@ class RefreshTokenRotationServiceTest {
 
         Clock laterClock = Clock.fixed(FIXED_NOW.plusSeconds(AT_VALIDITY + 1), ZoneOffset.UTC);
         JwtProvider laterJwt = new JwtProvider(props, laterClock);
-        RefreshTokenRotationService laterService = new RefreshTokenRotationService(laterJwt, store, blacklist, laterClock, props);
+        RefreshTokenRotationService laterService = new RefreshTokenRotationService(laterJwt, store, blacklist, new com.sseulang.domain.user.application.InMemoryFakeUserRepository(), laterClock, props);
 
         laterService.logout(at, rt);
 

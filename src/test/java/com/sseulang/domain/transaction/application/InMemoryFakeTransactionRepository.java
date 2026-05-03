@@ -141,9 +141,13 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
             String keyword,
             Pageable pageable
     ) {
+        boolean hasKeyword = keyword != null && !keyword.isBlank();
         Long keywordId = null;
-        if (keyword != null && !keyword.isBlank()) {
+        if (hasKeyword) {
             try { keywordId = Long.parseLong(keyword.trim()); } catch (NumberFormatException ignored) { }
+        }
+        if (hasKeyword && keywordId == null) {
+            return new PageImpl<>(java.util.Collections.emptyList(), pageable, 0);
         }
         final Long kId = keywordId;
         List<Transaction> filtered = store.values().stream()

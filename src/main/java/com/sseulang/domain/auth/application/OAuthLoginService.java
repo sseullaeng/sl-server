@@ -82,7 +82,8 @@ public class OAuthLoginService {
                 info.profileImage()
         );
 
-        if (user.isBlocked() || user.isDeleted()) {
+        // SUSPENDED (시한부 정지) 도 USER_BLOCKED 통합 — Codex round 9 hotfix.
+        if (!user.isAccessibleAt(java.time.LocalDateTime.now())) {
             throw new BusinessException(ErrorCode.USER_BLOCKED);
         }
 
