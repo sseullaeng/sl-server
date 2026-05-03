@@ -86,6 +86,25 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
     }
 
     @Override
+    public java.util.List<com.sseulang.domain.transaction.domain.TransactionMonthlyStat> countCompletedMonthly(
+            java.time.YearMonth from, java.time.YearMonth to) {
+        Map<java.time.YearMonth, long[]> bucket = new HashMap<>();  // [count, amount]
+        for (Transaction t : store.values()) {
+            if (t.getStatus() != TransactionStatus.거래완료 || t.getCompletedAt() == null) continue;
+            java.time.YearMonth m = java.time.YearMonth.from(t.getCompletedAt());
+            if (m.isBefore(from) || m.isAfter(to)) continue;
+            long[] arr = bucket.computeIfAbsent(m, k -> new long[]{0, 0});
+            arr[0]++;
+            arr[1] += t.getPrice();
+        }
+        return bucket.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> new com.sseulang.domain.transaction.domain.TransactionMonthlyStat(
+                        e.getKey(), e.getValue()[0], e.getValue()[1]))
+                .toList();
+    }
+
+    @Override
     public Page<Transaction> findPendingReviewable(Long userId, LocalDateTime since, Pageable pageable) {
         List<Transaction> filtered = store.values().stream()
                 .filter(t -> t.getStatus() == TransactionStatus.거래완료)

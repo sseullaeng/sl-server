@@ -37,6 +37,12 @@ public interface TransactionRepository {
      */
     java.util.Map<Long, Long> countByUserIdsAsParticipant(java.util.Collection<Long> userIds);
 
+    /**
+     * 월별 거래 집계 — completed_at 기준 (status=거래완료 만). [from, to] 월 범위 inclusive.
+     * 결과는 월별 (year, month, count, sumPrice). 거래 0건 월은 응답에 포함되지 않음 (호출자가 0 채움).
+     */
+    List<TransactionMonthlyStat> countCompletedMonthly(java.time.YearMonth from, java.time.YearMonth to);
+
     // ───────── Review pending (follow-up #56) ─────────
 
     /**

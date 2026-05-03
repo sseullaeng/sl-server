@@ -55,6 +55,32 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
     }
 
     /**
+     * 월별 거래완료 집계 — completed_at YEAR/MONTH GROUP BY. native MySQL.
+     * Result projection: (year, month, count, amount). YearMonth 변환은 호출자.
+     */
+    @Query(value = """
+            SELECT YEAR(completed_at) AS y, MONTH(completed_at) AS m,
+                   COUNT(*) AS cnt, COALESCE(SUM(price), 0) AS amt
+              FROM transactions
+             WHERE status = '거래완료'
+               AND completed_at >= :fromTs
+               AND completed_at <  :toTs
+             GROUP BY YEAR(completed_at), MONTH(completed_at)
+             ORDER BY y ASC, m ASC
+            """, nativeQuery = true)
+    List<MonthlyStatRow> countCompletedMonthlyRaw(
+            @Param("fromTs") java.time.LocalDateTime fromTs,
+            @Param("toTs") java.time.LocalDateTime toTs
+    );
+
+    interface MonthlyStatRow {
+        Integer getY();
+        Integer getM();
+        Long getCnt();
+        Long getAmt();
+    }
+
+    /**
      * Review 작성 대기 거래 — completedAt 하한 + 본인 참여 + 본인이 reviewer 인 review 가 아직 없는 것.
      * Review 와 NOT EXISTS 로 cross-aggregate read (write 가 아니라 도메인 invariant 영향 X).
      */
