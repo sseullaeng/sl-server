@@ -16,4 +16,17 @@ interface UserReportJpaRepository extends JpaRepository<UserReport, Long> {
              ORDER BY r.id DESC
             """)
     Page<UserReport> findByStatusFilter(@Param("status") ReportStatus status, Pageable pageable);
+
+    /** Admin enrich — targetUserIds 의 신고 누적 수 (target_user_id, count). */
+    @Query("""
+            SELECT r.reportedId AS userId, COUNT(r) AS cnt FROM UserReport r
+             WHERE r.reportedId IN :ids
+             GROUP BY r.reportedId
+            """)
+    java.util.List<UserCountRow> countByTargetUserIdsRaw(@Param("ids") java.util.Collection<Long> ids);
+
+    interface UserCountRow {
+        Long getUserId();
+        Long getCnt();
+    }
 }

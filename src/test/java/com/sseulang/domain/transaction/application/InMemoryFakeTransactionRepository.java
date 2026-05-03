@@ -98,4 +98,18 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
         int end = Math.min(start + pageable.getPageSize(), filtered.size());
         return new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
     }
+
+    @Override
+    public Map<Long, Long> countByUserIdsAsParticipant(java.util.Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        Set<Long> idSet = new HashSet<>(userIds);
+        Map<Long, Long> result = new HashMap<>();
+        for (Transaction t : store.values()) {
+            if (idSet.contains(t.getSellerId())) result.merge(t.getSellerId(), 1L, Long::sum);
+            if (idSet.contains(t.getBuyerId())) result.merge(t.getBuyerId(), 1L, Long::sum);
+        }
+        return result;
+    }
 }

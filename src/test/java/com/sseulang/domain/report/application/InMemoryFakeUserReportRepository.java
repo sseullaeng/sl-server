@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-class InMemoryFakeUserReportRepository implements UserReportRepository {
+public class InMemoryFakeUserReportRepository implements UserReportRepository {
 
     private final Map<Long, UserReport> store = new HashMap<>();
     private long sequence = 0;
@@ -40,5 +40,20 @@ class InMemoryFakeUserReportRepository implements UserReportRepository {
                 .sorted(Comparator.comparing(UserReport::getId).reversed())
                 .toList();
         return new PageImpl<>(filtered, pageable, filtered.size());
+    }
+
+    @Override
+    public Map<Long, Long> countByTargetUserIds(java.util.Collection<Long> targetUserIds) {
+        if (targetUserIds == null || targetUserIds.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        java.util.Set<Long> idSet = new java.util.HashSet<>(targetUserIds);
+        Map<Long, Long> result = new HashMap<>();
+        for (UserReport r : store.values()) {
+            if (idSet.contains(r.getReportedId())) {
+                result.merge(r.getReportedId(), 1L, Long::sum);
+            }
+        }
+        return result;
     }
 }

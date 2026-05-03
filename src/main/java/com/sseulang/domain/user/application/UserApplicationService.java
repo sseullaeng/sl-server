@@ -19,10 +19,24 @@ import java.util.Optional;
 @Transactional(readOnly = true)
 public class UserApplicationService {
 
-    private final UserRepository userRepository;
+    /** 휴면 판정 — 90일 이상 미접속이면 dormant. status derive 와 search 양쪽에서 공유. */
+    private static final int DORMANT_THRESHOLD_DAYS = 90;
 
-    public UserApplicationService(UserRepository userRepository) {
+    private final UserRepository userRepository;
+    private final com.sseulang.domain.transaction.domain.TransactionRepository transactionRepository;
+    private final com.sseulang.domain.report.domain.UserReportRepository userReportRepository;
+    private final java.time.Clock clock;
+
+    public UserApplicationService(
+            UserRepository userRepository,
+            com.sseulang.domain.transaction.domain.TransactionRepository transactionRepository,
+            com.sseulang.domain.report.domain.UserReportRepository userReportRepository,
+            java.time.Clock clock
+    ) {
         this.userRepository = userRepository;
+        this.transactionRepository = transactionRepository;
+        this.userReportRepository = userReportRepository;
+        this.clock = clock;
     }
 
     /**
@@ -159,6 +173,40 @@ public class UserApplicationService {
     }
 
     /**
+     * Admin 회원 검색 + enrich. status/keyword/created_at 범위 필터 후 페이지의 userIds 로 batch
+     * tradeCount / reportCount 집계 (N+1 회피).
+     */
+    public Page<com.sseulang.domain.user.application.dto.AdminUserResult> adminSearch(
+            com.sseulang.domain.user.application.dto.AdminUserSearchCriteria criteria,
+            Pageable pageable
+    ) {
+        java.time.LocalDateTime now = java.time.LocalDateTime.now(clock);
+        Page<User> page = userRepository.searchForAdmin(criteria, now, DORMANT_THRESHOLD_DAYS, pageable);
+        if (page.isEmpty()) {
+            return page.map(u -> com.sseulang.domain.user.application.dto.AdminUserResult.from(
+                    u, now, DORMANT_THRESHOLD_DAYS, 0L, 0L));
+        }
+        java.util.List<Long> ids = page.getContent().stream().map(User::getId).toList();
+        java.util.Map<Long, Long> tradeCounts = transactionRepository.countByUserIdsAsParticipant(ids);
+        java.util.Map<Long, Long> reportCounts = userReportRepository.countByTargetUserIds(ids);
+        return page.map(u -> com.sseulang.domain.user.application.dto.AdminUserResult.from(
+                u, now, DORMANT_THRESHOLD_DAYS,
+                tradeCounts.getOrDefault(u.getId(), 0L),
+                reportCounts.getOrDefault(u.getId(), 0L)
+        ));
+    }
+
+    /** 단건 enrich — 관리자 단건 조회. */
+    public com.sseulang.domain.user.application.dto.AdminUserResult adminGetEnriched(Long userId) {
+        User u = getById(userId);
+        java.time.LocalDateTime now = java.time.LocalDateTime.now(clock);
+        java.util.List<Long> ids = java.util.List.of(userId);
+        long trades = transactionRepository.countByUserIdsAsParticipant(ids).getOrDefault(userId, 0L);
+        long reports = userReportRepository.countByTargetUserIds(ids).getOrDefault(userId, 0L);
+        return com.sseulang.domain.user.application.dto.AdminUserResult.from(u, now, DORMANT_THRESHOLD_DAYS, trades, reports);
+    }
+
+    /**
      * 관리자 차단/해제 — Aggregate {@code block()/unblock()} 위임. 미존재 userId → USER_NOT_FOUND.
      * 멱등 (이미 차단된 사용자를 또 차단해도 OK).
      */
@@ -166,6 +214,26 @@ public class UserApplicationService {
     public void adminSetBlocked(Long userId, boolean blocked) {
         User u = getById(userId);
         if (blocked) u.block(); else u.unblock();
+    }
+
+    /** 관리자 시한부 활동정지 — N일 동안. days >= 1. */
+    @Transactional
+    public void adminSuspend(Long userId, int days) {
+        User u = getById(userId);
+        u.suspend(days, java.time.LocalDateTime.now(clock));
+    }
+
+    /** 관리자 활동정지 즉시 해제. */
+    @Transactional
+    public void adminUnsuspend(Long userId) {
+        User u = getById(userId);
+        u.unsuspend();
+    }
+
+    /** 로그인 성공 직후 호출 — 마지막 로그인 시각 기록 (휴면 판정 기준). 미존재 userId 무시. */
+    @Transactional
+    public void recordLogin(Long userId) {
+        userRepository.findById(userId).ifPresent(u -> u.recordLogin(java.time.LocalDateTime.now(clock)));
     }
 
     /**

@@ -60,7 +60,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         PointHistoryRepositoryImpl.class,
         PointApplicationService.class,
         WithdrawalRepositoryImpl.class,
-        WithdrawalApplicationService.class
+        WithdrawalApplicationService.class,
+        // v8b — UserApplicationService 가 Transaction/UserReport repo 도 의존
+        com.sseulang.domain.transaction.infrastructure.persistence.TransactionRepositoryImpl.class,
+        com.sseulang.domain.report.infrastructure.persistence.UserReportRepositoryImpl.class
 })
 @Testcontainers
 @Transactional(propagation = Propagation.NOT_SUPPORTED)

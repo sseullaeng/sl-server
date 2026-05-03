@@ -15,6 +15,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
  * User Aggregate Root. V1 스키마 {@code users} 매핑.
@@ -70,8 +71,25 @@ public class User extends BaseEntity {
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified;
 
+    /**
+     * 마지막 로그인 시각 (V14). 휴면(dormant) 판정용 — 90일 이상 미접속이면 dormant.
+     * LocalAuthService / OAuthLoginService 가 로그인 성공 시 갱신.
+     */
+    @Column(name = "last_login_at")
+    private LocalDateTime lastLoginAt;
+
     @Column(name = "is_blocked", nullable = false)
     private boolean blocked;
+
+    /**
+     * 시한부 활동정지 (V14). is_blocked(영구) 와 별개. suspended_at + suspend_days 가 만료시각.
+     * 만료 후엔 자동 해제 (status 계산 시점에 derive).
+     */
+    @Column(name = "suspended_at")
+    private LocalDateTime suspendedAt;
+
+    @Column(name = "suspend_days")
+    private Integer suspendDays;
 
     @Column(name = "is_deleted", nullable = false)
     private boolean deleted;
@@ -232,5 +250,53 @@ public class User extends BaseEntity {
     /** 관리자 차단 해제 — 멱등 호출. */
     public void unblock() {
         this.blocked = false;
+    }
+
+    /** 로그인 성공 시점 기록. dormant 판정 기준. */
+    public void recordLogin(LocalDateTime now) {
+        this.lastLoginAt = now;
+    }
+
+    /** 시한부 활동정지. days >= 1. now 부터 N일 동안. */
+    public void suspend(int days, LocalDateTime now) {
+        if (days < 1) {
+            throw new IllegalArgumentException("days 는 1 이상이어야 합니다");
+        }
+        if (now == null) {
+            throw new IllegalArgumentException("now 는 필수입니다");
+        }
+        this.suspendedAt = now;
+        this.suspendDays = days;
+    }
+
+    /** 활동정지 즉시 해제. */
+    public void unsuspend() {
+        this.suspendedAt = null;
+        this.suspendDays = null;
+    }
+
+    /** 활동정지가 아직 유효 (만료 전). suspendedAt 없거나 만료됐으면 false. */
+    public boolean isSuspendedAt(LocalDateTime now) {
+        if (suspendedAt == null || suspendDays == null || suspendDays <= 0) {
+            return false;
+        }
+        LocalDateTime expiresAt = suspendedAt.plusDays(suspendDays);
+        return now != null && now.isBefore(expiresAt);
+    }
+
+    /** 휴면 — lastLoginAt 이 dormantThresholdDays 이상 과거. lastLoginAt 없으면 createdAt 기준. */
+    public boolean isDormantAt(LocalDateTime now, int dormantThresholdDays) {
+        if (now == null) return false;
+        LocalDateTime base = lastLoginAt != null ? lastLoginAt : getCreatedAt();
+        if (base == null) return false;
+        return base.plusDays(dormantThresholdDays).isBefore(now);
+    }
+
+    /** Admin 응답용 status derive — WITHDRAWN > SUSPENDED > DORMANT > ACTIVE 우선순위. */
+    public UserStatus derivedStatus(LocalDateTime now, int dormantThresholdDays) {
+        if (deleted) return UserStatus.WITHDRAWN;
+        if (isSuspendedAt(now)) return UserStatus.SUSPENDED;
+        if (isDormantAt(now, dormantThresholdDays)) return UserStatus.DORMANT;
+        return UserStatus.ACTIVE;
     }
 }

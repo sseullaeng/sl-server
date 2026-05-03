@@ -38,6 +38,7 @@ class LocalAuthServiceTest {
     private static final Email EMAIL = new Email("local@test.com");
 
     @Mock private UserRepository userRepository;
+    @Mock private com.sseulang.domain.user.application.UserApplicationService userService;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JwtProvider jwtProvider;
     @Mock private RefreshTokenStore refreshTokenStore;
@@ -48,7 +49,7 @@ class LocalAuthServiceTest {
     @BeforeEach
     void setUp() {
         JwtProperties props = new JwtProperties("0123456789012345678901234567890123", 1800L, 604800L);
-        service = new LocalAuthService(userRepository, passwordEncoder, jwtProvider, refreshTokenStore, verificationService, props);
+        service = new LocalAuthService(userRepository, userService, passwordEncoder, jwtProvider, refreshTokenStore, verificationService, props);
     }
 
     private User savedUser(String hashedPw) {
@@ -200,7 +201,7 @@ class LocalAuthServiceTest {
     void dummyHash_실제_BCrypt_패턴() {
         BCryptPasswordEncoder real = new BCryptPasswordEncoder();
         JwtProperties props = new JwtProperties("0123456789012345678901234567890123", 1800L, 604800L);
-        LocalAuthService realSvc = new LocalAuthService(userRepository, real, jwtProvider, refreshTokenStore, verificationService, props);
+        LocalAuthService realSvc = new LocalAuthService(userRepository, userService, real, jwtProvider, refreshTokenStore, verificationService, props);
 
         String dummyHash = (String) ReflectionTestUtils.getField(realSvc, "dummyPasswordHash");
         assertThat(dummyHash)

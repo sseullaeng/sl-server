@@ -60,6 +60,85 @@ interface UserJpaRepository extends JpaRepository<User, Long> {
 
     Page<User> findAllByOrderByIdDesc(Pageable pageable);
 
+    /**
+     * Admin 회원 검색 — keyword(nickname/email LIKE), created_at 범위, derive status.
+     *
+     * <p>NATIVE query 사용 이유: SUSPENDED 판정에 {@code suspended_at + INTERVAL suspend_days DAY > now}
+     * 가 필요한데 JPQL TIMESTAMPADD 가 DB 별 호환성 이슈가 큼. MySQL DATE_ADD 직접 사용.</p>
+     *
+     * <p>status 파라미터:
+     * <ul>
+     *   <li>{@code 'WITHDRAWN'} — is_deleted=TRUE</li>
+     *   <li>{@code 'SUSPENDED'} — 시한부 정지 만료 전</li>
+     *   <li>{@code 'DORMANT'} — deleted/suspended 아니고 마지막 로그인이 dormantThreshold 이전</li>
+     *   <li>{@code 'ACTIVE'} — 그 외 (탈퇴/정지/휴면 아님)</li>
+     *   <li>{@code NULL} — 필터 안 함 (전체)</li>
+     * </ul>
+     */
+    @Query(value = """
+            SELECT * FROM users u
+             WHERE (:kw IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :kw, '%'))
+                                 OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :kw, '%')))
+               AND (:after  IS NULL OR u.created_at >= :after)
+               AND (:before IS NULL OR u.created_at <= :before)
+               AND (:status IS NULL
+                    OR (:status = 'WITHDRAWN' AND u.is_deleted = TRUE)
+                    OR (:status = 'SUSPENDED' AND u.is_deleted = FALSE
+                                              AND u.suspended_at IS NOT NULL
+                                              AND u.suspend_days IS NOT NULL
+                                              AND u.suspend_days > 0
+                                              AND DATE_ADD(u.suspended_at, INTERVAL u.suspend_days DAY) > :now)
+                    OR (:status = 'DORMANT'   AND u.is_deleted = FALSE
+                                              AND (u.suspended_at IS NULL
+                                                   OR u.suspend_days IS NULL
+                                                   OR u.suspend_days <= 0
+                                                   OR DATE_ADD(u.suspended_at, INTERVAL u.suspend_days DAY) <= :now)
+                                              AND COALESCE(u.last_login_at, u.created_at) <= :dormantThreshold)
+                    OR (:status = 'ACTIVE'    AND u.is_deleted = FALSE
+                                              AND (u.suspended_at IS NULL
+                                                   OR u.suspend_days IS NULL
+                                                   OR u.suspend_days <= 0
+                                                   OR DATE_ADD(u.suspended_at, INTERVAL u.suspend_days DAY) <= :now)
+                                              AND COALESCE(u.last_login_at, u.created_at) > :dormantThreshold))
+             ORDER BY u.id DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM users u
+             WHERE (:kw IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :kw, '%'))
+                                 OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :kw, '%')))
+               AND (:after  IS NULL OR u.created_at >= :after)
+               AND (:before IS NULL OR u.created_at <= :before)
+               AND (:status IS NULL
+                    OR (:status = 'WITHDRAWN' AND u.is_deleted = TRUE)
+                    OR (:status = 'SUSPENDED' AND u.is_deleted = FALSE
+                                              AND u.suspended_at IS NOT NULL
+                                              AND u.suspend_days IS NOT NULL
+                                              AND u.suspend_days > 0
+                                              AND DATE_ADD(u.suspended_at, INTERVAL u.suspend_days DAY) > :now)
+                    OR (:status = 'DORMANT'   AND u.is_deleted = FALSE
+                                              AND (u.suspended_at IS NULL
+                                                   OR u.suspend_days IS NULL
+                                                   OR u.suspend_days <= 0
+                                                   OR DATE_ADD(u.suspended_at, INTERVAL u.suspend_days DAY) <= :now)
+                                              AND COALESCE(u.last_login_at, u.created_at) <= :dormantThreshold)
+                    OR (:status = 'ACTIVE'    AND u.is_deleted = FALSE
+                                              AND (u.suspended_at IS NULL
+                                                   OR u.suspend_days IS NULL
+                                                   OR u.suspend_days <= 0
+                                                   OR DATE_ADD(u.suspended_at, INTERVAL u.suspend_days DAY) <= :now)
+                                              AND COALESCE(u.last_login_at, u.created_at) > :dormantThreshold))
+            """,
+            nativeQuery = true)
+    Page<User> searchAdmin(
+            @Param("kw") String kw,
+            @Param("after") java.time.LocalDateTime after,
+            @Param("before") java.time.LocalDateTime before,
+            @Param("status") String status,
+            @Param("dormantThreshold") java.time.LocalDateTime dormantThreshold,
+            @Param("now") java.time.LocalDateTime now,
+            Pageable pageable
+    );
+
     @Query("SELECT COUNT(u) FROM User u WHERE u.blocked = true")
     long countBlocked();
 

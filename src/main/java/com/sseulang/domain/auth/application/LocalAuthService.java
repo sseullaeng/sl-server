@@ -45,6 +45,7 @@ public class LocalAuthService {
     private static final String DUMMY_PASSWORD_PLAINTEXT = "__sseulang_dummy_user_sentinel_v1__";
 
     private final UserRepository userRepository;
+    private final com.sseulang.domain.user.application.UserApplicationService userService;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final RefreshTokenStore refreshTokenStore;
@@ -57,6 +58,7 @@ public class LocalAuthService {
 
     public LocalAuthService(
             UserRepository userRepository,
+            com.sseulang.domain.user.application.UserApplicationService userService,
             PasswordEncoder passwordEncoder,
             JwtProvider jwtProvider,
             RefreshTokenStore refreshTokenStore,
@@ -64,6 +66,7 @@ public class LocalAuthService {
             JwtProperties jwtProperties
     ) {
         this.userRepository = userRepository;
+        this.userService = userService;
         this.passwordEncoder = passwordEncoder;
         this.jwtProvider = jwtProvider;
         this.refreshTokenStore = refreshTokenStore;
@@ -128,6 +131,8 @@ public class LocalAuthService {
         if (user == null || !user.hasPassword() || user.isBlocked() || user.isDeleted() || !passwordOk) {
             throw new BusinessException(ErrorCode.AUTH_LOGIN_FAILED);
         }
+        // 휴면 판정 기준 — 응답 status 가 ACTIVE 로 자동 복귀.
+        userService.recordLogin(user.getId());
         return issueTokens(user);
     }
 

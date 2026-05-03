@@ -33,6 +33,27 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
             """)
     List<TransactionStatusCount> countGroupByStatusJpql();
 
+    /** Admin 회원 카드용 — sellerId 로 참여한 거래 (sellerId, count). */
+    @Query("""
+            SELECT t.sellerId AS userId, COUNT(t) AS cnt FROM Transaction t
+             WHERE t.sellerId IN :ids
+             GROUP BY t.sellerId
+            """)
+    List<UserCountRow> countAsSellerRaw(@Param("ids") java.util.Collection<Long> ids);
+
+    /** Admin 회원 카드용 — buyerId 로 참여한 거래 (buyerId, count). */
+    @Query("""
+            SELECT t.buyerId AS userId, COUNT(t) AS cnt FROM Transaction t
+             WHERE t.buyerId IN :ids
+             GROUP BY t.buyerId
+            """)
+    List<UserCountRow> countAsBuyerRaw(@Param("ids") java.util.Collection<Long> ids);
+
+    interface UserCountRow {
+        Long getUserId();
+        Long getCnt();
+    }
+
     /**
      * Review 작성 대기 거래 — completedAt 하한 + 본인 참여 + 본인이 reviewer 인 review 가 아직 없는 것.
      * Review 와 NOT EXISTS 로 cross-aggregate read (write 가 아니라 도메인 invariant 영향 X).

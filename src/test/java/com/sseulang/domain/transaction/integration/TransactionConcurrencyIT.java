@@ -75,7 +75,9 @@ import static org.assertj.core.api.Assertions.assertThat;
         PointHistoryRepositoryImpl.class,
         PointApplicationService.class,
         TransactionRepositoryImpl.class,
-        TransactionApplicationService.class
+        TransactionApplicationService.class,
+        // v8b — UserApplicationService 가 UserReportRepository 도 의존
+        com.sseulang.domain.report.infrastructure.persistence.UserReportRepositoryImpl.class
 })
 @Testcontainers
 @Transactional(propagation = Propagation.NOT_SUPPORTED)

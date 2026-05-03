@@ -32,4 +32,16 @@ public class UserReportRepositoryImpl implements UserReportRepository {
     public Page<UserReport> findByStatus(ReportStatus status, Pageable pageable) {
         return jpa.findByStatusFilter(status, pageable);
     }
+
+    @Override
+    public java.util.Map<Long, Long> countByTargetUserIds(java.util.Collection<Long> targetUserIds) {
+        if (targetUserIds == null || targetUserIds.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        java.util.Map<Long, Long> result = new java.util.HashMap<>();
+        for (UserReportJpaRepository.UserCountRow row : jpa.countByTargetUserIdsRaw(targetUserIds)) {
+            result.put(row.getUserId(), row.getCnt());
+        }
+        return result;
+    }
 }
