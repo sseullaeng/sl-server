@@ -59,7 +59,7 @@ class ItemSearchTest {
         register("갤럭시 S24", "S급", catB, TradeType.판매, 200_000L, null);
 
         Page<ItemSummaryResult> result = service.search(
-                new com.sseulang.domain.item.application.dto.ItemSearchCriteria("아이폰", null, null, null, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria("아이폰", null, null, null, null, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
                 PageRequest.of(0, 10));
 
         assertThat(result.getContent()).extracting(ItemSummaryResult::title)
@@ -73,7 +73,7 @@ class ItemSearchTest {
         register("물건2", "사용감 있음", catA, TradeType.판매, 200_000L, null);
 
         Page<ItemSummaryResult> result = service.search(
-                new com.sseulang.domain.item.application.dto.ItemSearchCriteria("정품", null, null, null, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria("정품", null, null, null, null, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
                 PageRequest.of(0, 10));
 
         assertThat(result.getContent()).hasSize(1);
@@ -88,7 +88,7 @@ class ItemSearchTest {
         register("b1", "d", catB, TradeType.판매, 300L, null);
 
         Page<ItemSummaryResult> result = service.search(
-                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(null, catA, null, null, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(null, catA, null, null, null, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
                 PageRequest.of(0, 10));
 
         assertThat(result.getTotalElements()).isEqualTo(2);
@@ -102,7 +102,7 @@ class ItemSearchTest {
         register("대여물", "d", catA, TradeType.대여, 100L, RentalUnit.일);
 
         Page<ItemSummaryResult> result = service.search(
-                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(null, null, TradeType.나눔, null, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(null, null, TradeType.나눔, null, null, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
                 PageRequest.of(0, 10));
 
         assertThat(result.getContent()).hasSize(1);
@@ -117,7 +117,7 @@ class ItemSearchTest {
         register("비싼것", "d", catA, TradeType.판매, 1_000_000L, null);
 
         Page<ItemSummaryResult> result = service.search(
-                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(null, null, null, 10_000L, 100_000L, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(null, null, null, 10_000L, 100_000L, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
                 PageRequest.of(0, 10));
 
         assertThat(result.getContent()).extracting(ItemSummaryResult::title)
@@ -137,7 +137,7 @@ class ItemSearchTest {
         ));
 
         Page<ItemSummaryResult> result = service.search(
-                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(null, null, null, null, null, "아이폰", com.sseulang.domain.item.application.dto.ItemSort.LATEST),
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(null, null, null, null, null, "아이폰", null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
                 PageRequest.of(0, 10));
 
         assertThat(result.getContent()).extracting(ItemSummaryResult::id)
@@ -181,7 +181,7 @@ class ItemSearchTest {
         register("a3", "d", catA, TradeType.판매, 5_000_000L, null);
 
         Page<ItemSummaryResult> result = service.search(
-                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(null, catA, TradeType.판매, 0L, 100_000L, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(null, catA, TradeType.판매, 0L, 100_000L, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
                 PageRequest.of(0, 10));
 
         assertThat(result.getContent()).extracting(ItemSummaryResult::title).containsExactly("a1");

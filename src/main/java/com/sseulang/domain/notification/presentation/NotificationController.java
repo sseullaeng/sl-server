@@ -57,4 +57,14 @@ public class NotificationController {
         notificationService.markAsRead(id, userId);
         return ApiResponse.ok();
     }
+
+    @Operation(summary = "내 모든 알림 읽음 처리",
+            description = "본인 unread 알림 일괄 read (atomic UPDATE multi). 처리 건수 반환.")
+    @PatchMapping("/read-all")
+    public ApiResponse<MarkAllResponse> markAllAsRead(@AuthenticationPrincipal Long userId) {
+        long updated = notificationService.markAllAsRead(userId);
+        return ApiResponse.ok(new MarkAllResponse(updated));
+    }
+
+    public record MarkAllResponse(long updated) { }
 }

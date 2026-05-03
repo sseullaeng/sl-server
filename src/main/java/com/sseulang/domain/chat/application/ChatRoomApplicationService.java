@@ -71,7 +71,7 @@ public class ChatRoomApplicationService {
     public Page<ChatRoomResult> listMine(Long userId, Pageable pageable) {
         Page<ChatRoom> page = chatRoomRepository.findMine(userId, pageable);
         if (page.isEmpty()) {
-            return page.map(c -> ChatRoomResult.from(c, userId, null, null, null, null));
+            return page.map(c -> ChatRoomResult.from(c, userId, null, null, null, null, null));
         }
         Set<Long> opponentIds = new HashSet<>();
         Set<Long> itemIds = new HashSet<>();
@@ -163,7 +163,8 @@ public class ChatRoomApplicationService {
                 u != null ? u.nickname() : null,
                 u != null ? u.profileImage() : null,
                 i != null ? i.title() : null,
-                i != null ? i.thumbnailUrl() : null
+                i != null ? i.thumbnailUrl() : null,
+                i != null ? i.sellerId() : null
         );
     }
 

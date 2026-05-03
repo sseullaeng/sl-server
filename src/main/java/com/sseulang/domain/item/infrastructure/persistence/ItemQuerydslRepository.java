@@ -83,6 +83,9 @@ public class ItemQuerydslRepository {
                     .where(h.item.eq(item).and(h.tag.eq(criteria.tag().strip())))
                     .exists());
         }
+        if (criteria.sellerId() != null) {
+            where.and(item.sellerId.eq(criteria.sellerId()));
+        }
 
         List<Item> content = queryFactory
                 .selectFrom(item)

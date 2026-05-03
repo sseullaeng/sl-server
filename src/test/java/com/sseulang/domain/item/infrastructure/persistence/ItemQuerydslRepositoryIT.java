@@ -133,7 +133,7 @@ class ItemQuerydslRepositoryIT {
         // "X" 1글자 → ngram_token_size=2 미달 → toBooleanModeQuery 빈 문자열 → LIKE 폴백.
         // LIKE 는 트랜잭션 내 INSERT row 도 즉시 매칭됨.
         Page<Item> result = repository.search(
-                new com.sseulang.domain.item.application.dto.ItemSearchCriteria("X", null, null, null, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria("X", null, null, null, null, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
                 PageRequest.of(0, 10));
 
         assertThat(result.getContent())
@@ -150,7 +150,7 @@ class ItemQuerydslRepositoryIT {
         persistItem("비싼것", TradeType.판매, 1_000_000L);
 
         Page<Item> result = repository.search(
-                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(null, null, TradeType.판매, 10_000L, 100_000L, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(null, null, TradeType.판매, 10_000L, 100_000L, null, null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
                 PageRequest.of(0, 10));
 
         assertThat(result.getContent())
@@ -174,7 +174,7 @@ class ItemQuerydslRepositoryIT {
         em.clear();
 
         Page<Item> hit = repository.search(
-                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(null, null, null, null, null, "미개봉", com.sseulang.domain.item.application.dto.ItemSort.LATEST),
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(null, null, null, null, null, "미개봉", null, com.sseulang.domain.item.application.dto.ItemSort.LATEST),
                 PageRequest.of(0, 10));
 
         assertThat(hit.getContent())

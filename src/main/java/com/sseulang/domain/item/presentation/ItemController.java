@@ -69,6 +69,7 @@ public class ItemController {
             @RequestParam(name = "minPrice", required = false) Long minPrice,
             @RequestParam(name = "maxPrice", required = false) Long maxPrice,
             @RequestParam(name = "tag", required = false) String tag,
+            @RequestParam(name = "sellerId", required = false) Long sellerId,
             @RequestParam(name = "sort", required = false) String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
@@ -77,7 +78,7 @@ public class ItemController {
         int safePage = Math.max(page, 0);
         Pageable pageable = PageRequest.of(safePage, safeSize);
         ItemSearchCriteria criteria = new ItemSearchCriteria(
-                q, categoryId, tradeType, minPrice, maxPrice, tag,
+                q, categoryId, tradeType, minPrice, maxPrice, tag, sellerId,
                 com.sseulang.domain.item.application.dto.ItemSort.parse(sort));
 
         // 비로그인 — viewerId null → isWishlisted 항상 false. 로그인 시 단일 SELECT 로 enrich.
