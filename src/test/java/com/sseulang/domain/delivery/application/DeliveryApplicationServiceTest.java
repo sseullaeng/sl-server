@@ -41,7 +41,9 @@ class DeliveryApplicationServiceTest {
         repo = new InMemoryFakeDeliveryRepository();
         userService = mock(UserApplicationService.class);
         pointService = mock(PointApplicationService.class);
-        service = new DeliveryApplicationService(repo, userService, pointService);
+        com.sseulang.domain.delivery.domain.DeliveryLocationCache locationCache =
+                mock(com.sseulang.domain.delivery.domain.DeliveryLocationCache.class);
+        service = new DeliveryApplicationService(repo, userService, pointService, locationCache);
     }
 
     @Test

@@ -95,7 +95,9 @@ public enum ErrorCode {
     DELIVERY_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서 수행할 수 없는 동작입니다."),
     DELIVERY_ALREADY_ACCEPTED(HttpStatus.CONFLICT, "이미 다른 라이더가 수락한 요청입니다."),
     DELIVERY_SELF_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "본인이 등록한 요청은 수락할 수 없습니다."),
-    DELIVERY_LOCATION_INVALID(HttpStatus.BAD_REQUEST, "유효하지 않은 위치 좌표입니다.");
+    DELIVERY_LOCATION_INVALID(HttpStatus.BAD_REQUEST, "유효하지 않은 위치 좌표입니다."),
+    DELIVERY_LOCATION_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "위치 업데이트 빈도가 너무 높습니다."),
+    PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "요청 본문 크기가 한도를 초과합니다.");
 
     private final HttpStatus status;
     private final String defaultMessage;
@@ -103,5 +105,13 @@ public enum ErrorCode {
     ErrorCode(HttpStatus status, String defaultMessage) {
         this.status = status;
         this.defaultMessage = defaultMessage;
+    }
+
+    public HttpStatus getStatus() {
+        return status;
+    }
+
+    public String getDefaultMessage() {
+        return defaultMessage;
     }
 }

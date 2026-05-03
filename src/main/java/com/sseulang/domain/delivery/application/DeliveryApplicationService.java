@@ -3,6 +3,7 @@ package com.sseulang.domain.delivery.application;
 import com.sseulang.domain.delivery.application.dto.DeliveryCreateCommand;
 import com.sseulang.domain.delivery.application.dto.DeliveryResult;
 import com.sseulang.domain.delivery.application.dto.DeliveryStatsResult;
+import com.sseulang.domain.delivery.domain.DeliveryLocationCache;
 import com.sseulang.domain.delivery.domain.DeliveryRepository;
 import com.sseulang.domain.delivery.domain.DeliveryRequest;
 import com.sseulang.domain.delivery.domain.DeliveryStatus;
@@ -45,15 +46,18 @@ public class DeliveryApplicationService {
     private final DeliveryRepository deliveryRepository;
     private final UserApplicationService userApplicationService;
     private final PointApplicationService pointApplicationService;
+    private final DeliveryLocationCache locationCache;
 
     public DeliveryApplicationService(
             DeliveryRepository deliveryRepository,
             UserApplicationService userApplicationService,
-            PointApplicationService pointApplicationService
+            PointApplicationService pointApplicationService,
+            DeliveryLocationCache locationCache
     ) {
         this.deliveryRepository = deliveryRepository;
         this.userApplicationService = userApplicationService;
         this.pointApplicationService = pointApplicationService;
+        this.locationCache = locationCache;
     }
 
     /**
@@ -164,6 +168,8 @@ public class DeliveryApplicationService {
                 "배달 정산: delivery#" + d.getId()
         );
         d.markSettled(LocalDateTime.now());
+        // 위치 캐시 즉시 만료 — 정산완료 후 개인정보 잔류 방지 (Codex 게이트 2 W1).
+        locationCache.evict(deliveryId);
         return DeliveryResult.from(d);
     }
 
@@ -190,6 +196,8 @@ public class DeliveryApplicationService {
             // 이미 수락된 / 취소된 / 그 이후 단계 — 모집중 아님.
             throw new BusinessException(ErrorCode.DELIVERY_INVALID_STATE);
         }
+        // 모집중에서 취소된 케이스 — 위치 캐시 보통 비어있지만 안전망으로 evict.
+        locationCache.evict(deliveryId);
         return DeliveryResult.from(findOrThrow(deliveryId));
     }
 
@@ -225,6 +233,31 @@ public class DeliveryApplicationService {
         DeliveryRequest d = findOrThrow(deliveryId);
         if (!d.isRider(userId)) {
             throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
+        }
+    }
+
+    /**
+     * 라이더 본인 + 위치 추적 가능 상태({@link DeliveryStatus#canTrackLocation}) 검증.
+     * 위치 publish 진입 가드 — 종료(배송완료/정산완료/취소) 후 위치 보낼 수 없게 함 (Codex 게이트 2 W1).
+     */
+    public void requireRiderTrackable(Long deliveryId, Long userId) {
+        DeliveryRequest d = findOrThrow(deliveryId);
+        if (!d.isRider(userId)) {
+            throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
+        }
+        if (!d.getStatus().canTrackLocation()) {
+            throw new BusinessException(ErrorCode.DELIVERY_INVALID_STATE);
+        }
+    }
+
+    /** 참여자 + 위치 추적 가능 상태 — 종료 후 위치 조회/구독 차단. */
+    public void requireParticipantTrackable(Long deliveryId, Long userId) {
+        DeliveryRequest d = findOrThrow(deliveryId);
+        if (!d.isParticipant(userId)) {
+            throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
+        }
+        if (!d.getStatus().canTrackLocation()) {
+            throw new BusinessException(ErrorCode.DELIVERY_INVALID_STATE);
         }
     }
 

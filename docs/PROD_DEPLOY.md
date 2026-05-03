@@ -96,6 +96,10 @@ docker logs -f sseulang-app
 
 `/etc/nginx/conf.d/sseulang.conf`:
 ```nginx
+# webhook 전용 IP 별 rate limit zone — 결제 webhook DoS 방어 (Codex 게이트 2 W5/W10).
+# zone 크기 10MB ≈ 16만 IP 정도 추적 가능. burst 5 + nodelay 로 정상 retry 흐름은 통과.
+limit_req_zone $binary_remote_addr zone=toss_webhook:10m rate=10r/s;
+
 server {
     listen 80;
     server_name sseulang.com www.sseulang.com;
@@ -129,6 +133,19 @@ server {
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;
         proxy_read_timeout 3600s;
+    }
+
+    # 토스 결제 webhook 전용 — body 크기 16KB 제한 + IP 별 rate limit + 짧은 timeout.
+    # 토스 retry 정상 흐름(같은 transmission-id)은 burst 안에서 통과, 폭주 공격은 zone 한도에서 차단.
+    location = /api/v1/payments/webhook/toss {
+        limit_req            zone=toss_webhook burst=5 nodelay;
+        client_max_body_size 16k;
+        proxy_pass         http://127.0.0.1:8080;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
     }
 
     location / {

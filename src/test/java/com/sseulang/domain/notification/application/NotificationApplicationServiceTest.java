@@ -64,23 +64,23 @@ class NotificationApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("markAsRead 타인_FORBIDDEN")
-    void markAsRead_타인_거부() {
+    @DisplayName("markAsRead 타인_무시 (read 변경 없음, FORBIDDEN throw 안 함 — Codex 게이트 2 W12)")
+    void markAsRead_타인_무시() {
         Notification n = service.notify(USER, NotificationType.시스템, "t", null, null, null);
 
-        assertThatThrownBy(() -> service.markAsRead(n.getId(), OTHER))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.FORBIDDEN);
+        // 예외 안 던지고 silently 무시 — 정보 노출 차단 + doc/FRONTEND_INTEGRATION.md §10.10 정합
+        service.markAsRead(n.getId(), OTHER);
+
+        Notification reloaded = repo.findById(n.getId()).orElseThrow();
+        assertThat(reloaded.isRead()).isFalse();  // 읽음 처리 안 됨
     }
 
     @Test
-    @DisplayName("markAsRead 없는 알림_RESOURCE_NOT_FOUND")
-    void markAsRead_없음() {
-        assertThatThrownBy(() -> service.markAsRead("nonexistent", USER))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+    @DisplayName("markAsRead 없는 알림_무시 (RESOURCE_NOT_FOUND 안 던짐)")
+    void markAsRead_없음_무시() {
+        // 없는 id 도 silently 무시 — 다른 사용자 알림 id 유추 차단
+        service.markAsRead("nonexistent", USER);
+        // throw 가 없으면 통과
     }
 
     @Test

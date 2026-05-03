@@ -171,6 +171,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
                         // 다른 사용자 공개 프로필 — ItemDetail 의 sellerId 등 비로그인 접근 허용.
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/*/profile").permitAll()
+                        // 메인 화면 배너 / 공지 — 비로그인도 노출 (FRONTEND_INTEGRATION.md §10.8/10.9 정합).
+                        .requestMatchers(HttpMethod.GET, "/api/v1/banners").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/notices/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook/**").permitAll()
                         // WebSocket handshake 는 인증 없이 통과 — STOMP CONNECT 단계의 ChannelInterceptor 가
                         // Authorization 헤더 검증으로 인증 책임 (follow-up #19 native 토큰 인증).

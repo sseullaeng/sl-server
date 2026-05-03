@@ -36,7 +36,7 @@ public record DeliveryLocation(
                 || longitude < LNG_MIN || longitude > LNG_MAX) {
             throw new BusinessException(ErrorCode.DELIVERY_LOCATION_INVALID);
         }
-        if (accuracyM != null && (accuracyM.isNaN() || accuracyM < 0)) {
+        if (accuracyM != null && (accuracyM.isNaN() || accuracyM.isInfinite() || accuracyM < 0)) {
             throw new BusinessException(ErrorCode.DELIVERY_LOCATION_INVALID);
         }
     }
