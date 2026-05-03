@@ -3,7 +3,7 @@ package com.sseulang.domain.auth.infrastructure.email;
 import com.sseulang.domain.auth.domain.EmailSender;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -14,14 +14,15 @@ import java.nio.charset.StandardCharsets;
 /**
  * prod SMTP {@link EmailSender} 구현. Spring Mail (JavaMailSender) 사용.
  *
- * <p>{@code @Profile("prod")} — prod 환경 전용. local/dev/test 는 {@code LogEmailSender} 가 활성화.
- * SMTP 설정은 {@code application-prod.yml} 의 {@code spring.mail.*} 환경변수 주입.</p>
+ * <p>활성화: {@code app.email.smtp-enabled=true} (prod 는 application-prod.yml 에서 강제 true,
+ * local 은 .env 에서 SMTP 정보 채우면 켤 수 있음). false / 미설정 시 {@link LogEmailSender} 가 활성.
+ * SMTP 설정은 {@code spring.mail.*} 환경변수 주입.</p>
  *
  * <p>발송 실패 시 {@link RuntimeException} 으로 throw — 호출자(LocalAuthService.signup) 가 회원 가입
  * 실패로 트랜잭션 롤백. 5/6 이후 outbox 패턴 도입 시 비동기 발송으로 변경 가능.</p>
  */
 @Component
-@Profile("prod")
+@ConditionalOnProperty(name = "app.email.smtp-enabled", havingValue = "true")
 public class SmtpEmailSender implements EmailSender {
 
     private static final String SUBJECT = "[쓸랭] 이메일 인증을 완료해 주세요";
