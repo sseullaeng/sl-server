@@ -58,6 +58,24 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public List<com.sseulang.domain.transaction.domain.TransactionMonthlyStat> countCompletedMonthly(
+            java.time.YearMonth from, java.time.YearMonth to) {
+        if (from == null || to == null) {
+            throw new IllegalArgumentException("from/to 는 필수입니다");
+        }
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException("from 은 to 이전이어야 합니다");
+        }
+        java.time.LocalDateTime fromTs = from.atDay(1).atStartOfDay();
+        // toTs 는 (to.다음월 1일 00:00) — exclusive 경계로 to 월 마지막 순간까지 포함.
+        java.time.LocalDateTime toTs = to.plusMonths(1).atDay(1).atStartOfDay();
+        return jpa.countCompletedMonthlyRaw(fromTs, toTs).stream()
+                .map(r -> new com.sseulang.domain.transaction.domain.TransactionMonthlyStat(
+                        java.time.YearMonth.of(r.getY(), r.getM()), r.getCnt(), r.getAmt()))
+                .toList();
+    }
+
+    @Override
     public Page<Transaction> findPendingReviewable(Long userId, LocalDateTime since, Pageable pageable) {
         return jpa.findPendingReviewableJpql(userId, since, pageable);
     }

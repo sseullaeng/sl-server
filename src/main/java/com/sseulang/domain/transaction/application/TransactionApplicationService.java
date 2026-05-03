@@ -197,6 +197,22 @@ public class TransactionApplicationService {
     }
 
     /**
+     * 월별 거래완료 집계 (Admin) — completed_at 기준. 거래 0 건 월은 응답에서 0 으로 채워진다.
+     * recharts 친화 — month ASC. (year, month, count, amount).
+     */
+    public java.util.List<com.sseulang.domain.transaction.domain.TransactionMonthlyStat> adminMonthlyTrades(
+            java.time.YearMonth from, java.time.YearMonth to) {
+        java.util.Map<java.time.YearMonth, com.sseulang.domain.transaction.domain.TransactionMonthlyStat> byMonth = new java.util.LinkedHashMap<>();
+        for (java.time.YearMonth m = from; !m.isAfter(to); m = m.plusMonths(1)) {
+            byMonth.put(m, new com.sseulang.domain.transaction.domain.TransactionMonthlyStat(m, 0, 0));
+        }
+        for (var row : transactionRepository.countCompletedMonthly(from, to)) {
+            byMonth.put(row.month(), row);
+        }
+        return new java.util.ArrayList<>(byMonth.values());
+    }
+
+    /**
      * 본인이 reviewer 로 아직 작성하지 않은 거래완료 거래 페이징 (follow-up #56).
      *
      * <p>completedAt 이 7일 이내인 것만 — 작성 가능 기간이 지난 거래는 제외 (가이드 §5.5).

@@ -55,4 +55,10 @@ public class AdminStatsService {
         DeliveryStatsResult deliveries = deliveryService.adminGetStats();
         return new AdminDashboardResult(users, transactions, payments, withdrawals, deliveries);
     }
+
+    /** 월별 거래완료 집계 — recharts 차트용. month ASC, 빈 월은 0 채움. */
+    public java.util.List<com.sseulang.domain.transaction.domain.TransactionMonthlyStat> tradesMonthly(
+            java.time.YearMonth from, java.time.YearMonth to) {
+        return transactionService.adminMonthlyTrades(from, to);
+    }
 }

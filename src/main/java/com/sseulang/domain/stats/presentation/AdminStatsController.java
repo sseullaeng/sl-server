@@ -27,4 +27,22 @@ public class AdminStatsController {
     public ApiResponse<AdminDashboardResponse> dashboard() {
         return ApiResponse.ok(AdminDashboardResponse.from(statsService.dashboard()));
     }
+
+    @Operation(summary = "월별 거래완료 집계",
+            description = "completed_at 기준. from/to 형식 'YYYY-MM' (양쪽 inclusive). 거래 0건 월은 0 으로 채워져 차트 친화.")
+    @GetMapping("/trades/monthly")
+    public ApiResponse<java.util.List<com.sseulang.domain.stats.presentation.dto.MonthlyTradeStatResponse>> tradesMonthly(
+            @org.springframework.web.bind.annotation.RequestParam("from")
+            @org.springframework.format.annotation.DateTimeFormat(pattern = "yyyy-MM") java.time.YearMonth from,
+            @org.springframework.web.bind.annotation.RequestParam("to")
+            @org.springframework.format.annotation.DateTimeFormat(pattern = "yyyy-MM") java.time.YearMonth to
+    ) {
+        if (from.isAfter(to)) {
+            throw new com.sseulang.global.exception.BusinessException(
+                    com.sseulang.global.exception.ErrorCode.INVALID_REQUEST);
+        }
+        return ApiResponse.ok(statsService.tradesMonthly(from, to).stream()
+                .map(com.sseulang.domain.stats.presentation.dto.MonthlyTradeStatResponse::from)
+                .toList());
+    }
 }
