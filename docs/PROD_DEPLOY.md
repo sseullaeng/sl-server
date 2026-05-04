@@ -224,9 +224,47 @@ docker exec sseulang-mongo mongodump \
 
 ---
 
-## 8. 다음 단계 (이 문서 외)
+## 8. Swagger prod 노출 정책
+
+기본값: **비활성** (`APP_SWAGGER_ENABLED=false`).
+
+- `/swagger-ui.html`, `/v3/api-docs/**` 모두 404 (springdoc 자체 차단)
+- 외부 API 검수 / 응급 디버그 시에만 일시 켜기:
+  ```bash
+  # .env.prod 에서 일시 변경 후 재기동
+  sed -i 's/APP_SWAGGER_ENABLED=false/APP_SWAGGER_ENABLED=true/' .env.prod
+  docker compose -f docker-compose.prod.yml --env-file .env.prod up -d app
+  # 사용 끝나면 즉시 false 로 되돌리기
+  ```
+- IP 제한이 필요하면 nginx `location = /swagger-ui.html { allow <admin-ip>; deny all; }` 추가 권장.
+
+---
+
+## 9. CORS 도메인 갱신 (Vercel 호스팅)
+
+프론트가 Vercel 사용 (2026-05-05). 도메인 확정되면 `.env.prod` 의 `CORS_ALLOWED_ORIGINS` 콤마 추가:
+
+```bash
+# 예시
+CORS_ALLOWED_ORIGINS=https://sseulang.com,https://www.sseulang.com,https://sseulang.vercel.app
+```
+
+⚠️ Vercel **preview 배포** 도메인은 PR 별로 다름 (`sseulang-git-{branch}-{team}.vercel.app`). 모든 preview 허용하려면:
+- 옵션 a) 정확 매칭만 → 프론트가 preview 환경에서 백엔드 호출 X (mock API 사용)
+- 옵션 b) `CorsConfigurationSource` 에 패턴 매칭 추가 (코드 변경, follow-up)
+
+현재 옵션 (a) — preview 는 prod API 호출 X 가정. 합의 필요 시 옵션 (b) 추가.
+
+재기동:
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d app
+```
+
+---
+
+## 10. 다음 단계 (이 문서 외)
 
 - [ ] **#91** EC2 인스턴스 생성 + Let's Encrypt (`certbot --nginx`)
-- [ ] **#93** Swagger prod 노출 정책 결정 (인증 필수 / IP 제한 / 비활성)
 - [ ] CI/CD — GitHub Actions 로 image build → ECR/Docker Hub push → SSH 갱신 (선택)
 - [ ] CloudWatch 또는 Loki 로 로그 수집 (선택)
+- [ ] CORS preview 도메인 패턴 매칭 (Vercel 결정 후, 선택)

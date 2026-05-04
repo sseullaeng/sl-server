@@ -117,12 +117,18 @@ services:
       TOSS_CLIENT_KEY: ${TOSS_CLIENT_KEY:?required}
       TOSS_SECRET_KEY: ${TOSS_SECRET_KEY:?required}
       TOSS_WEBHOOK_SECRET: ${TOSS_WEBHOOK_SECRET:-}
-      # === SMTP (이메일 인증) ===
+      # === SMTP (이메일 인증 + 답변 알림) ===
       MAIL_HOST: ${MAIL_HOST:?required}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME:?required}
       MAIL_PASSWORD: ${MAIL_PASSWORD:?required}
       MAIL_FROM: ${MAIL_FROM:-noreply@sseulang.com}
+      APP_EMAIL_SMTP_ENABLED: ${APP_EMAIL_SMTP_ENABLED:-true}
+      APP_EMAIL_VERIFICATION_URL_BASE: ${APP_EMAIL_VERIFICATION_URL_BASE:-}
+      # === 토스 webhook replay 허용 (옵션) ===
+      TOSS_WEBHOOK_REPLAY_TOLERANCE: ${TOSS_WEBHOOK_REPLAY_TOLERANCE:-300}
+      # === Swagger 노출 (옵션, default false — 운영 보안) ===
+      APP_SWAGGER_ENABLED: ${APP_SWAGGER_ENABLED:-false}
     ports:
       # nginx 가 호스트 80/443 → app 의 8080 으로 reverse proxy.
       # 외부에 8080 직접 노출하려면 "8080:8080" 으로 변경 (권장 X — TLS 없이 노출).
