@@ -284,12 +284,19 @@ public class User extends BaseEntity {
         return now != null && now.isBefore(expiresAt);
     }
 
-    /** 휴면 — lastLoginAt 이 dormantThresholdDays 이상 과거. lastLoginAt 없으면 createdAt 기준. */
+    /**
+     * 휴면 — lastLoginAt 이 dormantThresholdDays 이상 과거. lastLoginAt 없으면 createdAt 기준.
+     *
+     * <p>경계: 정확히 N일째 (base + N days == now) 도 dormant 로 본다. SQL 의 검색 쿼리
+     * ({@code COALESCE(last_login_at, created_at) <= now - N days}) 와 일관 (round 12 boundary
+     * 통일). 이전엔 Java 만 strict before 라 정확 N일째 ACTIVE / SQL 만 DORMANT 로 분기 → 같은 시점
+     * 같은 user 가 단건 조회와 검색 결과에서 다르게 나오던 회귀.</p>
+     */
     public boolean isDormantAt(LocalDateTime now, int dormantThresholdDays) {
         if (now == null) return false;
         LocalDateTime base = lastLoginAt != null ? lastLoginAt : getCreatedAt();
         if (base == null) return false;
-        return base.plusDays(dormantThresholdDays).isBefore(now);
+        return !base.plusDays(dormantThresholdDays).isAfter(now);  // <= (inclusive)
     }
 
     /** Admin 응답용 status derive — WITHDRAWN > SUSPENDED > DORMANT > ACTIVE 우선순위. */

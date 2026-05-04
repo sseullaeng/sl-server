@@ -18,6 +18,10 @@ import java.time.Instant;
  */
 @Document(collection = "notifications")
 @CompoundIndex(name = "user_created", def = "{'userId': 1, 'createdAt': -1}")
+// Round 12 — broadcast 멱등성. 같은 (broadcastId, userId) 중복 INSERT 차단.
+// broadcastId 가 null 인 일반 알림은 sparse=true 로 인덱스 외.
+@CompoundIndex(name = "broadcast_user_unique",
+        def = "{'broadcastId': 1, 'userId': 1}", unique = true, sparse = true)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Notification {
@@ -50,6 +54,13 @@ public class Notification {
     @Field("read")
     private boolean read;
 
+    /**
+     * Admin broadcast 멱등키 (round 12). 같은 broadcastId 로 재호출 시 (broadcastId, userId) UNIQUE
+     * 위반으로 중복 INSERT 차단. 일반 알림은 null (sparse 인덱스).
+     */
+    @Field("broadcastId")
+    private String broadcastId;
+
     @CreatedDate
     @Field("createdAt")
     private Instant createdAt;
@@ -61,6 +72,19 @@ public class Notification {
             String content,
             String linkType,
             Long linkId
+    ) {
+        return create(userId, type, title, content, linkType, linkId, null);
+    }
+
+    /** Round 12 broadcast 전용 — broadcastId 동반 INSERT. */
+    public static Notification create(
+            Long userId,
+            NotificationType type,
+            String title,
+            String content,
+            String linkType,
+            Long linkId,
+            String broadcastId
     ) {
         if (userId == null || userId <= 0) {
             throw new IllegalArgumentException("userId 는 양수여야 합니다");
@@ -85,6 +109,7 @@ public class Notification {
         n.linkType = linkType;
         n.linkId = linkId;
         n.read = false;
+        n.broadcastId = broadcastId;
         return n;
     }
 
