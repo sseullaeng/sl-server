@@ -111,4 +111,12 @@ public class UserRepositoryImpl implements UserRepository {
         if (limit <= 0) return java.util.Collections.emptyList();
         return jpa.findActiveIdsAfter(afterId, org.springframework.data.domain.PageRequest.of(0, limit));
     }
+
+    @Override
+    public java.util.List<Long> findIdsByKeywordLike(String keyword, int limit) {
+        if (keyword == null || keyword.isBlank() || limit <= 0) {
+            return java.util.Collections.emptyList();
+        }
+        return jpa.findIdsByKeywordLike(keyword.strip(), org.springframework.data.domain.PageRequest.of(0, limit));
+    }
 }

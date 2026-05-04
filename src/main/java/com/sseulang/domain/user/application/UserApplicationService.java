@@ -247,6 +247,15 @@ public class UserApplicationService {
         u.unsuspend();
     }
 
+    /**
+     * Admin 거래 검색 (round 10) — keyword 로 매칭되는 user id 리스트.
+     * cross-aggregate keyword (email/nickname LIKE) 매칭 시 호출자가 IN 절로 사용.
+     * limit 으로 IN 절 폭주 방지.
+     */
+    public java.util.List<Long> findUserIdsByKeyword(String keyword, int limit) {
+        return userRepository.findIdsByKeywordLike(keyword, limit);
+    }
+
     /** 로그인 성공 직후 호출 — 마지막 로그인 시각 기록 (휴면 판정 기준). 미존재 userId 무시. */
     @Transactional
     public void recordLogin(Long userId) {

@@ -133,4 +133,20 @@ public class InMemoryFakeUserRepository implements UserRepository {
                 .limit(limit)
                 .toList();
     }
+
+    @Override
+    public java.util.List<Long> findIdsByKeywordLike(String keyword, int limit) {
+        if (keyword == null || keyword.isBlank() || limit <= 0) return java.util.Collections.emptyList();
+        String kw = keyword.strip().toLowerCase();
+        return store.values().stream()
+                .filter(u -> {
+                    String email = u.getEmail() == null ? "" : u.getEmail().toLowerCase();
+                    String nick  = u.getNickname() == null ? "" : u.getNickname().toLowerCase();
+                    return email.contains(kw) || nick.contains(kw);
+                })
+                .map(User::getId)
+                .sorted()
+                .limit(limit)
+                .toList();
+    }
 }
