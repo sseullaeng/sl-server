@@ -155,4 +155,13 @@ interface UserJpaRepository extends JpaRepository<User, Long> {
     /** Admin broadcast — 활성 사용자 id 만 청크 페이징. id ASC. */
     @Query("SELECT u.id FROM User u WHERE u.blocked = false AND u.deleted = false AND u.id > :afterId ORDER BY u.id ASC")
     java.util.List<Long> findActiveIdsAfter(@Param("afterId") long afterId, org.springframework.data.domain.Pageable pageable);
+
+    /** Admin 거래 검색 (round 10) — email/nickname LIKE 매칭 user id. limit 으로 IN 절 폭주 방지. */
+    @Query("""
+            SELECT u.id FROM User u
+             WHERE LOWER(u.email)    LIKE LOWER(CONCAT('%', :kw, '%'))
+                OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :kw, '%'))
+             ORDER BY u.id ASC
+            """)
+    java.util.List<Long> findIdsByKeywordLike(@Param("kw") String kw, org.springframework.data.domain.Pageable pageable);
 }

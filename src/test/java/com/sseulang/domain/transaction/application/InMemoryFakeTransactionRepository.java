@@ -139,6 +139,7 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
             com.sseulang.domain.item.domain.TradeType tradeType,
             TransactionStatus status,
             String keyword,
+            java.util.Collection<Long> matchedUserIds,
             Pageable pageable
     ) {
         boolean hasKeyword = keyword != null && !keyword.isBlank();
@@ -146,16 +147,24 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
         if (hasKeyword) {
             try { keywordId = Long.parseLong(keyword.trim()); } catch (NumberFormatException ignored) { }
         }
-        if (hasKeyword && keywordId == null) {
+        boolean hasUserIds = matchedUserIds != null && !matchedUserIds.isEmpty();
+        if (hasKeyword && keywordId == null && !hasUserIds) {
             return new PageImpl<>(java.util.Collections.emptyList(), pageable, 0);
         }
         final Long kId = keywordId;
+        final Set<Long> userIdSet = hasUserIds ? new HashSet<>(matchedUserIds) : Set.of();
         List<Transaction> filtered = store.values().stream()
                 .filter(t -> startDate == null || t.getCreatedAt() == null || !t.getCreatedAt().isBefore(startDate))
                 .filter(t -> endDate == null || t.getCreatedAt() == null || !t.getCreatedAt().isAfter(endDate))
                 .filter(t -> tradeType == null || t.getTradeType() == tradeType)
                 .filter(t -> status == null || t.getStatus() == status)
-                .filter(t -> kId == null || kId.equals(t.getId()) || kId.equals(t.getItemId()))
+                .filter(t -> {
+                    // keyword 가 없으면 패스. 있으면 keywordId 매칭 OR userId IN.
+                    if (kId == null && !hasUserIds) return true;
+                    if (kId != null && (kId.equals(t.getId()) || kId.equals(t.getItemId()))) return true;
+                    if (hasUserIds && (userIdSet.contains(t.getSellerId()) || userIdSet.contains(t.getBuyerId()))) return true;
+                    return false;
+                })
                 .sorted(Comparator.comparingLong(Transaction::getId).reversed())
                 .toList();
         int start = Math.min((int) pageable.getOffset(), filtered.size());

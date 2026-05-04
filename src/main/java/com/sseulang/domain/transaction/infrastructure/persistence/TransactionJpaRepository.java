@@ -34,8 +34,12 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
     List<TransactionStatusCount> countGroupByStatusJpql();
 
     /**
-     * Admin 거래 검색 (round 9). created_at [start, end] + tradeType / status / keywordId 필터.
-     * 모두 nullable. keywordId 는 t.id 또는 t.itemId 정확 매칭. 최신순.
+     * Admin 거래 검색 (round 9 + round 10). created_at [start, end] + tradeType / status / keywordId / matchedUserIds.
+     * 모두 nullable. 최신순.
+     *
+     * <p>keywordId: t.id 또는 t.itemId 정확 매칭 (숫자 keyword).</p>
+     * <p>matchedUserIds: t.sellerId 또는 t.buyerId 가 IN (cross-aggregate user LIKE 매치 결과).</p>
+     * <p>두 파라미터는 호출자가 mutually exclusive 로 채움 — 동시에 쓰면 OR 로 합쳐짐.</p>
      */
     @Query("""
             SELECT t FROM Transaction t
@@ -43,7 +47,11 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
                AND (:end   IS NULL OR t.createdAt <= :end)
                AND (:tradeType IS NULL OR t.tradeType = :tradeType)
                AND (:status    IS NULL OR t.status    = :status)
-               AND (:keywordId IS NULL OR t.id = :keywordId OR t.itemId = :keywordId)
+               AND (
+                    (:keywordId IS NULL AND :hasUserIds = FALSE)
+                    OR (:keywordId IS NOT NULL AND (t.id = :keywordId OR t.itemId = :keywordId))
+                    OR (:hasUserIds = TRUE AND (t.sellerId IN :userIds OR t.buyerId IN :userIds))
+               )
              ORDER BY t.id DESC
             """)
     Page<Transaction> adminSearchJpql(
@@ -52,6 +60,8 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
             @Param("tradeType") com.sseulang.domain.item.domain.TradeType tradeType,
             @Param("status")    TransactionStatus status,
             @Param("keywordId") Long keywordId,
+            @Param("hasUserIds") boolean hasUserIds,
+            @Param("userIds")    java.util.Collection<Long> userIds,
             Pageable pageable
     );
 

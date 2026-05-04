@@ -84,4 +84,11 @@ public interface UserRepository {
      * @param limit   페이지 크기
      */
     java.util.List<Long> findActiveIdsAfter(long afterId, int limit);
+
+    /**
+     * Admin 거래 검색 (round 10) cross-aggregate keyword 매칭용 — email/nickname LIKE.
+     * 결과 id 만 반환 → 호출자가 IN 절로 사용. limit 으로 IN 절 폭주 방지.
+     * keyword null/blank → 빈 리스트.
+     */
+    java.util.List<Long> findIdsByKeywordLike(String keyword, int limit);
 }

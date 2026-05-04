@@ -64,16 +64,19 @@ public class TransactionRepositoryImpl implements TransactionRepository {
             com.sseulang.domain.item.domain.TradeType tradeType,
             TransactionStatus status,
             String keyword,
+            java.util.Collection<Long> matchedUserIds,
             Pageable pageable
     ) {
-        // keyword 입력이 있으면 숫자만 매칭 — 비숫자 (영문/이메일 등) 는 빈 결과 반환 (Codex round 9 hotfix).
-        // null/blank 는 필터 미적용. NUMBER 매칭만이 현 범위 — LIKE 는 follow-up.
+        // round 10 — keyword 가 숫자면 keywordId 로, 비숫자면 호출자가 미리 LIKE 매치한 userIds 로.
+        // 둘 다 비어있고 keyword 만 있으면 (= 비숫자인데 매치 0건) 빈 결과 즉시 반환.
         boolean hasKeyword = keyword != null && !keyword.isBlank();
         Long keywordId = parseKeywordId(keyword);
-        if (hasKeyword && keywordId == null) {
+        boolean hasUserIds = matchedUserIds != null && !matchedUserIds.isEmpty();
+        if (hasKeyword && keywordId == null && !hasUserIds) {
             return new org.springframework.data.domain.PageImpl<>(java.util.Collections.emptyList(), pageable, 0);
         }
-        return jpa.adminSearchJpql(startDate, endDate, tradeType, status, keywordId, pageable);
+        java.util.Collection<Long> userIdsParam = hasUserIds ? matchedUserIds : java.util.List.of(0L); // dummy IN — JPA 빈 IN 회피
+        return jpa.adminSearchJpql(startDate, endDate, tradeType, status, keywordId, hasUserIds, userIdsParam, pageable);
     }
 
     /** keyword 가 숫자면 long, 아니면 null. */

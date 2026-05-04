@@ -212,9 +212,19 @@ public class TransactionApplicationService {
         return new java.util.ArrayList<>(byMonth.values());
     }
 
+    /** Admin 거래 keyword LIKE 매칭 시 user IN 절 폭주 방지 — top N user. */
+    private static final int KEYWORD_USER_LIMIT = 200;
+
     /**
-     * Admin 거래 검색 (round 9). 모든 필터 nullable, 최신순. cross-aggregate join 부담 회피로
-     * keyword 는 itemId/transactionId 숫자 매칭만 (email/nickname LIKE 는 follow-up).
+     * Admin 거래 검색 (round 9 + round 10 LIKE).
+     *
+     * <p>keyword 처리 (round 10):
+     * <ul>
+     *   <li>숫자: transactionId 또는 itemId 정확 매칭</li>
+     *   <li>비숫자: UserApplicationService.findUserIdsByKeyword 로 user 매치 (top {@value #KEYWORD_USER_LIMIT}) →
+     *       Transaction.sellerId/buyerId IN. user 매치 0건이면 빈 결과.</li>
+     * </ul>
+     * 모든 필터 nullable, 최신순.</p>
      */
     public Page<TransactionResult> adminSearch(
             java.time.LocalDateTime startDate,
@@ -224,8 +234,18 @@ public class TransactionApplicationService {
             String keyword,
             Pageable pageable
     ) {
-        return transactionRepository.adminSearch(startDate, endDate, tradeType, status, keyword, pageable)
+        java.util.List<Long> matchedUserIds = java.util.Collections.emptyList();
+        if (keyword != null && !keyword.isBlank() && parseLong(keyword) == null) {
+            matchedUserIds = userApplicationService.findUserIdsByKeyword(keyword, KEYWORD_USER_LIMIT);
+        }
+        return transactionRepository.adminSearch(
+                        startDate, endDate, tradeType, status, keyword, matchedUserIds, pageable)
                 .map(TransactionResult::from);
+    }
+
+    private static Long parseLong(String s) {
+        if (s == null || s.isBlank()) return null;
+        try { return Long.parseLong(s.trim()); } catch (NumberFormatException e) { return null; }
     }
 
     /**
