@@ -58,4 +58,25 @@ public class InMemoryFakeNotificationRepository implements NotificationRepositor
         }
         return count;
     }
+
+    @Override
+    public int saveAllIgnoreDuplicates(java.util.List<Notification> notifications) {
+        if (notifications == null || notifications.isEmpty()) return 0;
+        // (broadcastId, userId) UNIQUE 시뮬레이션 — round 12 멱등성.
+        java.util.Set<String> existingKeys = new java.util.HashSet<>();
+        for (Notification existing : store.values()) {
+            if (existing.getBroadcastId() != null) {
+                existingKeys.add(existing.getBroadcastId() + ":" + existing.getUserId());
+            }
+        }
+        int inserted = 0;
+        for (Notification n : notifications) {
+            String key = n.getBroadcastId() == null ? null : (n.getBroadcastId() + ":" + n.getUserId());
+            if (key != null && existingKeys.contains(key)) continue;  // dup skip
+            save(n);
+            if (key != null) existingKeys.add(key);
+            inserted++;
+        }
+        return inserted;
+    }
 }

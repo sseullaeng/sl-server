@@ -72,31 +72,45 @@ public class NotificationApplicationService {
 
     /**
      * Admin broadcast — 활성 사용자(blocked/deleted 제외) 전원에게 동일 알림 발송.
-     * 청크 페이징 + Mongo 단위 INSERT 로 OOM 방지. 처리 건수 반환.
      *
-     * <p>type 은 {@link NotificationType#공지} 고정. linkType=null, linkId=null (특정 자원 아님).</p>
+     * <p>round 12 멱등성 + bulk:
+     * <ul>
+     *   <li>idempotencyKey null 이면 서버 UUID 자동 생성 → 응답으로 반환</li>
+     *   <li>idempotencyKey 제공 시 그대로 broadcastId — 같은 키 재호출 시 중복 INSERT 차단</li>
+     *   <li>chunk 당 BulkOperations UNORDERED INSERT — Mongo round-trip 1번 (이전엔 chunk 사이즈만큼)</li>
+     *   <li>중간 실패 시 같은 broadcastId 로 재호출 → (broadcastId, userId) UNIQUE 가 dup skip</li>
+     * </ul>
+     *
+     * <p>type {@link NotificationType#공지} 고정. linkType / linkId null.</p>
+     *
+     * @return BroadcastResult — broadcastId + 실제 INSERT 된 건수
      */
-    public long broadcast(String title, String content) {
+    public BroadcastResult broadcast(String title, String content, String idempotencyKey) {
         if (title == null || title.isBlank()) {
             throw new IllegalArgumentException("title 은 필수입니다");
         }
         if (content == null || content.isBlank()) {
             throw new IllegalArgumentException("content 는 필수입니다");
         }
+        String broadcastId = (idempotencyKey != null && !idempotencyKey.isBlank())
+                ? idempotencyKey.trim()
+                : java.util.UUID.randomUUID().toString();
         long total = 0;
         long afterId = 0;
         while (true) {
             java.util.List<Long> chunk = userRepository.findActiveIdsAfter(afterId, BROADCAST_CHUNK_SIZE);
             if (chunk.isEmpty()) break;
+            java.util.List<Notification> docs = new java.util.ArrayList<>(chunk.size());
             for (Long uid : chunk) {
-                notificationRepository.save(
-                        Notification.create(uid, NotificationType.공지, title, content, null, null)
-                );
+                docs.add(Notification.create(uid, NotificationType.공지, title, content, null, null, broadcastId));
             }
-            total += chunk.size();
+            total += notificationRepository.saveAllIgnoreDuplicates(docs);
             afterId = chunk.get(chunk.size() - 1);
             if (chunk.size() < BROADCAST_CHUNK_SIZE) break;
         }
-        return total;
+        return new BroadcastResult(broadcastId, total);
     }
+
+    /** Round 12 broadcast 결과 — broadcastId 응답으로 반환해 재호출 멱등키로 사용. */
+    public record BroadcastResult(String broadcastId, long sent) { }
 }
