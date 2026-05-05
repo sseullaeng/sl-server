@@ -53,7 +53,9 @@ app:
   cookie:
     domain: ${COOKIE_DOMAIN}
     secure: true
-    same-site: Strict
+    # cross-site 쿠키 허용 — 프론트 (vercel.app) 와 백엔드 (duckdns.org 등) 가 다른 site 일 때 None 필수.
+    # 같은 eTLD+1 으로 합쳐지면 Strict / Lax 로 강화. CSRF 방어는 X-XSRF-TOKEN 헤더 + Secure 가 1차.
+    same-site: ${COOKIE_SAME_SITE:None}
   oauth2:
     kakao:
       client-id: ${KAKAO_REST_API_KEY}
