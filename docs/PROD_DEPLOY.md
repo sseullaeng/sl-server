@@ -1,35 +1,45 @@
 # 쓸랭 프로덕션 배포 가이드
 
-> Docker Compose 기반. 호스트(EC2)에 nginx 가 80/443 → app:8080 으로 reverse proxy.
-> EC2 + Let's Encrypt 절차는 별도 문서 (`#91 task` 작업 후 추가).
+> Docker Compose 기반. 호스트 (GCP Compute Engine) 에 nginx 가 80/443 → app:8080 으로 reverse proxy.
 
 ---
 
 ## 1. 사전 준비
 
-### 1.1 EC2 호스트
-- Amazon Linux 2023 또는 Ubuntu 22.04+
-- 최소 t3.small (2GB RAM) 권장 — JVM heap + 3개 DB 컨테이너
+### 1.1 호스트 (GCP Compute Engine 기준)
+- e2-medium (2 vCPU / 4GB RAM) — JVM heap + 3개 DB 컨테이너 빠듯하지만 동작
+- Debian 12 / Ubuntu 22.04+
+- 정적 외부 IP 예약 (인스턴스 재시작 시 IP 보존)
+- 디스크 30GB 이상 권장 (10GB 는 Docker image + 로그로 빠르게 참)
+- 방화벽: 80/443/22 만 허용 (GCP Network tags `http-server`, `https-server` 자동 적용)
 - Docker + Docker Compose plugin 설치
   ```bash
-  sudo yum install -y docker
-  sudo systemctl enable --now docker
+  # Debian/Ubuntu
+  curl -fsSL https://get.docker.com | sudo sh
   sudo usermod -aG docker $USER   # 재로그인 필요
   ```
 - nginx 설치 (호스트 패키지 — 컨테이너 외부)
   ```bash
-  sudo yum install -y nginx
+  sudo apt install -y nginx
   ```
+
+### 1.1a 도메인 — DuckDNS (무료) 또는 정식 도메인
+- DuckDNS: https://www.duckdns.org/ 가입 → `sseulang.duckdns.org` 같은 sub 발급 → IP 매핑 → 즉시 사용
+- 정식 도메인: 가비아/Namecheap 구입 후 DNS A 레코드 → 외부 IP
+- ⚠️ Let's Encrypt SSL 은 도메인 필수 (IP 발급 X)
 
 ### 1.2 외부 서비스 키 발급 (.env.prod 채우기 전)
 - **JWT_SECRET**: `openssl rand -hex 64`
 - **카카오**: 콘솔 → 앱 키 → REST API 키
-  - 사이트 도메인 / Redirect URI 등록 (https://sseulang.com 등)
+  - 사이트 도메인: 프론트 도메인 (예: `https://sseulang.vercel.app`)
+  - Redirect URI: 프론트 라우팅 (예: `https://sseulang.vercel.app/auth/oauth2/kakao/callback`)
 - **구글 OAuth**: Google Cloud Console → OAuth 2.0 클라이언트
-  - 승인된 redirect URI: `https://sseulang.com/auth/google/callback`
+  - 승인된 JavaScript 출처: `https://sseulang.vercel.app`
+  - 승인된 redirect URI: `https://sseulang.vercel.app/auth/oauth2/google/callback`
 - **AWS IAM**: S3 PutObject/GetObject/DeleteObject/CopyObject 권한 (특정 버킷 한정)
 - **토스페이먼츠**: 운영 키 (테스트 키 X). webhook secret 도 콘솔에서 발급
-- **SMTP**: Gmail App Password / AWS SES / Naver Works 중 택
+  - webhook URL: `https://{백엔드 도메인}/api/v1/payments/webhook/toss`
+- **SMTP**: Gmail App Password / AWS SES / Naver SMTP 중 택
 
 ---
 
