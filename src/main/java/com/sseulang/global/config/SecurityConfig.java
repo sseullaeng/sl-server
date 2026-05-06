@@ -85,6 +85,13 @@ public class SecurityConfig {
     private final JwtAccessDeniedHandler accessDeniedHandler;
     private final CsrfCookieFilter csrfCookieFilter;
 
+    /**
+     * XSRF-TOKEN 쿠키의 Domain. cross-subdomain 공유 (super-domain 통합 시) 위해 prod 에 .sseulang.store
+     * 설정. 미주입 시 host-only — frontend 가 다른 sub-domain 에서 readCookie 못함 (게이트 1 round 1 round 2 fix).
+     */
+    @org.springframework.beans.factory.annotation.Value("${app.cookie.domain:}")
+    private String cookieDomain;
+
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter,
             JwtAuthenticationEntryPoint authenticationEntryPoint,
@@ -136,13 +143,25 @@ public class SecurityConfig {
         return source;
     }
 
+    /**
+     * XSRF-TOKEN 쿠키 발급 — prod 에선 Domain={@code .sseulang.store} 명시해서 sub-domain 공유.
+     * 미주입(local) 시 default host-only.
+     */
+    private CookieCsrfTokenRepository buildCsrfRepo() {
+        CookieCsrfTokenRepository repo = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        if (cookieDomain != null && !cookieDomain.isBlank()) {
+            repo.setCookieCustomizer(c -> c.domain(cookieDomain));
+        }
+        return repo;
+    }
+
     @Bean
     @Order(1)
     public SecurityFilterChain adminFilterChain(HttpSecurity http) throws Exception {
         applyCommon(http)
                 .securityMatcher("/api/v1/admin/**")
                 .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .csrfTokenRepository(buildCsrfRepo())
                         .csrfTokenRequestHandler(eagerCsrfHandler()))
                 .exceptionHandling(eh -> eh
                         .authenticationEntryPoint(authenticationEntryPoint)
@@ -159,7 +178,7 @@ public class SecurityConfig {
         applyCommon(http)
                 .securityMatcher("/api/v1/**", "/ws-stomp/**", "/ws-stomp-native/**")
                 .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .csrfTokenRepository(buildCsrfRepo())
                         .csrfTokenRequestHandler(eagerCsrfHandler())
                         .ignoringRequestMatchers(CSRF_IGNORED_ENDPOINTS))
                 .exceptionHandling(eh -> eh
