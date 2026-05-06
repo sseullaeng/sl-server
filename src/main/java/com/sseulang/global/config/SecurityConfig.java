@@ -176,6 +176,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/notices/**").permitAll()
                         // 고객지원 FAQ/QNA 게시글 — 비로그인 조회 허용. 1:1 문의는 본인 인증 필수.
                         .requestMatchers(HttpMethod.GET, "/api/v1/support/posts", "/api/v1/support/posts/**").permitAll()
+                        // 거래대행 link 진입 — 결정 #1 A1 (비로그인 OK). POST 들은 표준 인증.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/escrow/links/*").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook/**").permitAll()
                         // WebSocket handshake 는 인증 없이 통과 — STOMP CONNECT 단계의 ChannelInterceptor 가
                         // Authorization 헤더 검증으로 인증 책임 (follow-up #19 native 토큰 인증).

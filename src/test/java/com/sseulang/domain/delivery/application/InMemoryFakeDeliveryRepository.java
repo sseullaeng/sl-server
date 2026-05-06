@@ -99,4 +99,11 @@ public class InMemoryFakeDeliveryRepository implements DeliveryRepository {
                 .mapToLong(DeliveryRequest::getFee)
                 .sum();
     }
+
+    @Override
+    public java.util.Optional<DeliveryRequest> findByEscrowApplicationId(Long escrowApplicationId) {
+        return store.values().stream()
+                .filter(d -> escrowApplicationId.equals(d.getEscrowApplicationId()))
+                .findFirst();
+    }
 }

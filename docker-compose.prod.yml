@@ -45,6 +45,9 @@ services:
       - "yes"
       - "--requirepass"
       - "${REDIS_PASSWORD:?required}"
+    environment:
+      # healthcheck 안의 $${REDIS_PASSWORD} 는 컨테이너 내부 shell 이 확장 — env 주입 필수.
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?required}
     volumes:
       - "redis-data:/data"
     healthcheck:
@@ -78,8 +81,13 @@ services:
     networks: [db-internal]
 
   app:
-    image: sseulang-backend:${APP_IMAGE_TAG:-latest}
-    # 또는 build context — CI 가 image push 안 하면 아래 주석 해제:
+    # Docker Hub 에서 pull. 빌드/푸시는 로컬에서:
+    #   docker build -t seodongbe/sseulang-backend:latest .
+    #   docker push seodongbe/sseulang-backend:latest
+    # private repo 면 인스턴스에서 `docker login` 1회 필요.
+    image: seodongbe/sseulang-backend:${APP_IMAGE_TAG:-latest}
+    pull_policy: always
+    # local 빌드만 쓰려면 image 주석 + 아래 해제:
     # build:
     #   context: .
     #   dockerfile: Dockerfile
@@ -130,6 +138,10 @@ services:
       TOSS_WEBHOOK_REPLAY_TOLERANCE: ${TOSS_WEBHOOK_REPLAY_TOLERANCE:-300}
       # === Swagger 노출 (옵션, default false — 운영 보안) ===
       APP_SWAGGER_ENABLED: ${APP_SWAGGER_ENABLED:-false}
+      # === 로그 경로 (logback-spring.xml LOG_PATH 변수) ===
+      # 비특권 user (uid 1000) 가 /app 안에 dir 못 만듦 → /tmp 로 회피.
+      # 추후 Dockerfile 에 mkdir /app/logs + chown 추가 또는 stdout-only 전환.
+      LOG_PATH: /tmp/sseulang-logs
     ports:
       # nginx 가 호스트 80/443 → app 의 8080 으로 reverse proxy.
       # 외부에 8080 직접 노출하려면 "8080:8080" 으로 변경 (권장 X — TLS 없이 노출).

@@ -48,7 +48,8 @@ public class FileApplicationService {
     private static final Set<FilePurpose> USER_ALLOWED_PURPOSES = EnumSet.of(
             FilePurpose.PROFILE,
             FilePurpose.ITEM,
-            FilePurpose.SUPPORT
+            FilePurpose.SUPPORT,
+            FilePurpose.ESCROW
     );
 
     private static final Map<String, String> EXTENSION_BY_CONTENT_TYPE = Map.of(

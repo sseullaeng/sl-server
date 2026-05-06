@@ -59,4 +59,7 @@ public interface DeliveryRepository {
 
     /** 정산완료 상태의 fee 총합 (admin stats). 누적 라이더 수익 추정. */
     long sumSettledFee();
+
+    /** 거래대행 application 으로 자동 생성된 delivery 조회 — Escrow 정산 시 rider 식별용. */
+    Optional<DeliveryRequest> findByEscrowApplicationId(Long escrowApplicationId);
 }

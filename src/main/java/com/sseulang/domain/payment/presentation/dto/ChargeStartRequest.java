@@ -11,6 +11,6 @@ public record ChargeStartRequest(
         @NotNull @Positive Long amount
 ) {
     public ChargeStartCommand toCommand(Long userId) {
-        return new ChargeStartCommand(userId, amount);
+        return ChargeStartCommand.charge(userId, amount);
     }
 }

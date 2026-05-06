@@ -66,4 +66,9 @@ public class DeliveryRepositoryImpl implements DeliveryRepository {
         Long sum = jpa.sumSettledFeeJpql();
         return sum != null ? sum : 0L;
     }
+
+    @Override
+    public Optional<DeliveryRequest> findByEscrowApplicationId(Long escrowApplicationId) {
+        return jpa.findByEscrowApplicationId(escrowApplicationId);
+    }
 }
