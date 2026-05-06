@@ -178,17 +178,38 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## 5. 갱신 / 롤백
 
-### 갱신
+### Docker Hub 이미지 빌드 / 푸시 (로컬에서 1회 셋업 후 매 갱신)
+
+레포: `seodongbe/sseulang-backend` (Docker Hub).
+**최초 1회**:
+1. https://hub.docker.com → Repositories → Create — 이름 `sseulang-backend`, public/private 선택
+2. 로컬: `docker login` (Hub 계정)
+3. private 선택 시: GCP 인스턴스에서도 `docker login` 1회 (이후 자동 캐시)
+
+### 갱신 (로컬에서 빌드/푸시 → 인스턴스에서 pull)
 ```bash
-git pull
-docker build -t sseulang-backend:$(git rev-parse --short HEAD) .
-APP_IMAGE_TAG=$(git rev-parse --short HEAD) \
+# === 로컬 (Mac) ===
+git pull                              # main 최신
+TAG=$(git rev-parse --short HEAD)
+docker build --platform=linux/amd64 -t seodongbe/sseulang-backend:$TAG \
+                                  -t seodongbe/sseulang-backend:latest .
+docker push seodongbe/sseulang-backend:$TAG
+docker push seodongbe/sseulang-backend:latest
+
+# === 인스턴스 (GCP) ===
+APP_IMAGE_TAG=$TAG \
+  docker compose -f docker-compose.prod.yml --env-file .env.prod pull app
+APP_IMAGE_TAG=$TAG \
   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d app
 # DB 컨테이너는 영향 X — app 만 새 image 로 교체
 ```
 
-### 롤백
+> ⚠️ Mac (Apple Silicon/arm64) 에서 빌드하면 `--platform=linux/amd64` 필수. GCP e2-medium 은 amd64.
+
+### 롤백 (이전 SHA 로 재기동)
 ```bash
+APP_IMAGE_TAG=<이전-sha> \
+  docker compose -f docker-compose.prod.yml --env-file .env.prod pull app
 APP_IMAGE_TAG=<이전-sha> \
   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d app
 ```
