@@ -88,4 +88,6 @@ interface DeliveryJpaRepository extends JpaRepository<DeliveryRequest, Long> {
              WHERE d.status = com.sseulang.domain.delivery.domain.DeliveryStatus.정산완료
             """)
     Long sumSettledFeeJpql();
+
+    java.util.Optional<DeliveryRequest> findByEscrowApplicationId(Long escrowApplicationId);
 }

@@ -1,0 +1,159 @@
+package com.sseulang.domain.escrow.domain;
+
+import com.sseulang.global.exception.BusinessException;
+import com.sseulang.global.exception.ErrorCode;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import java.math.BigDecimal;
+
+import static org.assertj.core.api.Assertions.*;
+
+/**
+ * EscrowApplication Aggregate 단위 테스트.
+ * 결정 #4 (tradeMode), #5 (feePayer), #6 (cancel), #8 (참여자 가드).
+ */
+class EscrowApplicationTest {
+
+    private static FeeBreakdown snap(long deliveryFee, long commissionFee, long itemPrice, TradeMode mode) {
+        long total = deliveryFee + commissionFee + (mode == TradeMode.INTERNAL ? itemPrice : 0);
+        return new FeeBreakdown(new BigDecimal("8.50"), deliveryFee, commissionFee, total, new BigDecimal("0.0500"));
+    }
+
+    private static EscrowApplication build(InitiatorRole role, TradeMode mode, FeePayer payer,
+                                           long itemPrice, long initiatorShare, long receiverShare) {
+        return EscrowApplication.create(
+                100L,
+                /* initiator */ 11L, /* receiver */ 20L, role,
+                mode, payer,
+                itemPrice, "맥북",
+                "픽업주소", new BigDecimal("37.5"), new BigDecimal("127.0"),
+                "도착주소", new BigDecimal("37.6"), new BigDecimal("127.1"),
+                Weight.R1TO3, Volume.M, Fragility.F3, null,
+                snap(12000L, mode == TradeMode.INTERNAL ? 50_000L : 0L, itemPrice, mode),
+                initiatorShare, receiverShare,
+                null
+        );
+    }
+
+    @Test
+    @DisplayName("create_initiatorRole_buyer_매핑")
+    void create_buyer_role_mapping() {
+        EscrowApplication a = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, 1_062_000L, 0L);
+        assertThat(a.getBuyerId()).isEqualTo(11L);   // initiator
+        assertThat(a.getSellerId()).isEqualTo(20L);  // receiver
+    }
+
+    @Test
+    @DisplayName("create_initiatorRole_seller_매핑")
+    void create_seller_role_mapping() {
+        EscrowApplication a = build(InitiatorRole.seller, TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, 0L, 1_062_000L);
+        assertThat(a.getBuyerId()).isEqualTo(20L);   // receiver
+        assertThat(a.getSellerId()).isEqualTo(11L);  // initiator
+    }
+
+    @Test
+    @DisplayName("markReceiverPaid_initiatorShare_0_즉시_결제완료")
+    void receiverPaid_alone_advances_when_initiator_share_zero() {
+        // feePayer=buyer 인 경우 seller 부담 0
+        EscrowApplication a = build(InitiatorRole.seller, TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, 0L /* seller initiator share */, 1_062_000L /* buyer receiver share */);
+        a.markReceiverPaid();
+        assertThat(a.getStatus()).isEqualTo(EscrowApplicationStatus.결제완료);
+        assertThat(a.getReceiverPaidAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("markReceiverPaid_양쪽share_있으면_결제대기_유지")
+    void both_shares_pending_until_both() {
+        EscrowApplication a = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.both,
+                1_000_000L, 531_000L, 531_000L);
+        a.markReceiverPaid();
+        // 신청자 결제 안 함 → 결제대기 유지
+        assertThat(a.getStatus()).isEqualTo(EscrowApplicationStatus.결제대기);
+        a.markInitiatorPaid();
+        assertThat(a.getStatus()).isEqualTo(EscrowApplicationStatus.결제완료);
+    }
+
+    @Test
+    @DisplayName("markReceiverPaid_2번_INVALID_STATE")
+    void receiver_double_pay_rejected() {
+        EscrowApplication a = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.both,
+                1_000_000L, 531_000L, 531_000L);
+        a.markReceiverPaid();
+        assertThatThrownBy(a::markReceiverPaid)
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    @DisplayName("confirmReceipt_buyer만_허용_Mode_B")
+    void confirmReceipt_only_buyer_internal() {
+        EscrowApplication a = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, 1_062_000L, 0L);
+        a.markInitiatorPaid();  // share 0 receiver + 결제 initiator → 결제완료
+        a.markInProgress();     // 라이더 매칭됨
+
+        // seller 가 호출 — 거부
+        assertThatThrownBy(() -> a.confirmReceipt(20L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_FORBIDDEN);
+
+        // buyer 호출 — 통과
+        a.confirmReceipt(11L);
+        assertThat(a.getReceiptConfirmedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("confirmReceipt_Mode_A_거부")
+    void confirmReceipt_external_mode_rejected() {
+        EscrowApplication a = build(InitiatorRole.buyer, TradeMode.EXTERNAL, FeePayer.buyer,
+                0L, 12_000L, 0L);
+        a.markInitiatorPaid();
+        a.markInProgress();
+        assertThatThrownBy(() -> a.confirmReceipt(11L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("cancel_terminal_상태_거부")
+    void cancel_terminal_rejected() {
+        EscrowApplication a = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, 1_062_000L, 0L);
+        a.markInitiatorPaid();
+        a.markInProgress();
+        a.markSettled();  // 완료
+        assertThatThrownBy(() -> a.cancel(11L, "변심"))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    @DisplayName("isParticipant_initiator_or_receiver_만")
+    void isParticipant_check() {
+        EscrowApplication a = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, 1_062_000L, 0L);
+        assertThat(a.isParticipant(11L)).isTrue();
+        assertThat(a.isParticipant(20L)).isTrue();
+        assertThat(a.isParticipant(99L)).isFalse();
+    }
+
+    @Test
+    @DisplayName("create_buyer_seller_같음_SELF_NOT_ALLOWED")
+    void create_self_rejected() {
+        assertThatThrownBy(() -> EscrowApplication.create(
+                100L, 11L, 11L, InitiatorRole.buyer,
+                TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, "x", "p", new BigDecimal("37.5"), new BigDecimal("127.0"),
+                "d", new BigDecimal("37.6"), new BigDecimal("127.1"),
+                Weight.LT1, Volume.S, Fragility.F1, null,
+                snap(12000L, 50000L, 1_000_000L, TradeMode.INTERNAL),
+                1_062_000L, 0L, null
+        )).isInstanceOf(BusinessException.class)
+          .extracting(e -> ((BusinessException) e).getErrorCode())
+          .isEqualTo(ErrorCode.ESCROW_SELF_NOT_ALLOWED);
+    }
+}

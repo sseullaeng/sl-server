@@ -20,6 +20,7 @@ import com.sseulang.domain.escrow.domain.FeeBreakdown;
 import com.sseulang.domain.escrow.domain.FeePayer;
 import com.sseulang.domain.escrow.domain.InitiatorRole;
 import com.sseulang.domain.escrow.domain.TradeMode;
+import com.sseulang.domain.delivery.domain.DeliveryRepository;
 import com.sseulang.domain.escrow.domain.event.EscrowConfirmedEvent;
 import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.point.domain.PointHistoryType;
@@ -62,6 +63,7 @@ public class EscrowApplicationService {
     private final EscrowFeeSettingsRepository feeSettingsRepository;
     private final UserApplicationService userApplicationService;
     private final PointApplicationService pointApplicationService;
+    private final DeliveryRepository deliveryRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final int linkExpiryHours;
 
@@ -71,6 +73,7 @@ public class EscrowApplicationService {
             EscrowFeeSettingsRepository feeSettingsRepository,
             UserApplicationService userApplicationService,
             PointApplicationService pointApplicationService,
+            DeliveryRepository deliveryRepository,
             ApplicationEventPublisher eventPublisher,
             @Value("${app.escrow.link.expiry-hours:24}") int linkExpiryHours
     ) {
@@ -79,6 +82,7 @@ public class EscrowApplicationService {
         this.feeSettingsRepository = feeSettingsRepository;
         this.userApplicationService = userApplicationService;
         this.pointApplicationService = pointApplicationService;
+        this.deliveryRepository = deliveryRepository;
         this.eventPublisher = eventPublisher;
         this.linkExpiryHours = linkExpiryHours;
     }
@@ -253,7 +257,7 @@ public class EscrowApplicationService {
     // =============================================================
     @Transactional
     public EscrowApplicationStatus recordPaymentConfirmed(Long applicationId, Long payerId) {
-        EscrowApplication app = applicationRepository.findById(applicationId)
+        EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
         if (app.isPaymentTimedOut()) {
             // 자동 환불 트리거 — 5/11 시점엔 단순화 — 환불 처리는 Payment 도메인 또는 cron 후속.
@@ -295,10 +299,18 @@ public class EscrowApplicationService {
     // 결정 #4
     // =============================================================
     @Transactional
-    public void confirmReceipt(Long applicationId, Long requesterId, Long riderId) {
-        EscrowApplication app = applicationRepository.findById(applicationId)
+    public void confirmReceipt(Long applicationId, Long requesterId) {
+        EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
         app.confirmReceipt(requesterId);
+        // 라이더 식별 — Delivery 도메인에서 escrow_application_id 로 조회 (게이트 1 Critical 2).
+        Long riderId = deliveryRepository.findByEscrowApplicationId(applicationId)
+                .map(d -> d.getRiderId())
+                .orElse(null);
+        if (riderId == null) {
+            // 라이더 매칭 안 된 상태에서 receipt 호출 — 데이터 부정합 (정산 불가).
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
         settle(app, riderId);
     }
 
@@ -306,12 +318,18 @@ public class EscrowApplicationService {
      * 자동 정산 (Mode A — 배송완료 시 Delivery 도메인이 호출).
      */
     @Transactional
-    public void settleAfterDelivery(Long applicationId, Long riderId) {
-        EscrowApplication app = applicationRepository.findById(applicationId)
+    public void settleAfterDelivery(Long applicationId) {
+        EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
         if (app.getTradeMode() == TradeMode.INTERNAL) {
             // Mode B 는 buyer 수령 확인 별도 endpoint 호출
             return;
+        }
+        Long riderId = deliveryRepository.findByEscrowApplicationId(applicationId)
+                .map(d -> d.getRiderId())
+                .orElse(null);
+        if (riderId == null) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
         }
         settle(app, riderId);
     }
@@ -343,7 +361,7 @@ public class EscrowApplicationService {
     // =============================================================
     @Transactional
     public void cancel(Long applicationId, Long requesterId, String reason) {
-        EscrowApplication app = applicationRepository.findById(applicationId)
+        EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
         if (!app.isParticipant(requesterId)) {
             throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);

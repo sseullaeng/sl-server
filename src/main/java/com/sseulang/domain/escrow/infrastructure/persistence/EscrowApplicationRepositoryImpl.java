@@ -31,6 +31,11 @@ public class EscrowApplicationRepositoryImpl implements EscrowApplicationReposit
     }
 
     @Override
+    public Optional<EscrowApplication> findByIdForUpdate(Long id) {
+        return jpa.findByIdForUpdate(id);
+    }
+
+    @Override
     public Optional<EscrowApplication> findByLinkId(Long linkId) {
         return jpa.findByLinkId(linkId);
     }

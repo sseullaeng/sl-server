@@ -43,7 +43,7 @@ class DeliveryApplicationServiceTest {
         pointService = mock(PointApplicationService.class);
         com.sseulang.domain.delivery.domain.DeliveryLocationCache locationCache =
                 mock(com.sseulang.domain.delivery.domain.DeliveryLocationCache.class);
-        service = new DeliveryApplicationService(repo, userService, pointService, locationCache);
+        service = new DeliveryApplicationService(repo, userService, pointService, locationCache, e -> {});
     }
 
     @Test

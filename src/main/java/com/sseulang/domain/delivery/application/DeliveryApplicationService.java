@@ -47,17 +47,20 @@ public class DeliveryApplicationService {
     private final UserApplicationService userApplicationService;
     private final PointApplicationService pointApplicationService;
     private final DeliveryLocationCache locationCache;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     public DeliveryApplicationService(
             DeliveryRepository deliveryRepository,
             UserApplicationService userApplicationService,
             PointApplicationService pointApplicationService,
-            DeliveryLocationCache locationCache
+            DeliveryLocationCache locationCache,
+            org.springframework.context.ApplicationEventPublisher eventPublisher
     ) {
         this.deliveryRepository = deliveryRepository;
         this.userApplicationService = userApplicationService;
         this.pointApplicationService = pointApplicationService;
         this.locationCache = locationCache;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -136,6 +139,10 @@ public class DeliveryApplicationService {
             throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
         }
         d.markDelivered(LocalDateTime.now());
+        // Mode A escrow 자동 정산 트리거 — listener (EscrowApplicationService) 가 분기 처리.
+        eventPublisher.publishEvent(new com.sseulang.domain.delivery.domain.event.DeliveryDeliveredEvent(
+                d.getId(), d.getEscrowApplicationId()
+        ));
         return DeliveryResult.from(d);
     }
 

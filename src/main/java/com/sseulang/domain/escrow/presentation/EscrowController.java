@@ -106,10 +106,7 @@ public class EscrowController {
             @AuthenticationPrincipal Long userId,
             @PathVariable Long id
     ) {
-        // 라이더 식별은 Delivery 도메인에서 — Service 가 알아서 조회.
-        // 5/11 단순화: riderId null 전달 — Service 가 delivery row 조회하지 않고 정산 시 누락 가능.
-        // TODO(R1): Service 안에서 deliveryRepository.findByEscrowApplicationId 로 rider 조회.
-        service.confirmReceipt(id, userId, null);
+        service.confirmReceipt(id, userId);
         return ApiResponse.ok();
     }
 }

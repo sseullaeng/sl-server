@@ -12,6 +12,12 @@ public interface EscrowApplicationRepository {
 
     Optional<EscrowApplication> findById(Long id);
 
+    /**
+     * 결제/정산 흐름 비관적 락 — recordPaymentConfirmed / confirmReceipt / cancel race 직렬화
+     * (게이트 1 round 1 — Critical 3: 동시 결제 / receipt 연타 시 paid_at 유실 또는 정산 중복 회귀 차단).
+     */
+    Optional<EscrowApplication> findByIdForUpdate(Long id);
+
     Optional<EscrowApplication> findByLinkId(Long linkId);
 
     /** 본인이 참여한 (initiator OR receiver) application 목록. */
