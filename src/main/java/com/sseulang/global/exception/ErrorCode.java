@@ -103,6 +103,19 @@ public enum ErrorCode {
     DELIVERY_SELF_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "본인이 등록한 요청은 수락할 수 없습니다."),
     DELIVERY_LOCATION_INVALID(HttpStatus.BAD_REQUEST, "유효하지 않은 위치 좌표입니다."),
     DELIVERY_LOCATION_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "위치 업데이트 빈도가 너무 높습니다."),
+    DELIVERY_NOT_RIDER(HttpStatus.FORBIDDEN, "라이더 권한이 없습니다."),
+
+    // ===== Escrow (거래대행) =====
+    ESCROW_LINK_NOT_FOUND(HttpStatus.NOT_FOUND, "거래대행 링크를 찾을 수 없습니다."),
+    ESCROW_LINK_EXPIRED(HttpStatus.GONE, "거래대행 링크가 만료되었습니다."),
+    ESCROW_LINK_ALREADY_TAKEN(HttpStatus.CONFLICT, "이미 다른 사용자가 참여한 링크입니다."),
+    ESCROW_SELF_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "본인이 생성한 링크에는 참여할 수 없습니다."),
+    ESCROW_NOT_FOUND(HttpStatus.NOT_FOUND, "거래대행 신청을 찾을 수 없습니다."),
+    ESCROW_FORBIDDEN(HttpStatus.FORBIDDEN, "거래대행 신청에 대한 권한이 없습니다."),
+    ESCROW_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서 수행할 수 없는 동작입니다."),
+    ESCROW_FORM_INVALID(HttpStatus.BAD_REQUEST, "거래대행 신청 입력값이 올바르지 않습니다."),
+    ESCROW_FEE_MISMATCH(HttpStatus.BAD_REQUEST, "수수료 정책이 변경되었습니다. 새 금액 확인 후 다시 시도해주세요."),
+
     PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "요청 본문 크기가 한도를 초과합니다.");
 
     private final HttpStatus status;

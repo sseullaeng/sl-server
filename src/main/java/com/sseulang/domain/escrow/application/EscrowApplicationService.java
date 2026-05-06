@@ -1,0 +1,411 @@
+package com.sseulang.domain.escrow.application;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.sseulang.domain.escrow.application.dto.EscrowApplicationCreateCommand;
+import com.sseulang.domain.escrow.application.dto.EscrowApplicationResult;
+import com.sseulang.domain.escrow.application.dto.EscrowLinkCreateCommand;
+import com.sseulang.domain.escrow.application.dto.EscrowLinkResult;
+import com.sseulang.domain.escrow.domain.EscrowApplication;
+import com.sseulang.domain.escrow.domain.EscrowApplicationRepository;
+import com.sseulang.domain.escrow.domain.EscrowApplicationStatus;
+import com.sseulang.domain.escrow.domain.EscrowFeeCalculator;
+import com.sseulang.domain.escrow.domain.EscrowFeeSettings;
+import com.sseulang.domain.escrow.domain.EscrowFeeSettingsRepository;
+import com.sseulang.domain.escrow.domain.EscrowLink;
+import com.sseulang.domain.escrow.domain.EscrowLinkRepository;
+import com.sseulang.domain.escrow.domain.EscrowLinkStatus;
+import com.sseulang.domain.escrow.domain.FeeBreakdown;
+import com.sseulang.domain.escrow.domain.FeePayer;
+import com.sseulang.domain.escrow.domain.InitiatorRole;
+import com.sseulang.domain.escrow.domain.TradeMode;
+import com.sseulang.domain.escrow.domain.event.EscrowConfirmedEvent;
+import com.sseulang.domain.point.application.PointApplicationService;
+import com.sseulang.domain.point.domain.PointHistoryType;
+import com.sseulang.domain.point.domain.PointReferenceType;
+import com.sseulang.domain.user.application.UserApplicationService;
+import com.sseulang.domain.user.domain.User;
+import com.sseulang.global.exception.BusinessException;
+import com.sseulang.global.exception.ErrorCode;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * 거래대행 (Escrow) 흐름의 트랜잭션 경계. 8 use case + 결제 통합 + 정산 흐름.
+ *
+ * <p>핵심 보안/정합성 (Codex 게이트 1 영역):
+ * <ul>
+ *   <li>link 첫 폼 제출 atomic UPDATE (race-safe) — 결정 #2/3</li>
+ *   <li>snapshot 보존 — 운영 settings 변경 무관 lock — 결정 #9/12</li>
+ *   <li>fee mismatch ±10원 검증 — 결정 #10</li>
+ *   <li>매칭 후 취소 100% 부담 정책 — 결정 #6 (cancel 메서드 분기)</li>
+ *   <li>자기거래 차단 (initiator != receiver, buyer != seller)</li>
+ * </ul>
+ */
+@Service
+@Transactional(readOnly = true)
+public class EscrowApplicationService {
+
+    private static final ObjectMapper IMAGE_JSON = new ObjectMapper().configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+
+    private final EscrowLinkRepository linkRepository;
+    private final EscrowApplicationRepository applicationRepository;
+    private final EscrowFeeSettingsRepository feeSettingsRepository;
+    private final UserApplicationService userApplicationService;
+    private final PointApplicationService pointApplicationService;
+    private final ApplicationEventPublisher eventPublisher;
+    private final int linkExpiryHours;
+
+    public EscrowApplicationService(
+            EscrowLinkRepository linkRepository,
+            EscrowApplicationRepository applicationRepository,
+            EscrowFeeSettingsRepository feeSettingsRepository,
+            UserApplicationService userApplicationService,
+            PointApplicationService pointApplicationService,
+            ApplicationEventPublisher eventPublisher,
+            @Value("${app.escrow.link.expiry-hours:24}") int linkExpiryHours
+    ) {
+        this.linkRepository = linkRepository;
+        this.applicationRepository = applicationRepository;
+        this.feeSettingsRepository = feeSettingsRepository;
+        this.userApplicationService = userApplicationService;
+        this.pointApplicationService = pointApplicationService;
+        this.eventPublisher = eventPublisher;
+        this.linkExpiryHours = linkExpiryHours;
+    }
+
+    // =============================================================
+    // Use case 1 — 신청자가 link 생성
+    // =============================================================
+    @Transactional
+    public EscrowLinkResult createLink(EscrowLinkCreateCommand cmd) {
+        userApplicationService.requireVerified(cmd.initiatorId());
+        EscrowLink link = EscrowLink.create(
+                cmd.initiatorId(),
+                cmd.initiatorRole(),
+                cmd.feePayer(),
+                cmd.tradeMode(),
+                linkExpiryHours
+        );
+        EscrowLink saved = linkRepository.save(link);
+        User initiator = userApplicationService.getById(cmd.initiatorId());
+        return EscrowLinkResult.from(saved, initiator.getNickname());
+    }
+
+    // =============================================================
+    // Use case 2 — link 진입 (비로그인 OK, 결정 #1 A1)
+    // =============================================================
+    public EscrowLinkResult getByToken(String linkToken) {
+        EscrowLink link = linkRepository.findByLinkToken(linkToken)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_LINK_NOT_FOUND));
+        if (link.isExpired() && link.getStatus() == EscrowLinkStatus.대기) {
+            throw new BusinessException(ErrorCode.ESCROW_LINK_EXPIRED);
+        }
+        if (link.getStatus() == EscrowLinkStatus.만료) {
+            throw new BusinessException(ErrorCode.ESCROW_LINK_EXPIRED);
+        }
+        if (link.getStatus() == EscrowLinkStatus.완료 || link.getStatus() == EscrowLinkStatus.취소) {
+            throw new BusinessException(ErrorCode.ESCROW_LINK_ALREADY_TAKEN);
+        }
+        User initiator = userApplicationService.getById(link.getInitiatorId());
+        return EscrowLinkResult.from(link, initiator.getNickname());
+    }
+
+    // =============================================================
+    // Use case 3 — 폼 제출 (수신자 확정 + application 생성)
+    // 결정 #2 B3 + #3 C1+C3 (atomic + idempotent)
+    // =============================================================
+    @Transactional
+    public EscrowApplicationResult createApplication(EscrowApplicationCreateCommand cmd) {
+        userApplicationService.requireVerified(cmd.receiverId());
+
+        EscrowLink link = linkRepository.findByLinkToken(cmd.linkToken())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_LINK_NOT_FOUND));
+
+        // idempotent — 이미 본인이 receiver 면 기존 application 반환
+        if (cmd.receiverId().equals(link.getReceiverId())) {
+            return applicationRepository.findByLinkId(link.getId())
+                    .map(a -> EscrowApplicationResult.from(a, parseImageUrls(a.getImageUrls())))
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_INVALID_STATE));
+        }
+
+        // race lose / 본인 차단 / 만료 일괄 검증 — atomic UPDATE
+        int affected = linkRepository.claimReceiverIfAvailable(link.getId(), cmd.receiverId());
+        if (affected == 0) {
+            // 어떤 사유인지 분기
+            if (link.getInitiatorId().equals(cmd.receiverId())) {
+                throw new BusinessException(ErrorCode.ESCROW_SELF_NOT_ALLOWED);
+            }
+            if (link.isExpired() || link.getStatus() == EscrowLinkStatus.만료) {
+                throw new BusinessException(ErrorCode.ESCROW_LINK_EXPIRED);
+            }
+            throw new BusinessException(ErrorCode.ESCROW_LINK_ALREADY_TAKEN);
+        }
+
+        // snapshot — fee 산정
+        EscrowFeeSettings settings = feeSettingsRepository.findSingleton();
+        BigDecimal calculatedDistance = EscrowFeeCalculator.distanceKm(
+                cmd.pickupLat().doubleValue(), cmd.pickupLng().doubleValue(),
+                cmd.deliveryLat().doubleValue(), cmd.deliveryLng().doubleValue()
+        );
+        FeeBreakdown calculated = EscrowFeeCalculator.calculate(
+                settings, link.getTradeMode(), cmd.itemPrice(), calculatedDistance,
+                cmd.weight(), cmd.volume(), cmd.fragility()
+        );
+        // 결정 #10 — ±10원 tolerance
+        EscrowFeeCalculator.verifyTolerance(
+                calculated, cmd.submittedDeliveryFee(), cmd.submittedCommissionFee(), cmd.submittedTotalFee()
+        );
+
+        // share 산정 — feePayer 별 분기 (결정 #5)
+        long buyerOwed = computeBuyerOwed(link.getTradeMode(), cmd.itemPrice(), calculated, link.getFeePayer());
+        long sellerOwed = computeSellerOwed(calculated, link.getFeePayer());
+        long initiatorShare = link.getInitiatorRole() == InitiatorRole.buyer ? buyerOwed : sellerOwed;
+        long receiverShare = link.getInitiatorRole() == InitiatorRole.buyer ? sellerOwed : buyerOwed;
+
+        EscrowApplication app = EscrowApplication.create(
+                link.getId(),
+                link.getInitiatorId(), cmd.receiverId(), link.getInitiatorRole(),
+                link.getTradeMode(), link.getFeePayer(),
+                cmd.itemPrice(), cmd.itemDescription(),
+                cmd.pickupAddress(), cmd.pickupLat(), cmd.pickupLng(),
+                cmd.deliveryAddress(), cmd.deliveryLat(), cmd.deliveryLng(),
+                cmd.weight(), cmd.volume(), cmd.fragility(), cmd.deliveryNotes(),
+                calculated, initiatorShare, receiverShare,
+                serializeImageUrls(cmd.imageUrls())
+        );
+        EscrowApplication saved = applicationRepository.save(app);
+        // link 상태 → 완료
+        link.markAsCompleted();
+        return EscrowApplicationResult.from(saved, parseImageUrls(saved.getImageUrls()));
+    }
+
+    /**
+     * Mode B 의 buyer 부담 = itemPrice + (feePayer 별 fee 분담).
+     * Mode A 의 buyer 부담 = (feePayer 별 fee 분담).
+     */
+    private long computeBuyerOwed(TradeMode mode, long itemPrice, FeeBreakdown fee, FeePayer payer) {
+        long feeTotal = fee.deliveryFee() + fee.commissionFee();
+        long buyerFeeShare = switch (payer) {
+            case buyer -> feeTotal;
+            case seller -> 0L;
+            case both -> feeTotal / 2;  // 정수 원 단위 — 홀수 1원 차이는 buyer 가 더 부담
+        };
+        return (mode == TradeMode.INTERNAL ? itemPrice : 0L) + buyerFeeShare;
+    }
+
+    private long computeSellerOwed(FeeBreakdown fee, FeePayer payer) {
+        long feeTotal = fee.deliveryFee() + fee.commissionFee();
+        return switch (payer) {
+            case buyer -> 0L;
+            case seller -> feeTotal;
+            case both -> feeTotal - feeTotal / 2;  // 나머지 (홀수면 buyer 가 1 더, seller 가 1 적게)
+        };
+    }
+
+    /**
+     * Payment 도메인이 startCharge 단계에서 호출 — payer / share / status 검증.
+     * 검증 통과한 amount 만 Payment 진입 (위변조 방지 + race-safe).
+     */
+    public void verifyChargeIntent(Long applicationId, Long payerId, long amount) {
+        EscrowApplication app = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        if (app.getStatus() != EscrowApplicationStatus.결제대기) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (app.isPaymentTimedOut()) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        long expectedShare;
+        if (payerId.equals(app.getInitiatorId())) {
+            if (app.getInitiatorPaidAt() != null) {
+                throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+            }
+            expectedShare = app.getInitiatorShare();
+        } else if (payerId.equals(app.getReceiverId())) {
+            if (app.getReceiverPaidAt() != null) {
+                throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+            }
+            expectedShare = app.getReceiverShare();
+        } else {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
+        }
+        if (expectedShare <= 0) {
+            // 본인 share 가 0 인데 결제 시도 — 부정 시도.
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (expectedShare != amount) {
+            throw new BusinessException(ErrorCode.ESCROW_FEE_MISMATCH);
+        }
+    }
+
+    // =============================================================
+    // Use case 4 — 결제 confirm 후 호출 (Payment 도메인이 호출)
+    // =============================================================
+    @Transactional
+    public EscrowApplicationStatus recordPaymentConfirmed(Long applicationId, Long payerId) {
+        EscrowApplication app = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        if (app.isPaymentTimedOut()) {
+            // 자동 환불 트리거 — 5/11 시점엔 단순화 — 환불 처리는 Payment 도메인 또는 cron 후속.
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (payerId.equals(app.getInitiatorId())) {
+            app.markInitiatorPaid();
+        } else if (payerId.equals(app.getReceiverId())) {
+            app.markReceiverPaid();
+        } else {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
+        }
+        // 양쪽 결제 완료 시 EscrowConfirmedEvent 발행 → Delivery 도메인 listen
+        if (app.getStatus() == EscrowApplicationStatus.결제완료) {
+            eventPublisher.publishEvent(new EscrowConfirmedEvent(
+                    app.getId(),
+                    app.getPickupAddress(), app.getPickupLat().doubleValue(), app.getPickupLng().doubleValue(),
+                    app.getDeliveryAddress(), app.getDeliveryLat().doubleValue(), app.getDeliveryLng().doubleValue(),
+                    app.getItemDescription(),
+                    app.getAppliedDeliveryFee(),
+                    app.getBuyerId()
+            ));
+        }
+        return app.getStatus();
+    }
+
+    // =============================================================
+    // Use case 5 — 라이더 자동 매칭됐을 때 (Delivery 도메인이 호출)
+    // =============================================================
+    @Transactional
+    public void markInProgress(Long applicationId) {
+        EscrowApplication app = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        app.markInProgress();
+    }
+
+    // =============================================================
+    // Use case 6 — buyer 수령 확인 (Mode B 만) → 정산
+    // 결정 #4
+    // =============================================================
+    @Transactional
+    public void confirmReceipt(Long applicationId, Long requesterId, Long riderId) {
+        EscrowApplication app = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        app.confirmReceipt(requesterId);
+        settle(app, riderId);
+    }
+
+    /**
+     * 자동 정산 (Mode A — 배송완료 시 Delivery 도메인이 호출).
+     */
+    @Transactional
+    public void settleAfterDelivery(Long applicationId, Long riderId) {
+        EscrowApplication app = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        if (app.getTradeMode() == TradeMode.INTERNAL) {
+            // Mode B 는 buyer 수령 확인 별도 endpoint 호출
+            return;
+        }
+        settle(app, riderId);
+    }
+
+    /**
+     * 정산 — Mode B: seller += itemPrice, rider += deliveryFee.
+     * commissionFee 는 플랫폼 수익 (별도 transfer X — PointHistory 만 기록은 follow-up).
+     */
+    private void settle(EscrowApplication app, Long riderId) {
+        if (app.getTradeMode() == TradeMode.INTERNAL && app.getItemPrice() > 0) {
+            pointApplicationService.credit(
+                    app.getSellerId(), app.getItemPrice(),
+                    PointHistoryType.판매정산, PointReferenceType.ESCROW, app.getId(),
+                    "거래대행 정산 — 판매자 수령"
+            );
+        }
+        if (riderId != null && app.getAppliedDeliveryFee() > 0) {
+            pointApplicationService.credit(
+                    riderId, app.getAppliedDeliveryFee(),
+                    PointHistoryType.배달정산, PointReferenceType.ESCROW, app.getId(),
+                    "거래대행 정산 — 라이더 보상"
+            );
+        }
+        app.markSettled();
+    }
+
+    // =============================================================
+    // Use case 7 — 취소 (시점별 환불 — 결정 #6)
+    // =============================================================
+    @Transactional
+    public void cancel(Long applicationId, Long requesterId, String reason) {
+        EscrowApplication app = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        if (!app.isParticipant(requesterId)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
+        }
+        if (app.getStatus().isAfterMatching()) {
+            // 매칭 후 취소 — 100% 부담 정책 (결정 #6).
+            // 5/11 단순화: 별도 추가 결제 흐름 미구현 — 관리자 분기 처리.
+            // TODO(R1): 자동 추가 결제 + 환불 흐름.
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        // 매칭 전 — 양쪽 환불 (결제됐던 양만큼).
+        // 5/11 단순화: 환불 호출은 Payment 도메인이 별도 처리. 여기선 status만 갱신.
+        app.cancel(requesterId, reason);
+    }
+
+    // =============================================================
+    // Use case 8 — 본인 application 목록 / 단건
+    // =============================================================
+    public Page<EscrowApplicationResult> listMine(Long userId, Pageable pageable) {
+        return applicationRepository.findMyApplications(userId, pageable)
+                .map(a -> EscrowApplicationResult.from(a, parseImageUrls(a.getImageUrls())));
+    }
+
+    public EscrowApplicationResult getById(Long id, Long requesterId) {
+        EscrowApplication app = applicationRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        if (!app.isParticipant(requesterId)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
+        }
+        return EscrowApplicationResult.from(app, parseImageUrls(app.getImageUrls()));
+    }
+
+    // =============================================================
+    // Admin 우회 — 참여자 가드 X
+    // =============================================================
+    public Page<EscrowApplicationResult> adminListAll(Pageable pageable) {
+        return applicationRepository.findAll(pageable)
+                .map(a -> EscrowApplicationResult.from(a, parseImageUrls(a.getImageUrls())));
+    }
+
+    public EscrowApplicationResult adminGetById(Long id) {
+        EscrowApplication app = applicationRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        return EscrowApplicationResult.from(app, parseImageUrls(app.getImageUrls()));
+    }
+
+    /** 이미지 URL list 직렬화 (TEXT 컬럼). 5/11 단순화 — JSON 배열. */
+    private String serializeImageUrls(List<String> urls) {
+        if (urls == null || urls.isEmpty()) return null;
+        try {
+            return IMAGE_JSON.writeValueAsString(urls);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("imageUrls 직렬화 실패", e);
+        }
+    }
+
+    private List<String> parseImageUrls(String json) {
+        if (json == null || json.isBlank()) return Collections.emptyList();
+        try {
+            return IMAGE_JSON.readValue(json, IMAGE_JSON.getTypeFactory().constructCollectionType(List.class, String.class));
+        } catch (JsonProcessingException e) {
+            return Collections.emptyList();
+        }
+    }
+}

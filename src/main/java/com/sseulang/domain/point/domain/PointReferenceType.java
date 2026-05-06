@@ -8,5 +8,6 @@ public enum PointReferenceType {
     PAYMENT,
     TRANSACTION,
     WITHDRAWAL,
-    DELIVERY
+    DELIVERY,
+    ESCROW
 }

@@ -59,6 +59,7 @@ public class PaymentApplicationService {
     private final TossWebhookSignatureVerifier webhookVerifier;
     private final ObjectMapper objectMapper;
     private final WebhookPendingRateLimiter pendingRateLimiter;
+    private final com.sseulang.domain.escrow.application.EscrowApplicationService escrowApplicationService;
 
     public PaymentApplicationService(
             PaymentRepository paymentRepository,
@@ -69,7 +70,8 @@ public class PaymentApplicationService {
             WebhookEventRepository webhookEventRepository,
             TossWebhookSignatureVerifier webhookVerifier,
             ObjectMapper objectMapper,
-            WebhookPendingRateLimiter pendingRateLimiter
+            WebhookPendingRateLimiter pendingRateLimiter,
+            com.sseulang.domain.escrow.application.EscrowApplicationService escrowApplicationService
     ) {
         this.paymentRepository = paymentRepository;
         this.paymentGateway = paymentGateway;
@@ -80,6 +82,7 @@ public class PaymentApplicationService {
         this.webhookVerifier = webhookVerifier;
         this.objectMapper = objectMapper;
         this.pendingRateLimiter = pendingRateLimiter;
+        this.escrowApplicationService = escrowApplicationService;
     }
 
     @Transactional
@@ -89,8 +92,14 @@ public class PaymentApplicationService {
         }
         // 자금 흐름 진입점 — 이메일 인증 미완료 사용자 차단 (게이트 1).
         userApplicationService.requireVerified(cmd.userId());
+
+        // 거래대행 결제면 — Escrow application 검증 (payer / share / status).
+        if (cmd.isEscrow()) {
+            escrowApplicationService.verifyChargeIntent(cmd.escrowApplicationId(), cmd.userId(), cmd.amount());
+        }
+
         String merchantUid = generateMerchantUid();
-        Payment payment = Payment.startCharge(cmd.userId(), merchantUid, cmd.amount());
+        Payment payment = Payment.startCharge(cmd.userId(), merchantUid, cmd.amount(), cmd.escrowApplicationId());
         Payment saved = paymentRepository.save(payment);
         return new ChargeStartResult(saved.getId(), merchantUid, cmd.amount(), tossProperties.clientKey());
     }
@@ -164,15 +173,24 @@ public class PaymentApplicationService {
         );
 
         if (newlyPaid) {
-            // 가이드 §4.8 — 충전 성공 시 atomic point_balance 증가 + history 적재 (Day 8 PointApplicationService 도입).
-            pointApplicationService.credit(
-                    payment.getUserId(),
-                    payment.getAmount(),
-                    PointHistoryType.충전,
-                    PointReferenceType.PAYMENT,
-                    payment.getId(),
-                    "토스 충전"
-            );
+            if (payment.getEscrowApplicationId() != null) {
+                // 거래대행 결제 — buyer 잔액 변동 X (escrow hold). escrow application 의 paid_at 갱신만.
+                // 정산 시 seller / rider 한테만 credit (운영 자금에서 분배 모방).
+                escrowApplicationService.recordPaymentConfirmed(
+                        payment.getEscrowApplicationId(),
+                        payment.getUserId()
+                );
+            } else {
+                // 일반 충전 — atomic point_balance 증가 + history 적재.
+                pointApplicationService.credit(
+                        payment.getUserId(),
+                        payment.getAmount(),
+                        PointHistoryType.충전,
+                        PointReferenceType.PAYMENT,
+                        payment.getId(),
+                        "토스 충전"
+                );
+            }
         }
 
         return PaymentResult.from(payment);

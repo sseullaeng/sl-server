@@ -90,6 +90,26 @@ public class DeliveryRequest extends BaseEntity {
     @Column(name = "cancel_reason", length = MAX_CANCEL_REASON)
     private String cancelReason;
 
+    /** 거래대행 (Escrow) 결제완료 → 자동 생성된 delivery 의 application 참조. NULL = 일반 배달대행. */
+    @Column(name = "escrow_application_id")
+    private Long escrowApplicationId;
+
+    /** Escrow 결제완료 시 EscrowConfirmedEvent listener 가 호출. 일반 create 와 동일 + escrow_application_id 표시. */
+    public static DeliveryRequest createFromEscrow(
+            Long requesterId,
+            Long escrowApplicationId,
+            String pickupAddress,
+            String dropoffAddress,
+            String itemDescription,
+            long fee,
+            LocalDateTime now
+    ) {
+        DeliveryRequest d = create(requesterId, pickupAddress, dropoffAddress, itemDescription,
+                fee, null, null, now);
+        d.escrowApplicationId = escrowApplicationId;
+        return d;
+    }
+
     public static DeliveryRequest create(
             Long requesterId,
             String pickupAddress,

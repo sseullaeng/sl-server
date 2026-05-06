@@ -39,6 +39,9 @@ public class Payment extends BaseEntity {
     @Column(name = "transaction_id")
     private Long transactionId;
 
+    @Column(name = "escrow_application_id")
+    private Long escrowApplicationId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_type", nullable = false)
     private PaymentType paymentType;
@@ -74,8 +77,9 @@ public class Payment extends BaseEntity {
 
     /**
      * 충전 시작 — status=대기. amount 양수 강제.
+     * escrowApplicationId 가 NOT NULL 이면 거래대행 결제 — confirm 시 잔액 차감 + escrow 갱신 트리거.
      */
-    public static Payment startCharge(Long userId, String merchantUid, long amount) {
+    public static Payment startCharge(Long userId, String merchantUid, long amount, Long escrowApplicationId) {
         if (userId == null || userId <= 0) {
             throw new IllegalArgumentException("userId 는 양수여야 합니다");
         }
@@ -88,11 +92,17 @@ public class Payment extends BaseEntity {
         Payment p = new Payment();
         p.userId = userId;
         p.transactionId = null;
+        p.escrowApplicationId = escrowApplicationId;
         p.paymentType = PaymentType.충전;
         p.amount = amount;
         p.merchantUid = merchantUid;
         p.status = PaymentStatus.대기;
         return p;
+    }
+
+    /** Day 7 호환 (escrowApplicationId 없는 일반 충전). */
+    public static Payment startCharge(Long userId, String merchantUid, long amount) {
+        return startCharge(userId, merchantUid, amount, null);
     }
 
     /**
