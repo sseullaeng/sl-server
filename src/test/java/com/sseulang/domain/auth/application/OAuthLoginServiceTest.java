@@ -70,7 +70,8 @@ class OAuthLoginServiceTest {
                 userService,
                 jwtProvider,
                 store,
-                props
+                props,
+                ""  // adminUserEmailsRaw — empty (모두 USER role)
         );
     }
 
@@ -194,5 +195,76 @@ class OAuthLoginServiceTest {
         assertThat(store.contains("USER", USER_ID, j2)).isTrue();
 
         verify(userService, times(2)).findOrCreateBySocial(any(), any(), any(), any(), any());
+    }
+
+    // ───────── admin email allowlist (ROLE_ADMIN JWT 발급) ─────────
+
+    @Test
+    @DisplayName("login admin allowlist 매치_role=ADMIN JWT 발급 + RT store(ADMIN, userId)")
+    void login_admin_allowlist_매치() {
+        OAuthLoginService adminService = adminAllowlistService("admin@example.com,Other@Example.COM");
+
+        OAuthUserInfo info = new OAuthUserInfo(
+                SocialProvider.GOOGLE, "google-admin",
+                new Email("Admin@Example.com"),  // 대소문자 다름 — lowercase 비교
+                "관리자", "https://img/a.png");
+        when(googleProvider.exchangeCodeAndFetch("T", "http://cb")).thenReturn(info);
+        User u = userWithIdAndEmail(USER_ID, "Admin@Example.com");
+        when(userService.findOrCreateBySocial(any(), any(), any(), any(), any())).thenReturn(u);
+
+        TokenPair pair = adminService.loginWithCode(SocialProvider.GOOGLE, "T", "http://cb");
+
+        assertThat(jwtProvider.parse(pair.accessToken()).role()).isEqualTo("ADMIN");
+        String rtJti = jwtProvider.parse(pair.refreshToken()).jti();
+        assertThat(store.contains("ADMIN", USER_ID, rtJti)).isTrue();
+        assertThat(store.contains("USER", USER_ID, rtJti)).isFalse();
+    }
+
+    @Test
+    @DisplayName("login_allowlist 비매치 email_role=USER 유지 (기본 흐름)")
+    void login_admin_allowlist_비매치() {
+        OAuthLoginService adminService = adminAllowlistService("admin@example.com");
+
+        OAuthUserInfo info = new OAuthUserInfo(
+                SocialProvider.GOOGLE, "google-other",
+                new Email("other@example.com"),
+                "일반", null);
+        when(googleProvider.exchangeCodeAndFetch("T", "http://cb")).thenReturn(info);
+        User u = userWithIdAndEmail(USER_ID, "other@example.com");
+        when(userService.findOrCreateBySocial(any(), any(), any(), any(), any())).thenReturn(u);
+
+        TokenPair pair = adminService.loginWithCode(SocialProvider.GOOGLE, "T", "http://cb");
+
+        assertThat(jwtProvider.parse(pair.accessToken()).role()).isEqualTo("USER");
+    }
+
+    @Test
+    @DisplayName("login_allowlist empty (default)_role=USER 유지")
+    void login_admin_allowlist_empty() {
+        // 기본 service 는 setUp 에서 빈 allowlist — 모두 USER
+        when(kakaoProvider.exchangeCodeAndFetch("T", "http://cb")).thenReturn(INFO);
+        User u = userWithIdAndEmail(USER_ID, "user@kakao.com");
+        when(userService.findOrCreateBySocial(any(), any(), any(), any(), any())).thenReturn(u);
+
+        TokenPair pair = service.loginWithCode(SocialProvider.KAKAO, "T", "http://cb");
+
+        assertThat(jwtProvider.parse(pair.accessToken()).role()).isEqualTo("USER");
+    }
+
+    private OAuthLoginService adminAllowlistService(String adminEmailsCsv) {
+        JwtProperties props = new JwtProperties(SECRET, AT_VALIDITY, RT_VALIDITY);
+        return new OAuthLoginService(
+                List.of(kakaoProvider, googleProvider),
+                userService, jwtProvider, store, props,
+                adminEmailsCsv
+        );
+    }
+
+    private User userWithIdAndEmail(Long id, String email) {
+        User u = mock(User.class);
+        when(u.getId()).thenReturn(id);
+        when(u.isAccessibleAt(any(java.time.LocalDateTime.class))).thenReturn(true);
+        when(u.getEmail()).thenReturn(email);
+        return u;
     }
 }

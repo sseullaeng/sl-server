@@ -80,6 +80,10 @@ app:
     # !!! 운영 절대 false 유지 !!! — confirm 단의 토스 lookup 검증 우회. dev/QA 환경에서 시크릿 키
     # 미발급 상태로 결제 흐름 검증용. 활성 시 부팅 WARN + confirm 호출마다 WARN.
     skip-verify: ${TOSS_SKIP_VERIFY:false}
+  admin:
+    # OAuth 로그인 시 role=ADMIN JWT 를 발급할 email 화이트리스트 (콤마구분, lowercase 비교).
+    # 빈 값이면 모두 USER. 활성 시 부팅 WARN + 로그인마다 WARN.
+    user-emails: ${ADMIN_USER_EMAILS:}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
   email:
