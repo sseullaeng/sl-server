@@ -45,7 +45,7 @@ class PaymentApplicationServiceTest {
         pointHistoryRepo = new InMemoryFakePointHistoryRepository();
         userService = new UserApplicationService(userRepo, new com.sseulang.domain.transaction.application.InMemoryFakeTransactionRepository(), new com.sseulang.domain.report.application.InMemoryFakeUserReportRepository(), new com.sseulang.domain.auth.application.NoOpRefreshTokenStore(), java.time.Clock.systemDefaultZone());
         PointApplicationService pointSvc = new PointApplicationService(userService, pointHistoryRepo);
-        TossProperties tossProps = new TossProperties(CLIENT_KEY, "test_sk_secret", null, null, null);
+        TossProperties tossProps = new TossProperties(CLIENT_KEY, "test_sk_secret", null, null, null, null);
         service = new PaymentApplicationService(
                 paymentRepo, gateway, pointSvc, userService,
                 tossProps,

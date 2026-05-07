@@ -80,6 +80,8 @@ app:
     client-key: ${TOSS_CLIENT_KEY:}
     secret-key: ${TOSS_SECRET_KEY:}
     base-url: https://api.tosspayments.com
+    # dev/QA 한정 — 토스 시크릿 키 미발급 환경에서 confirm 검증 우회.
+    skip-verify: ${TOSS_SKIP_VERIFY:false}
   cors:
     allowed-origins:
       - http://localhost:3000

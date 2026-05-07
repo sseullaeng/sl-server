@@ -25,7 +25,7 @@ class TossWebhookSignatureVerifierTest {
     @Test
     @DisplayName("verify 시크릿 미설정_검증 비활성 (예외 X)")
     void verify_시크릿_미설정() {
-        TossProperties props = new TossProperties("ck", "sk", null, null, null);
+        TossProperties props = new TossProperties("ck", "sk", null, null, null, null);
         TossWebhookSignatureVerifier v = new TossWebhookSignatureVerifier(props, FIXED_CLOCK);
 
         assertThatCode(() -> v.verify("body", "anything", "anything")).doesNotThrowAnyException();
@@ -140,7 +140,7 @@ class TossWebhookSignatureVerifierTest {
     @Test
     @DisplayName("verify tolerance=0 면 timestamp 검증 비활성")
     void verify_tolerance_zero() {
-        TossProperties props = new TossProperties("ck", "sk", null, SECRET, 0L);
+        TossProperties props = new TossProperties("ck", "sk", null, SECRET, 0L, null);
         TossWebhookSignatureVerifier v = new TossWebhookSignatureVerifier(props, FIXED_CLOCK);
         String body = "body";
         // 1년 전이라도 timestamp 검증 안 함.
@@ -151,7 +151,7 @@ class TossWebhookSignatureVerifierTest {
     }
 
     private TossWebhookSignatureVerifier newVerifier() {
-        TossProperties props = new TossProperties("ck", "sk", null, SECRET, 300L);
+        TossProperties props = new TossProperties("ck", "sk", null, SECRET, 300L, null);
         return new TossWebhookSignatureVerifier(props, FIXED_CLOCK);
     }
 

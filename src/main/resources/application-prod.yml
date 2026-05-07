@@ -77,6 +77,9 @@ app:
     # Webhook 검증 — 토스 콘솔에서 webhook secret 발급 후 주입. 미주입 시 시그니처 검증 비활성 (위험).
     webhook-secret: ${TOSS_WEBHOOK_SECRET:}
     webhook-replay-tolerance-seconds: ${TOSS_WEBHOOK_REPLAY_TOLERANCE:300}
+    # !!! 운영 절대 false 유지 !!! — confirm 단의 토스 lookup 검증 우회. dev/QA 환경에서 시크릿 키
+    # 미발급 상태로 결제 흐름 검증용. 활성 시 부팅 WARN + confirm 호출마다 WARN.
+    skip-verify: ${TOSS_SKIP_VERIFY:false}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
   email:

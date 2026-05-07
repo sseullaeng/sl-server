@@ -85,6 +85,18 @@ public class PaymentApplicationService {
         this.escrowApplicationService = escrowApplicationService;
     }
 
+    /**
+     * 부팅 시점 skipVerify 활성 경고. dev/QA 환경에서 토스 시크릿 키 미발급 상태로 결제 흐름 검증할 때만 사용.
+     * 운영 진입 시 반드시 false 로 복귀해야 함.
+     */
+    @jakarta.annotation.PostConstruct
+    void warnIfSkipVerifyEnabled() {
+        if (Boolean.TRUE.equals(tossProperties.skipVerify())) {
+            log.warn("[!!! SKIP-VERIFY ACTIVE !!!] app.toss.skip-verify=true — 토스 confirm 검증 우회 모드 활성. "
+                    + "dev/QA 한정. 운영 진입 전 반드시 false 로 복귀 (TOSS_SKIP_VERIFY 환경변수 또는 application yml).");
+        }
+    }
+
     @Transactional
     public ChargeStartResult startCharge(ChargeStartCommand cmd) {
         if (cmd.amount() <= 0) {
@@ -131,6 +143,23 @@ public class PaymentApplicationService {
 
         // 멱등 — 이미 완료된 결제는 토스 호출 없이 그대로 반환.
         if (payment.getStatus().isPaid()) {
+            return PaymentResult.from(payment);
+        }
+
+        // skip-verify 모드 (dev/QA 한정) — 토스 시크릿 키 없는 환경에서 confirm 흐름 검증용.
+        // 1차 verifyAmount 가드는 통과한 상태 → 클라이언트 amount 그대로 신뢰. 운영 절대 사용 X (부팅 WARN 참고).
+        if (Boolean.TRUE.equals(tossProperties.skipVerify())) {
+            log.warn("[toss-confirm][SKIP-VERIFY] 토스 검증 우회 — paymentId={} merchantUid={} amount={} requesterId={}",
+                    payment.getId(), payment.getMerchantUid(), cmd.amount(), cmd.requesterId());
+            boolean newlyPaidSkip = payment.markAsPaid(
+                    "skip-" + cmd.paymentKey(),
+                    com.sseulang.domain.payment.domain.PaymentMethod.CARD,
+                    LocalDateTime.now(),
+                    "{\"skipped\":true,\"reason\":\"app.toss.skip-verify=true\"}"
+            );
+            if (newlyPaidSkip) {
+                applyPaymentConfirmedEffects(payment, "토스 충전 (skip-verify, dev 전용)");
+            }
             return PaymentResult.from(payment);
         }
 
