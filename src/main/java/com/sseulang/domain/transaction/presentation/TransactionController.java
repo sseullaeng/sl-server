@@ -22,7 +22,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Transaction", description = "거래 — 채팅중→예약→거래완료 (또는 취소). 정산은 거래완료 시점에 buyer→seller 포인트 이동.")
+@Tag(name = "Transaction", description = "거래 — 채팅중→예약→인계완료→거래완료 (또는 취소). "
+        + "라운드 11 escrow hold: 예약 시 buyer 잔액 hold, 인수확인 시 seller 정산.")
 @RestController
 @RequestMapping("/api/v1/transactions")
 public class TransactionController {
@@ -56,17 +57,18 @@ public class TransactionController {
     }
 
     /**
-     * 거래 상태 전이. action 별 분기:
+     * 거래 상태 전이. action 별 분기 (라운드 11):
      * <ul>
-     *   <li>{@code 예약}: seller 만 호출 가능. Item 비관적 락 + markAsReserved.</li>
-     *   <li>{@code 거래완료}: seller 만. (포인트 이동은 Day 8)</li>
-     *   <li>{@code 취소}: 양쪽 참여자. 예약 상태였다면 Item 판매중으로 복원.</li>
+     *   <li>{@code 예약}: seller. Item 비관적 락 + buyer escrow hold (잔액 부족 시 INSUFFICIENT_POINT).</li>
+     *   <li>{@code 인계확인}: seller. 예약 → 인계완료. 잔액 변동 X. 멱등.</li>
+     *   <li>{@code 인수확인}: buyer. 인계완료 → 거래완료 자동 전이 + 정산 (buyer hold 해제 + seller credit). 멱등.</li>
+     *   <li>{@code 취소}: 양쪽 참여자. 채팅중/예약 단계만 (인계완료 이후 차단 — R2 분쟁). 예약 단계 취소 시 Item 복원 + escrowRefund.</li>
      * </ul>
-     * action={@code 채팅중} 은 거부 — 채팅중은 create 시점에만 부여되는 초기 상태.
      */
-    @Operation(summary = "거래 상태 전이 (예약 / 거래완료 / 취소)",
-            description = "action 분기 — 예약: seller, 거래완료: seller(잔액 부족 시 INSUFFICIENT_POINT), 취소: 양쪽. "
-                    + "예약→취소 시 Item 판매중으로 복원. 동시 reserve 는 한 건만 성공(409 TRANSACTION_RESERVED_BY_OTHER).")
+    @Operation(summary = "거래 상태 전이 (예약 / 인계확인 / 인수확인 / 취소)",
+            description = "action 분기 — 예약: seller(잔액 부족 시 INSUFFICIENT_POINT), 인계확인: seller, "
+                    + "인수확인: buyer(자동 거래완료 + 정산), 취소: 양쪽(채팅중/예약 단계만). "
+                    + "동시 reserve 는 한 건만 성공(409 TRANSACTION_RESERVED_BY_OTHER).")
     @PatchMapping("/{id}")
     public ApiResponse<Void> patch(
             @AuthenticationPrincipal Long requesterId,
@@ -75,8 +77,10 @@ public class TransactionController {
     ) {
         if (request.isReserve()) {
             transactionService.reserve(id, requesterId);
-        } else if (request.isComplete()) {
-            transactionService.complete(id, requesterId);
+        } else if (request.isHandover()) {
+            transactionService.markHandover(id, requesterId);
+        } else if (request.isReceive()) {
+            transactionService.markReceived(id, requesterId);
         } else if (request.isCancel()) {
             transactionService.cancel(id, requesterId, request.cancelReason());
         } else {

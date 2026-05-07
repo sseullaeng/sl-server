@@ -142,8 +142,10 @@ public class PointHistory {
         if (type != PointHistoryType.충전
                 && type != PointHistoryType.판매정산
                 && type != PointHistoryType.환불
-                && type != PointHistoryType.배달정산) {
-            throw new IllegalArgumentException("recordCredit 은 충전 / 판매정산 / 환불 / 배달정산 type 만 허용: " + type);
+                && type != PointHistoryType.배달정산
+                && type != PointHistoryType.거래환불) {
+            throw new IllegalArgumentException(
+                    "recordCredit 은 충전 / 판매정산 / 환불 / 배달정산 / 거래환불 type 만 허용: " + type);
         }
     }
 
@@ -151,8 +153,10 @@ public class PointHistory {
         if (type != PointHistoryType.결제
                 && type != PointHistoryType.출금
                 && type != PointHistoryType.환불
-                && type != PointHistoryType.배달결제) {
-            throw new IllegalArgumentException("recordDebit 은 결제 / 출금 / 환불 / 배달결제 type 만 허용: " + type);
+                && type != PointHistoryType.배달결제
+                && type != PointHistoryType.거래보관) {
+            throw new IllegalArgumentException(
+                    "recordDebit 은 결제 / 출금 / 환불 / 배달결제 / 거래보관 type 만 허용: " + type);
         }
     }
 }

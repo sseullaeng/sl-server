@@ -85,6 +85,48 @@ public class InMemoryFakeUserRepository implements UserRepository {
     }
 
     @Override
+    public synchronized int holdForEscrow(Long userId, long amount) {
+        User user = store.get(userId);
+        if (user == null) return 0;
+        if (user.getPointBalance() < amount) return 0;
+        ReflectionTestUtils.setField(user, "pointBalance", user.getPointBalance() - amount);
+        ReflectionTestUtils.setField(user, "pointHold", user.getPointHold() + amount);
+        return 1;
+    }
+
+    @Override
+    public synchronized int releaseHold(Long userId, long amount) {
+        User user = store.get(userId);
+        if (user == null) return 0;
+        if (user.getPointHold() < amount) return 0;
+        ReflectionTestUtils.setField(user, "pointHold", user.getPointHold() - amount);
+        return 1;
+    }
+
+    @Override
+    public synchronized int refundHold(Long userId, long amount) {
+        User user = store.get(userId);
+        if (user == null) return 0;
+        if (user.getPointHold() < amount) return 0;
+        ReflectionTestUtils.setField(user, "pointHold", user.getPointHold() - amount);
+        ReflectionTestUtils.setField(user, "pointBalance", user.getPointBalance() + amount);
+        return 1;
+    }
+
+    @Override
+    public Long findPointHold(Long userId) {
+        User user = store.get(userId);
+        return user == null ? null : user.getPointHold();
+    }
+
+    @Override
+    public synchronized java.util.Optional<PointSnapshot> findPointSnapshot(Long userId) {
+        User user = store.get(userId);
+        if (user == null) return java.util.Optional.empty();
+        return java.util.Optional.of(new PointSnapshot(user.getPointBalance(), user.getPointHold()));
+    }
+
+    @Override
     public Page<User> findAllForAdmin(Pageable pageable) {
         List<User> all = store.values().stream()
                 .sorted(Comparator.comparing(User::getId).reversed())

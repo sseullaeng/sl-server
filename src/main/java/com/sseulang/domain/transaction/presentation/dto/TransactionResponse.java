@@ -7,7 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
 
-@Schema(description = "거래 — 채팅중→예약→거래완료 상태 머신. 정산은 거래완료 시 buyer 차감/seller 적립.")
+@Schema(description = "거래 — 채팅중→예약→인계완료→거래완료 (라운드 11). 정산은 인수확인 시점에 buyer hold 해제 + seller 적립.")
 public record TransactionResponse(
         @Schema(example = "12") Long id,
         @Schema(example = "42") Long itemId,
@@ -20,9 +20,14 @@ public record TransactionResponse(
         LocalDateTime rentalEnd,
         TransactionStatus status,
         LocalDateTime reservedAt,
+        @Schema(description = "seller 인계확인 시각 (라운드 11)") LocalDateTime handoverConfirmedAt,
+        @Schema(description = "buyer 인수확인 시각 (라운드 11)") LocalDateTime receiveConfirmedAt,
         LocalDateTime completedAt,
         LocalDateTime canceledAt,
         @Schema(example = "구매자 변심") String cancelReason,
+        @Schema(example = "1200000",
+                description = "예약 시 buyer point_balance 에서 hold 한 금액 (라운드 11). 0 = 나눔 또는 옛 거래.")
+        long escrowHoldAmount,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
@@ -31,8 +36,12 @@ public record TransactionResponse(
                 r.id(), r.itemId(), r.sellerId(), r.buyerId(),
                 r.tradeType(), r.price(), r.deposit(),
                 r.rentalStart(), r.rentalEnd(),
-                r.status(), r.reservedAt(), r.completedAt(), r.canceledAt(),
+                r.status(),
+                r.reservedAt(),
+                r.handoverConfirmedAt(), r.receiveConfirmedAt(),
+                r.completedAt(), r.canceledAt(),
                 r.cancelReason(),
+                r.escrowHoldAmount(),
                 r.createdAt(), r.updatedAt()
         );
     }

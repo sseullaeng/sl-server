@@ -210,4 +210,105 @@ public class PointApplicationService {
         return pointHistoryRepository.findByUserIdAndType(userId, type, pageable)
                 .map(PointHistoryResult::from);
     }
+
+    // ───────── 라운드 11 — 거래 escrow hold 흐름 (가이드 §5.1) ─────────
+
+    /**
+     * 거래 예약 시 buyer hold — point_balance 차감 + point_hold 적립을 단일 atomic UPDATE.
+     * 거래보관 history 1건 적재 (balance_after = 차감 후 잔액).
+     *
+     * <p>잔액 부족 시 UserApplicationService 가 INSUFFICIENT_POINT throw → 트랜잭션 롤백
+     * (history 미적재).</p>
+     */
+    @Transactional
+    public void escrowHold(Long buyerId, long amount, Long transactionId, String description) {
+        if (buyerId == null || buyerId <= 0) {
+            throw new IllegalArgumentException("buyerId 는 양수여야 합니다");
+        }
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount 는 양수여야 합니다");
+        }
+        if (transactionId == null || transactionId <= 0) {
+            throw new IllegalArgumentException("transactionId 는 양수여야 합니다");
+        }
+        userApplicationService.holdForEscrow(buyerId, amount);
+        long balanceAfter = readBalance(buyerId);
+        pointHistoryRepository.save(PointHistory.recordDebit(
+                buyerId, PointHistoryType.거래보관, amount, balanceAfter,
+                PointReferenceType.TRANSACTION, transactionId, description, LocalDateTime.now()
+        ));
+    }
+
+    /**
+     * 거래완료 (인수확인) 시 정산 — buyer hold 해제 + seller balance 적립을 한 트랜잭션.
+     *
+     * <p>가이드 §5.3 deadlock 방지: 두 user 의 잔액 변동 순서를 userId 오름차순으로 강제.
+     * buyer 의 hold 해제는 잔액 변화 X 라 history 미적재 (Aggregate 정책 — V16/PointHistoryType 주석 동기).
+     * seller 는 판매정산 history 1건 적재.</p>
+     *
+     * <p>buyer hold 부족 시 UserApplicationService 가 TRANSACTION_HOLD_FAILED throw — 운영 이상,
+     * seller 선행 적립도 롤백.</p>
+     */
+    @Transactional
+    public void escrowRelease(
+            Long buyerId,
+            Long sellerId,
+            long amount,
+            Long transactionId,
+            String description
+    ) {
+        if (buyerId == null || sellerId == null) {
+            throw new IllegalArgumentException("buyerId / sellerId 는 필수입니다");
+        }
+        if (buyerId.equals(sellerId)) {
+            throw new IllegalArgumentException("buyer 와 seller 는 같을 수 없습니다");
+        }
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount 는 양수여야 합니다");
+        }
+        if (transactionId == null || transactionId <= 0) {
+            throw new IllegalArgumentException("transactionId 는 양수여야 합니다");
+        }
+        if (buyerId < sellerId) {
+            userApplicationService.releaseHold(buyerId, amount);
+            creditSellerSettlement(sellerId, amount, transactionId, description);
+        } else {
+            creditSellerSettlement(sellerId, amount, transactionId, description);
+            userApplicationService.releaseHold(buyerId, amount);
+        }
+    }
+
+    /**
+     * 거래 취소 시 buyer 환불 — point_hold 차감 + point_balance 적립을 단일 atomic UPDATE.
+     * 거래환불 history 1건 적재 (balance_after = 적립 후 잔액). seller 잔액 변동 X (정산 전이라).
+     *
+     * <p>buyer hold 부족 시 UserApplicationService 가 TRANSACTION_HOLD_FAILED throw → 운영 이상.</p>
+     */
+    @Transactional
+    public void escrowRefund(Long buyerId, long amount, Long transactionId, String description) {
+        if (buyerId == null || buyerId <= 0) {
+            throw new IllegalArgumentException("buyerId 는 양수여야 합니다");
+        }
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount 는 양수여야 합니다");
+        }
+        if (transactionId == null || transactionId <= 0) {
+            throw new IllegalArgumentException("transactionId 는 양수여야 합니다");
+        }
+        userApplicationService.refundHold(buyerId, amount);
+        long balanceAfter = readBalance(buyerId);
+        pointHistoryRepository.save(PointHistory.recordCredit(
+                buyerId, PointHistoryType.거래환불, amount, balanceAfter,
+                PointReferenceType.TRANSACTION, transactionId, description, LocalDateTime.now()
+        ));
+    }
+
+    private void creditSellerSettlement(Long sellerId, long amount, Long transactionId, String description) {
+        userApplicationService.creditPoint(sellerId, amount);
+        long balanceAfter = readBalance(sellerId);
+        pointHistoryRepository.save(PointHistory.recordCredit(
+                sellerId, PointHistoryType.판매정산, amount, balanceAfter,
+                PointReferenceType.TRANSACTION, transactionId, description, LocalDateTime.now()
+        ));
+    }
 }

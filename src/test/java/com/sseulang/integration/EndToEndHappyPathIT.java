@@ -62,7 +62,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   <li>Buyer 가 토스 결제로 잔액 충전 (PG mock)</li>
  *   <li>Buyer 가 Item 으로 Transaction 생성 (채팅중)</li>
  *   <li>Seller 가 Transaction 예약</li>
- *   <li>Seller 가 Transaction 거래완료 → buyer 차감 + seller 적립 (정산)</li>
+ *   <li>Seller 인계확인 → 인계완료 (라운드 11)</li>
+ *   <li>Buyer 인수확인 → 거래완료 자동 전이 + 정산 (buyer hold 해제 + seller 적립)</li>
  *   <li>Buyer 가 Review 작성 (별점 기록)</li>
  * </ol>
  *
@@ -248,7 +249,7 @@ class EndToEndHappyPathIT {
                 .andReturn();
         Long txId = readId(txResult, "$.data.id");
 
-        // ───────── 6. Seller Transaction 예약 ─────────
+        // ───────── 6. Seller Transaction 예약 (라운드 11 — buyer hold 트리거) ─────────
         mvc.perform(patch("/api/v1/transactions/" + txId)
                         .with(csrf())
                         .cookie(sellerAt)
@@ -256,15 +257,23 @@ class EndToEndHappyPathIT {
                         .content("{\"action\":\"예약\"}"))
                 .andExpect(status().isOk());
 
-        // ───────── 7. Seller Transaction 거래완료 (정산) ─────────
+        // ───────── 7. Seller 인계확인 (라운드 11) ─────────
         mvc.perform(patch("/api/v1/transactions/" + txId)
                         .with(csrf())
                         .cookie(sellerAt)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"action\":\"거래완료\"}"))
+                        .content("{\"action\":\"인계확인\"}"))
                 .andExpect(status().isOk());
 
-        // 정산 검증 — buyer 잔액 차감 / seller 잔액 적립
+        // ───────── 8. Buyer 인수확인 (라운드 11 — 자동 거래완료 + 정산) ─────────
+        mvc.perform(patch("/api/v1/transactions/" + txId)
+                        .with(csrf())
+                        .cookie(buyerAt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"action\":\"인수확인\"}"))
+                .andExpect(status().isOk());
+
+        // 정산 검증 — buyer hold 해제 / seller 잔액 적립 + status=거래완료
         mvc.perform(get("/api/v1/transactions/" + txId).cookie(buyerAt))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("거래완료"));

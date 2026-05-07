@@ -58,6 +58,67 @@ interface UserJpaRepository extends JpaRepository<User, Long> {
     @Query("SELECT u.pointBalance FROM User u WHERE u.id = :userId")
     Long findPointBalanceById(@Param("userId") Long userId);
 
+    /**
+     * 가이드 §5.1 거래 hold (라운드 11) — point_balance 차감 + point_hold 적립을 단일 원자 UPDATE.
+     * 잔액 부족 시 affected=0 (WHERE point_balance >= :amount 가드 — 음수 방지).
+     * 동시 hold race 안전 (행 락 직렬화 + 단일 SQL).
+     *
+     * <p><b>@Version 정책</b>: 본 메서드 + creditPointBalance / deductPointBalance / releaseHold /
+     * refundHold / recordReviewFor 는 모두 가이드 §5.3 패턴 (원자 SQL 로 직접 컬럼 변경) — JPA dirty-check
+     * 경로를 우회하므로 {@code @Version} 을 의도적으로 갱신하지 않는다. race-safety 는 SQL 자체의
+     * 행 락 + WHERE 가드가 보장. 단, 같은 트랜잭션 안에서 다른 managed write (profile / block / suspend
+     * 등 entity dirty-check 경로) 와 섞이면 별도 optimistic-lock 방어가 필요 — Day 5 takeover 패턴 참고.</p>
+     */
+    @Modifying
+    @Query("""
+            UPDATE User u
+               SET u.pointBalance = u.pointBalance - :amount,
+                   u.pointHold    = u.pointHold + :amount
+             WHERE u.id = :userId
+               AND u.pointBalance >= :amount
+            """)
+    int holdForEscrow(@Param("userId") Long userId, @Param("amount") long amount);
+
+    /**
+     * 거래완료 정산 — buyer point_hold 만 차감. seller credit 은 별도 호출 (양 사용자 id-asc 락 순서).
+     * point_hold &lt; amount 면 affected=0 — 호출자가 fail-fast.
+     */
+    @Modifying
+    @Query("UPDATE User u SET u.pointHold = u.pointHold - :amount WHERE u.id = :userId AND u.pointHold >= :amount")
+    int releaseHold(@Param("userId") Long userId, @Param("amount") long amount);
+
+    /**
+     * 거래 취소 환불 — point_hold 차감 + point_balance 적립을 단일 원자 UPDATE.
+     * point_hold &lt; amount 면 affected=0.
+     */
+    @Modifying
+    @Query("""
+            UPDATE User u
+               SET u.pointBalance = u.pointBalance + :amount,
+                   u.pointHold    = u.pointHold - :amount
+             WHERE u.id = :userId
+               AND u.pointHold >= :amount
+            """)
+    int refundHold(@Param("userId") Long userId, @Param("amount") long amount);
+
+    /** point_hold scalar 조회. atomic UPDATE 직후 history balance_after 적재용. */
+    @Query("SELECT u.pointHold FROM User u WHERE u.id = :userId")
+    Long findPointHoldById(@Param("userId") Long userId);
+
+    /**
+     * 잔액 + hold 단일 SELECT 스냅샷 — 게이트 1 W-1 보강 (race-safe 일관성).
+     * native projection 으로 영속성 컨텍스트 stale 우회.
+     */
+    @Query(value = "SELECT point_balance AS balance, point_hold AS hold FROM users WHERE id = :userId",
+           nativeQuery = true)
+    java.util.Optional<PointSnapshotRow> findPointSnapshotById(@Param("userId") Long userId);
+
+    /** native projection — UserRepository.PointSnapshot 으로 매핑 (Spring Data 인터페이스 projection). */
+    interface PointSnapshotRow {
+        long getBalance();
+        long getHold();
+    }
+
     Page<User> findAllByOrderByIdDesc(Pageable pageable);
 
     /**

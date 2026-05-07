@@ -20,7 +20,8 @@ public record MeResponse(
         @Schema(description = "프로필 이미지 URL (없으면 null)") String profileImage,
         @Schema(description = "LOCAL / KAKAO / GOOGLE") SocialProvider socialProvider,
         @Schema(example = "true", description = "이메일 인증 여부 — false 면 자금/거래 API 가 403") boolean emailVerified,
-        @Schema(example = "50000", description = "포인트 잔액 (KRW)") long pointBalance,
+        @Schema(example = "50000", description = "즉시 사용 가능 포인트 (KRW). 라운드 11 부터 거래 hold 분 제외.") long pointBalance,
+        @Schema(example = "10000", description = "거래 hold 잔액 (라운드 11). 헤더/카드에 작은 텍스트 안내용.") long pointHold,
         @Schema(example = "4.7", description = "리뷰 평균. 리뷰 0건이면 null") BigDecimal trustScore,
         @Schema(example = "12") int reviewCount
 ) {
@@ -33,6 +34,7 @@ public record MeResponse(
                 u.getSocialProvider(),
                 u.isEmailVerified(),
                 u.getPointBalance(),
+                u.getPointHold(),
                 u.getTrustScore(),
                 u.getReviewCount()
         );

@@ -176,6 +176,70 @@ public class UserApplicationService {
     }
 
     /**
+     * 가이드 §5.1 거래 hold (라운드 11) — buyer point_balance 차감 + point_hold 적립을 단일 atomic UPDATE.
+     * 잔액 부족 시 INSUFFICIENT_POINT (음수 방지 가드). amount 양수 강제.
+     * Transaction 도메인은 Point 도메인을 통해 호출, 본 메서드는 UserRepository 위임 단일 진입점.
+     */
+    @Transactional
+    public void holdForEscrow(Long userId, long amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount 는 양수여야 합니다");
+        }
+        int affected = userRepository.holdForEscrow(userId, amount);
+        if (affected != 1) {
+            throw new BusinessException(ErrorCode.INSUFFICIENT_POINT);
+        }
+    }
+
+    /**
+     * 거래완료 정산 — buyer point_hold 만 차감 (seller credit 은 creditPoint 별도 호출).
+     * affected=0 = hold 잔액 부족 (운영 이상 — 가드 회귀) → TRANSACTION_HOLD_FAILED.
+     */
+    @Transactional
+    public void releaseHold(Long userId, long amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount 는 양수여야 합니다");
+        }
+        int affected = userRepository.releaseHold(userId, amount);
+        if (affected != 1) {
+            throw new BusinessException(ErrorCode.TRANSACTION_HOLD_FAILED);
+        }
+    }
+
+    /**
+     * 거래 취소 환불 — buyer point_hold 차감 + point_balance 적립을 단일 atomic UPDATE.
+     * affected=0 = hold 잔액 부족 (운영 이상 — 가드 회귀) → TRANSACTION_HOLD_FAILED.
+     */
+    @Transactional
+    public void refundHold(Long userId, long amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount 는 양수여야 합니다");
+        }
+        int affected = userRepository.refundHold(userId, amount);
+        if (affected != 1) {
+            throw new BusinessException(ErrorCode.TRANSACTION_HOLD_FAILED);
+        }
+    }
+
+    /** point_hold 단건 scalar 조회 (UI/통계용 + history balance_after 보강용). */
+    public long getPointHold(Long userId) {
+        Long hold = userRepository.findPointHold(userId);
+        if (hold == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+        return hold;
+    }
+
+    /**
+     * 잔액 + hold 단일 SELECT 스냅샷 — 잔액 페이지 3분할 표시 응답의 race-safe 일관성.
+     * balance / hold 분리 read 시 동시 reserve/cancel/refund 사이에 끼어 합산이 어긋날 수 있어 통합 (게이트 1 W-1).
+     */
+    public com.sseulang.domain.user.domain.UserRepository.PointSnapshot getPointSnapshot(Long userId) {
+        return userRepository.findPointSnapshot(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    /**
      * 관리자 회원 목록 — created_at DESC 페이징. 차단/삭제 상태 모두 포함.
      */
     public Page<User> adminFindAll(Pageable pageable) {

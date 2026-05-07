@@ -87,6 +87,32 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     @Override
+    public int holdForEscrow(Long userId, long amount) {
+        return jpa.holdForEscrow(userId, amount);
+    }
+
+    @Override
+    public int releaseHold(Long userId, long amount) {
+        return jpa.releaseHold(userId, amount);
+    }
+
+    @Override
+    public int refundHold(Long userId, long amount) {
+        return jpa.refundHold(userId, amount);
+    }
+
+    @Override
+    public Long findPointHold(Long userId) {
+        return jpa.findPointHoldById(userId);
+    }
+
+    @Override
+    public Optional<PointSnapshot> findPointSnapshot(Long userId) {
+        return jpa.findPointSnapshotById(userId)
+                .map(row -> new PointSnapshot(row.getBalance(), row.getHold()));
+    }
+
+    @Override
     public long countAll() {
         return jpa.count();
     }
