@@ -19,4 +19,7 @@ public interface UserReportRepository {
      * 빈 입력은 빈 맵. 단일 GROUP BY 쿼리 — N+1 회피.
      */
     java.util.Map<Long, Long> countByTargetUserIds(java.util.Collection<Long> targetUserIds);
+
+    /** 차트 dashboard summary — 처리 대기 신고 수 (status IN (접수, 처리중)). */
+    long countPending();
 }

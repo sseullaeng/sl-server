@@ -133,6 +133,18 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     @Override
+    public long countSignupsBetween(java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return jpa.countSignupsBetween(from, to);
+    }
+
+    @Override
+    public java.util.List<DailyCount> findDailySignups(java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return jpa.findDailySignupsRaw(from, to).stream()
+                .map(r -> new DailyCount(r.getD().toLocalDate(), r.getC()))
+                .toList();
+    }
+
+    @Override
     public java.util.List<Long> findActiveIdsAfter(long afterId, int limit) {
         if (limit <= 0) return java.util.Collections.emptyList();
         return jpa.findActiveIdsAfter(afterId, org.springframework.data.domain.PageRequest.of(0, limit));

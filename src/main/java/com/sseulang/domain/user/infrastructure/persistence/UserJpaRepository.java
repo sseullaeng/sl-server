@@ -203,6 +203,30 @@ interface UserJpaRepository extends JpaRepository<User, Long> {
     @Query("SELECT COUNT(u) FROM User u WHERE u.blocked = true")
     long countBlocked();
 
+    @Query("SELECT COUNT(u) FROM User u WHERE u.createdAt >= :from AND u.createdAt < :to")
+    long countSignupsBetween(@Param("from") java.time.LocalDateTime from, @Param("to") java.time.LocalDateTime to);
+
+    /**
+     * 일자별 가입자 — DATE(created_at) GROUP BY. native query (JPQL DATE 함수 호환성 회피).
+     * 결과 row: (date, count). 빈 일자는 결과에 미포함 (호출자가 fill).
+     */
+    @Query(value = """
+            SELECT DATE(u.created_at) AS d, COUNT(*) AS c
+              FROM users u
+             WHERE u.created_at >= :from AND u.created_at < :to
+             GROUP BY DATE(u.created_at)
+             ORDER BY d ASC
+            """, nativeQuery = true)
+    java.util.List<DailySignupRow> findDailySignupsRaw(
+            @Param("from") java.time.LocalDateTime from,
+            @Param("to") java.time.LocalDateTime to);
+
+    /** native projection — UserRepository.DailyCount 으로 매핑. */
+    interface DailySignupRow {
+        java.sql.Date getD();
+        long getC();
+    }
+
     @Query("SELECT COUNT(u) FROM User u WHERE u.deleted = true")
     long countDeleted();
 

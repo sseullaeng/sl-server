@@ -76,6 +76,11 @@ public class UserReportApplicationService {
         return findOrThrow(reportId);
     }
 
+    /** 차트 dashboard summary — 처리 대기 (접수 + 처리중) 신고 수. */
+    public long countPending() {
+        return repository.countPending();
+    }
+
     private UserReport findOrThrow(Long reportId) {
         return repository.findById(reportId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REPORT_NOT_FOUND));

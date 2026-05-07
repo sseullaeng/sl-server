@@ -221,6 +221,17 @@ public class UserApplicationService {
         }
     }
 
+    /** 차트 dashboard — 기간 [from, to) 가입자 수. */
+    public long countSignupsBetween(java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return userRepository.countSignupsBetween(from, to);
+    }
+
+    /** 차트 dashboard — 일자별 가입자 수 (빈 일은 미포함, 호출자가 0 채움). */
+    public java.util.List<UserRepository.DailyCount> findDailySignups(
+            java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return userRepository.findDailySignups(from, to);
+    }
+
     /** point_hold 단건 scalar 조회 (UI/통계용 + history balance_after 보강용). */
     public long getPointHold(Long userId) {
         Long hold = userRepository.findPointHold(userId);

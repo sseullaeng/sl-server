@@ -273,6 +273,18 @@ public class TransactionApplicationService {
         return new ReviewableTransactionResult(tx.getId(), requesterId, revieweeId, tx.getCompletedAt());
     }
 
+    /** 차트 dashboard — 기간 [from, to) tradeType 별 카운트 (created_at 기준). */
+    public java.util.List<com.sseulang.domain.transaction.domain.TransactionRepository.TradeTypeCount>
+            countByTradeTypeBetween(java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return transactionRepository.countByTradeTypeBetween(from, to);
+    }
+
+    /** 차트 dashboard — 기간 [from, to) status 별 카운트 (라운드 11 5단계, created_at 기준). */
+    public java.util.List<TransactionStatusCount> countByStatusBetween(
+            java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return transactionRepository.countByStatusBetween(from, to);
+    }
+
     /**
      * 관리자 거래 통계 — total + status 별 카운트. byStatus 는 enum 모든 값 포함 (없는 status 는 0L).
      * 단일 GROUP BY 쿼리 — N+1 없음.

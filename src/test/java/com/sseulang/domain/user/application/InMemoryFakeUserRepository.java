@@ -155,6 +155,29 @@ public class InMemoryFakeUserRepository implements UserRepository {
     }
 
     @Override
+    public long countSignupsBetween(java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return store.values().stream()
+                .filter(u -> {
+                    java.time.LocalDateTime c = u.getCreatedAt();
+                    return c != null && !c.isBefore(from) && c.isBefore(to);
+                })
+                .count();
+    }
+
+    @Override
+    public java.util.List<DailyCount> findDailySignups(java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        java.util.Map<java.time.LocalDate, Long> grouped = new java.util.TreeMap<>();
+        for (User u : store.values()) {
+            java.time.LocalDateTime c = u.getCreatedAt();
+            if (c == null || c.isBefore(from) || !c.isBefore(to)) continue;
+            grouped.merge(c.toLocalDate(), 1L, Long::sum);
+        }
+        return grouped.entrySet().stream()
+                .map(e -> new DailyCount(e.getKey(), e.getValue()))
+                .toList();
+    }
+
+    @Override
     public Page<User> searchForAdmin(
             com.sseulang.domain.user.application.dto.AdminUserSearchCriteria criteria,
             java.time.LocalDateTime now,

@@ -56,4 +56,11 @@ public class InMemoryFakeUserReportRepository implements UserReportRepository {
         }
         return result;
     }
+
+    @Override
+    public long countPending() {
+        return store.values().stream()
+                .filter(r -> r.getStatus() == ReportStatus.접수 || r.getStatus() == ReportStatus.처리중)
+                .count();
+    }
 }

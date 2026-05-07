@@ -109,6 +109,21 @@ public interface UserRepository {
     long countActive();
 
     /**
+     * 차트 dashboard — 기간 안 (created_at &gt;= from AND created_at &lt; to) 가입자 수.
+     * to 는 exclusive. summary.users.monthDelta / todaySignups.* 등 기간 합산용.
+     */
+    long countSignupsBetween(java.time.LocalDateTime from, java.time.LocalDateTime to);
+
+    /**
+     * 차트 dashboard — 일자별 가입자 수. 빈 일은 결과에 미포함 (호출자가 0으로 채움).
+     * created_at DATE GROUP BY, ASC.
+     */
+    java.util.List<DailyCount> findDailySignups(java.time.LocalDateTime from, java.time.LocalDateTime to);
+
+    /** {@code (date, count)} record — 일자별 차트 데이터용. */
+    record DailyCount(java.time.LocalDate date, long count) { }
+
+    /**
      * Admin broadcast 용 — 활성 사용자 id 청크 페이징. blocked/deleted 제외.
      * 큰 사용자 수에서 OOM 방지를 위해 호출자가 청크 단위로 호출. id ASC 안정 정렬.
      *
