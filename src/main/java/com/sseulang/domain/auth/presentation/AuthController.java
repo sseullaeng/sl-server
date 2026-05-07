@@ -81,8 +81,9 @@ public class AuthController {
     private ResponseEntity<ApiResponse<MeResponse>> setAuthCookiesWithMe(TokenPair pair) {
         ResponseCookie at = cookieUtil.accessTokenCookie(pair.accessToken());
         ResponseCookie rt = cookieUtil.refreshTokenCookie(pair.refreshToken());
-        Long userId = jwtProvider.parse(pair.accessToken()).userId();
-        MeResponse me = MeResponse.from(userService.getById(userId));
+        // JWT role claim 그대로 응답에 노출 — 프론트가 ADMIN/USER 분기 (마이페이지 → 관리 페이지 redirect 등).
+        var claims = jwtProvider.parse(pair.accessToken());
+        MeResponse me = MeResponse.from(userService.getById(claims.userId()), claims.role());
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, at.toString())
                 .header(HttpHeaders.SET_COOKIE, rt.toString())

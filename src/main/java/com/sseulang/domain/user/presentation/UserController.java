@@ -8,6 +8,8 @@ import com.sseulang.global.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -28,10 +30,13 @@ public class UserController {
     }
 
     @Operation(summary = "본인 정보 조회",
-            description = "AT 쿠키 기반 인증된 사용자 정보. 로그인 후 페이지 새로고침 시 store 재초기화에 사용.")
+            description = "AT 쿠키 기반 인증된 사용자 정보. 응답 role 필드로 ADMIN 여부 판별 가능 — 프론트 마이페이지 → 관리 페이지 redirect 분기.")
     @GetMapping("/me")
-    public ApiResponse<MeResponse> getMe(@AuthenticationPrincipal Long userId) {
-        return ApiResponse.ok(MeResponse.from(userService.getById(userId)));
+    public ApiResponse<MeResponse> getMe(
+            @AuthenticationPrincipal Long userId,
+            Authentication auth
+    ) {
+        return ApiResponse.ok(MeResponse.from(userService.getById(userId), roleFrom(auth)));
     }
 
     @Operation(summary = "다른 사용자 공개 프로필 조회",
@@ -49,10 +54,23 @@ public class UserController {
     @PatchMapping("/me")
     public ApiResponse<MeResponse> updateMe(
             @AuthenticationPrincipal Long userId,
+            Authentication auth,
             @Valid @RequestBody UserUpdateRequest request
     ) {
         return ApiResponse.ok(MeResponse.from(
-                userService.updateProfile(userId, request.profileImage(), request.nickname())
+                userService.updateProfile(userId, request.profileImage(), request.nickname()),
+                roleFrom(auth)
         ));
+    }
+
+    /** Spring Security Authentication 의 GrantedAuthority 에서 ROLE_ prefix 제거한 role 문자열. */
+    private static String roleFrom(Authentication auth) {
+        if (auth == null) return "USER";
+        return auth.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .filter(a -> a != null && a.startsWith("ROLE_"))
+                .findFirst()
+                .map(a -> a.substring("ROLE_".length()))
+                .orElse("USER");
     }
 }
