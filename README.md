@@ -1,79 +1,220 @@
-# 쓸랭 (Sseulang) 백엔드
+# 쓸랭 (Sseulang) — C2C 통합 거래 플랫폼 백엔드
 
-중고 거래 + 대여 + 나눔 + 배달대행을 통합한 C2C 플랫폼 백엔드.
+> 중고 거래 + 대여 + 나눔 + 배달대행을 통합한 C2C 플랫폼 백엔드
 
-> 상세 설계: [docs/backend.md](docs/SSEULANG_BACKEND_GUIDE.md)
+[![build](https://img.shields.io/badge/build-passing-brightgreen)](.)
+[![Java](https://img.shields.io/badge/Java-21-orange)](.)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.5-green)](.)
+[![tests](https://img.shields.io/badge/tests-280%2B%20passing-brightgreen)](.)
+
+🔗 **라이브 데모**: [api.sseulang.store](https://api.sseulang.store) · [Swagger UI](https://api.sseulang.store/swagger-ui.html)
+
+---
+
+## 핵심 기능
+
+49개 유스케이스를 6개 묶음으로 구현했습니다.
+
+| 묶음 | 핵심 |
+|---|---|
+| 🛒 **거래** | 판매 / 대여 / 나눔 3유형, escrow hold + 양쪽 확인 정산 |
+| 💳 **결제·포인트** | 토스페이먼츠 실연동, 충전식 플랫폼 머니, 적자 방지 정책 |
+| 💬 **채팅·알림** | WebSocket + STOMP 실시간, MongoDB 영속, JWT 통합 인증 |
+| 🛵 **배달대행** | 라이더 매칭, 위치 트래킹, Redis 캐시 + STOMP 브로드캐스트 |
+| 🔐 **인증** | OAuth 카카오 / 구글 + LOCAL 이메일 인증, JWT + Refresh Rotation |
+| 🛠 **관리자** | 통계 대시보드, 신고 처리, 출금 승인, 배너 / 공지 관리 |
+
+---
+
+## 아키텍처
+
+![시스템 아키텍처](docs/img/architecture.png)
+
+- **백엔드**: Spring Boot 기반 REST API + WebSocket/STOMP 실시간 통신
+- **DB**: MySQL 8, MongoDB 7, Redis 7
+- **외부 연동**: 토스페이먼츠, 카카오·구글 OAuth, AWS S3 Presigned URL
+- **인프라**: GCP Compute Engine, Docker Compose, Nginx, Let's Encrypt
+
+---
+
+## 도메인 구조
+
+14개 도메인을 `presentation → application → domain ← infrastructure` 방향의 4-layer 구조로 구성했습니다.
+
+```text
+com.sseulang
+├── global/             # config, security, exception, common, infra
+└── domain/
+    ├── user/           # Aggregate Root + VO: Email, Phone, PointBalance
+    ├── auth/           # OAuth + LOCAL + JWT + Refresh Rotation
+    ├── item/           # 상품 3유형 + 이미지 + 카테고리 + 해시태그
+    ├── transaction/    # 거래 상태 머신, escrow hold
+    ├── payment/        # 토스 결제 + 멱등성
+    ├── point/          # 충전식 머니, 원자 UPDATE
+    ├── delivery/       # 배달대행 + 위치 트래킹
+    ├── chat/           # 채팅방 + 메시지, MongoDB
+    ├── notification/   # 알림, MongoDB
+    ├── escrow/         # 거래대행, 라이더 매칭 + 수수료
+    ├── review/         # 신뢰도, 양방향 별점
+    ├── report/         # 신고
+    ├── support/        # 고객센터
+    └── admin/          # 통계 + 출금 승인
+```
+
+각 도메인은 `presentation / application / domain / infrastructure` 계층을 기준으로 분리했습니다.
+
+---
+
+## 기술 결정 하이라이트
+
+| 결정 | 이유 |
+|---|---|
+| **DDD-lite** | Aggregate / VO / DomainEvent / Repository 인터페이스 분리는 채택하되, 1인 9일 일정상 헥사고날 모듈 분리와 CQRS는 제외 |
+| **충전식 포인트** | 가입 보너스나 추가 적립금이 아닌 거래 통화 머니로 설계해 시스템 적자 방지 |
+| **escrow hold + 양쪽 확인** | 구매자 hold 이후 handover → received 확인을 거쳐 정산하여 분쟁 가능성 감소 |
+| **JWT + CSRF 이중 가드** | HttpOnly + Secure + SameSite=Strict 쿠키와 X-XSRF-TOKEN double-submit 적용 |
+| **SecurityFilterChain 3분리** | PUBLIC / USER / ADMIN 체인을 분리해 권한별 진입 경로 명확화 |
+| **잔액 변경 = 원자 UPDATE** | `WHERE balance + amt >= 0` 단일 쿼리로 동시성 race 방어 |
+| **TDD 강제 영역** | 보안·결제·포인트·거래 상태·동시성·토큰 Rotation은 RED → GREEN → REFACTOR 우선 적용 |
+
+---
+
+## 거래 흐름
+
+![거래 상태 머신](docs/img/transaction-flow.png)
+
+```text
+[채팅중] ─reserve─▶ [HOLD] ─handover─▶ [HANDOVER] ─received─▶ [SETTLED]
+                      │                    │
+                      └─cancel─▶ refund    └─cancel─▶ refund
+```
+
+상태 전이 시 잔액 효과는 다음과 같습니다.
+
+- **HOLD**: 구매자 `point_balance → point_hold` 이동
+- **HANDOVER**: 금액 변화 없이 라이더 매칭 트리거
+- **SETTLED**: 구매자 `hold → 차감`, 판매자 `+금액 - 수수료`
+- **CANCEL**: HOLD / HANDOVER 단계별 환불 분기 처리
+
+---
+
+## 인증 + JWT
+
+![인증 흐름](docs/img/auth-flow.png)
+
+- **AT**: 30분, payload는 `userId + role + jti`
+- **RT**: 7일, Redis 저장, 사용 시 새 RT 발급 + 기존 RT 폐기
+- **저장 위치**: HttpOnly + Secure + SameSite=Strict 쿠키
+- **CSRF**: X-XSRF-TOKEN 헤더와 쿠키 값 일치 검증
+- **체인 분리**: PUBLIC / USER / ADMIN SecurityFilterChain
+- **에러 정책**: 로그인 실패는 `AUTH_LOGIN_FAILED`로 통합해 이메일 존재 여부 노출 방지
+
+---
+
+## 결제 + 포인트
+
+![결제 흐름](docs/img/payment-flow.png)
+
+```text
+[1] POST /payments/charge   → READY, merchant_uid UNIQUE 발급
+[2] 토스 SDK 결제창          → 카드 / 카카오뱅크 인증
+[3] POST /payments/confirm  → 토스 API 금액 재검증 + 멱등 처리
+[4] 포인트 잔액 +금액        → 원자 UPDATE
+[5] 거래 시 HOLD → SETTLED   → 판매자 적립, PG 재호출 없음
+[6] 출금 신청 → 관리자 승인 → 외부 계좌
+[7] 웹훅 POST /payments/webhook/toss → 별도 검증
+```
+
+결제 구조의 핵심은 **충전식 플랫폼 머니**, **merchant_uid 기반 멱등성**, **토스 API 금액 재검증**, **잔액 원자 UPDATE**입니다.
+
+---
 
 ## 기술 스택
 
-- Java 21, Spring Boot 3.3.5, Gradle
-- JPA(Hibernate) + QueryDSL, Flyway
-- MySQL 8 / MongoDB 7 / Redis 7
-- Spring Security + JWT (HttpOnly 쿠키), Spring OAuth2 Client (카카오·구글)
-- WebSocket + STOMP
-- AWS S3 (Presigned URL)
-- 토스페이먼츠
-- springdoc-openapi (Swagger UI)
+| 카테고리 | 스택 |
+|---|---|
+| **언어 / 빌드** | Java 21, Gradle |
+| **Web** | Spring Boot 3.3.5, Spring Security, Spring WebSocket + STOMP |
+| **DB / ORM** | MySQL 8, MongoDB 7, Redis 7, JPA(Hibernate), QueryDSL, Flyway |
+| **인증** | JWT, OAuth2 Client, BCrypt |
+| **외부 연동** | 토스페이먼츠 REST + 웹훅, AWS S3 Presigned URL |
+| **테스트** | JUnit 5, Mockito, AssertJ, Testcontainers, spring-security-test |
+| **인프라** | Docker Compose, GCP Compute, Nginx, Let's Encrypt |
+| **API 문서** | springdoc-openapi, Swagger UI |
+
+---
+
+## 테스트 전략
+
+**TDD**를 영역별 강도에 따라 차등 적용했습니다.
+
+| 영역 | 강도 |
+|---|---|
+| 보안 / 결제 / 포인트 / 거래 상태 / JWT / 동시성 | 🔒 구현 전 RED 필수 |
+| 일반 도메인 로직 | TDD 권장 |
+| Controller / DTO / 설정 | 통합 테스트로 검증 |
+
+테스트 흐름은 `domain` 순수 단위 테스트 → `application` Mockito 테스트 → `@WebMvcTest`, `@DataJpaTest` 슬라이스 테스트 → `@SpringBootTest + Testcontainers` 통합 테스트 순으로 구성했습니다.
+
+동시성 테스트는 `CompletableFuture`와 `CountDownLatch`로 race 상황을 재현하고, 락 또는 원자 연산이 정상 동작하는지 검증했습니다.
+
+---
+
+## 배포
+
+- **이미지**: Docker Hub `seodongbe/sseulang-backend:latest`
+- **호스팅**: GCP Compute Engine + Docker Compose
+- **TLS**: Nginx 리버스 프록시 + Let's Encrypt 자동 갱신
+- **도메인**: `api.sseulang.store` / `www.sseulang.store`
+
+자세한 절차는 [`docs/PROD_DEPLOY.md`](docs/PROD_DEPLOY.md)에서 관리합니다.
+
+---
 
 ## 로컬 실행
 
-### 1) 인프라 띄우기
+### 1. 인프라 실행
 
 ```bash
 docker compose up -d
 ```
 
-- MySQL: `localhost:3307` (DB `sseulang` / user `sseulang` / pw `sseulangpw`)
+- MySQL: `localhost:3307`
 - Redis: `localhost:6380`
-- MongoDB: `localhost:27017` (user `sseulang` / pw `sseulangpw`)
+- MongoDB: `localhost:27017`
 
-> 호스트 포트는 다른 로컬 컨테이너와 충돌 방지를 위해 기본 포트가 아닌 값으로 잡혀 있습니다. 컨테이너 내부 포트는 표준 그대로입니다.
-
-### 2) 환경 변수
-
-`.env.example` 을 복사해서 `.env` 만들고 필요한 값 채우기:
+### 2. 환경변수 설정
 
 ```bash
 cp .env.example .env
-# 편집기로 열어 JWT_SECRET 등 채우기
+# JWT_SECRET 등 필요한 값 입력
 ```
 
-`.env` 는 `.gitignore` 처리됨. IntelliJ EnvFile 플러그인 또는 `set -a; source .env; set +a` 로 주입.
-
-| 시점 | 채워야 할 변수 |
-|------|---------------|
-| **현재 (local 개발)** | 채울 것 없음 — `application-local.yml` 의 fallback 으로 시작 가능. `JWT_SECRET` 만 본인 값으로 덮어두면 더 안전. |
-| Day 5+ (이미지 업로드) | `AWS_ACCESS_KEY`, `AWS_SECRET_KEY`, `S3_BUCKET` |
-| Day 7 (결제) | `TOSS_CLIENT_KEY`, `TOSS_SECRET_KEY` |
-| Day 11+ (배포) | prod 의 모든 변수 (`DB_URL`, `COOKIE_DOMAIN`, `MONGO_URI`, `REDIS_HOST`, `JWT_SECRET`, `CORS_ALLOWED_ORIGINS`) |
-
-> `KAKAO_*` / `GOOGLE_*` 는 가이드 §4.4 의 프론트 주도 OAuth 흐름 기준 백엔드 코드에서 직접 사용하지 않습니다 (백엔드는 access_token 만 검증). 향후 백엔드 주도 OAuth 도입 시 채울 것.
-
-### 3) 애플리케이션 실행
+### 3. 애플리케이션 실행
 
 ```bash
 ./gradlew bootRun
 ```
 
-- API: http://localhost:8080
-- Swagger UI: http://localhost:8080/swagger-ui.html
-- OpenAPI JSON: http://localhost:8080/v3/api-docs
+- API: <http://localhost:8080>
+- Swagger UI: <http://localhost:8080/swagger-ui.html>
 
-## 개발 메모
+---
 
-- 브랜치: `main` (배포) ← `dev` (통합) ← `feature/*`
-- 커밋: `feat: ...`, `fix: ...`, `refactor: ...`, `chore: ...`, `docs: ...`, `test: ...`
-- DDL은 `src/main/resources/db/migration/V*.sql` (Flyway)에만 작성. 엔티티 변경 시 마이그레이션 추가.
+## 컨벤션 / Codex 듀얼 운영
 
-## Codex 리뷰 운영
+Claude Code 작성 + Codex 리뷰 방식으로 듀얼 에이전트 운영 규칙을 적용했습니다.
 
-이 프로젝트는 Claude Code(작성) + Codex(리뷰) 듀얼 에이전트로 운영합니다.
+- **게이트 1**: 보안·결제·포인트·동시성 영역 작성 직후 리뷰
+- **게이트 2**: PR 전 전체 리뷰
+- **게이트 3**: 본인 디버깅 30분 이후 막힘 상황 리뷰
+- **제외 영역**: 단순 CRUD, DTO, 설정성 코드
 
-- **호출 타이밍 룰**: `.claude/CLAUDE.md` §9 "Codex 협업 규칙" — 게이트 1(🔴 즉시) / 2(🟡 PR 전) / 3(🟢 막혔을 때)
-- **실시간 모니터**: 별도 터미널 탭에서 실행
-    - Mac / Linux / WSL: `./scripts/codex-watch.sh`
-    - Windows: `powershell -File ./scripts/codex-watch.ps1`
-- **자세한 사용법**: [docs/CODEX_WATCH.md](docs/CODEX_WATCH.md)
+자세한 룰은 [`.claude/CLAUDE.md`](.claude/CLAUDE.md) §9에서 관리합니다.
 
-> 보안/결제/포인트 등 게이트 1 영역은 코드 작성 직후 30분 안에 Codex 리뷰 호출이 컨벤션상 의무.
-> 단순 CRUD/DTO/설정 추가는 리뷰 거부 영역 — 무분별 호출 금지.
+---
+
+## 라이선스 / 연락처
+
+- License: Proprietary (TBD)
+- 개발: [@SD-gif](https://github.com/SD-gif)
