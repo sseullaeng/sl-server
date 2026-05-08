@@ -59,6 +59,38 @@ public interface UserRepository {
      */
     Long findPointBalance(Long userId);
 
+    /**
+     * 가이드 §5.1 거래 hold (라운드 11) — point_balance 에서 amount 차감 + point_hold 에 적립.
+     * 단일 원자 UPDATE 로 두 컬럼 동시 변경 → race-safe + buyer 잔액 부족 가드 (WHERE point_balance >= :amount).
+     * 영향 행 0 = 잔액 부족, 1 = 정상.
+     */
+    int holdForEscrow(Long userId, long amount);
+
+    /**
+     * 거래완료 정산 — buyer point_hold 만 차감 (seller credit 은 creditPointBalance 별도 호출).
+     * 단일 원자 UPDATE. point_hold &lt; amount 이면 affected=0 (가드 회귀 시 호출자 fail-fast).
+     */
+    int releaseHold(Long userId, long amount);
+
+    /**
+     * 거래 취소 환불 — point_hold 에서 차감 + point_balance 로 적립.
+     * 단일 원자 UPDATE 로 두 컬럼 동시 변경. point_hold &lt; amount 이면 affected=0.
+     */
+    int refundHold(Long userId, long amount);
+
+    /**
+     * point_hold scalar 조회. atomic UPDATE 직후 history balance_after 적재용 (영속성 컨텍스트 stale 우회).
+     */
+    Long findPointHold(Long userId);
+
+    /**
+     * (point_balance, point_hold) 단일 SELECT 스냅샷. 잔액 표시 응답 (3분할) 의 race-safe 일관성 보장 —
+     * 두 컬럼을 분리 read 하면 동시 reserve/cancel/refund 사이에 끼어 합산이 어긋날 수 있음 (게이트 1 W-1).
+     */
+    java.util.Optional<PointSnapshot> findPointSnapshot(Long userId);
+
+    record PointSnapshot(long balance, long hold) { }
+
     // ───────── 관리자 통계 ─────────
 
     /** 전체 사용자 수 (차단/삭제 포함). */
@@ -75,6 +107,21 @@ public interface UserRepository {
      * 게이트 2 보강 — total - blocked - deleted 의 이중 차감 회피.
      */
     long countActive();
+
+    /**
+     * 차트 dashboard — 기간 안 (created_at &gt;= from AND created_at &lt; to) 가입자 수.
+     * to 는 exclusive. summary.users.monthDelta / todaySignups.* 등 기간 합산용.
+     */
+    long countSignupsBetween(java.time.LocalDateTime from, java.time.LocalDateTime to);
+
+    /**
+     * 차트 dashboard — 일자별 가입자 수. 빈 일은 결과에 미포함 (호출자가 0으로 채움).
+     * created_at DATE GROUP BY, ASC.
+     */
+    java.util.List<DailyCount> findDailySignups(java.time.LocalDateTime from, java.time.LocalDateTime to);
+
+    /** {@code (date, count)} record — 일자별 차트 데이터용. */
+    record DailyCount(java.time.LocalDate date, long count) { }
 
     /**
      * Admin broadcast 용 — 활성 사용자 id 청크 페이징. blocked/deleted 제외.

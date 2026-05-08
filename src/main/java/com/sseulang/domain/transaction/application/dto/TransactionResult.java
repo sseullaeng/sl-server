@@ -18,9 +18,12 @@ public record TransactionResult(
         LocalDateTime rentalEnd,
         TransactionStatus status,
         LocalDateTime reservedAt,
+        LocalDateTime handoverConfirmedAt,
+        LocalDateTime receiveConfirmedAt,
         LocalDateTime completedAt,
         LocalDateTime canceledAt,
         String cancelReason,
+        long escrowHoldAmount,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
@@ -29,8 +32,12 @@ public record TransactionResult(
                 t.getId(), t.getItemId(), t.getSellerId(), t.getBuyerId(),
                 t.getTradeType(), t.getPrice(), t.getDeposit(),
                 t.getRentalStart(), t.getRentalEnd(),
-                t.getStatus(), t.getReservedAt(), t.getCompletedAt(), t.getCanceledAt(),
+                t.getStatus(),
+                t.getReservedAt(),
+                t.getHandoverConfirmedAt(), t.getReceiveConfirmedAt(),
+                t.getCompletedAt(), t.getCanceledAt(),
                 t.getCancelReason(),
+                t.getEscrowHoldAmount(),
                 t.getCreatedAt(), t.getUpdatedAt()
         );
     }

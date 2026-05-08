@@ -135,6 +135,11 @@ class TransactionConcurrencyIT {
             sellerId = persistUser("seller");
             buyer1Id = persistUser("buyer1");
             buyer2Id = persistUser("buyer2");
+            // 라운드 11 — reserve 시 buyer 잔액 hold 되므로 사전 충전 필수
+            em.createNativeQuery("UPDATE users SET point_balance = 50000 WHERE id IN (?, ?)")
+                    .setParameter(1, buyer1Id)
+                    .setParameter(2, buyer2Id)
+                    .executeUpdate();
 
             itemId = itemService.register(new ItemRegisterCommand(
                     sellerId, null, "물건", "설명", 50_000L, null, null, TradeType.판매,
@@ -175,13 +180,7 @@ class TransactionConcurrencyIT {
         Item item = itemRepository.findById(itemId).orElseThrow();
         assertThat(item.getStatus()).isEqualTo(ItemStatus.예약);
 
-        // cleanup — @Commit 으로 데이터 남으니 후속 테스트 충돌 방지 (현재 클래스 단일 테스트라 실효 X, 안전 차원)
-        txTemplate.execute(status -> {
-            em.createNativeQuery("DELETE FROM transactions").executeUpdate();
-            em.createNativeQuery("DELETE FROM items").executeUpdate();
-            em.createNativeQuery("DELETE FROM users").executeUpdate();
-            return null;
-        });
+        cleanup();
     }
 
     private void tryReserve(Long txId, CountDownLatch start, CountDownLatch done,
@@ -201,6 +200,153 @@ class TransactionConcurrencyIT {
         } finally {
             done.countDown();
         }
+    }
+
+    /**
+     * 라운드 11 — 같은 buyer 가 두 거래 동시 reserve 시도, 잔액이 한 건만 충당 가능.
+     * Item 락이 없는 상황 (서로 다른 Item) 에서도 buyer 행 락이 직렬화 + atomic UPDATE 의 잔액 가드
+     * (WHERE point_balance >= :amount) 가 두 번째 호출을 INSUFFICIENT_POINT 로 차단.
+     */
+    @Test
+    @DisplayName("라운드 11 — 같은 buyer 두 거래 동시 reserve_잔액 한건만 충당_정확히 1건만 성공")
+    void buyer_hold_race() throws Exception {
+        // 별도 두 Item + 두 거래 (buyer 동일, 잔액 50000 한 건만 가능)
+        Long item2Id = txTemplate.execute(status -> itemService.register(new ItemRegisterCommand(
+                sellerId, null, "물건2", "설명", 50_000L, null, null, TradeType.판매, "서울", null, null
+        )));
+        Long txA = txTemplate.execute(status ->
+                transactionService.create(new TransactionCreateCommand(itemId, buyer1Id, null, null)));
+        Long txB = txTemplate.execute(status ->
+                transactionService.create(new TransactionCreateCommand(item2Id, buyer1Id, null, null)));
+        // 기존 setUp 의 tx1 (item1, buyer1) 를 cancel 해 같은 Item 재예약 가능 상태로
+        // → 위 txA 가 새 Item 거래라 tx1Id 는 무시 가능. 단, item.status=판매중 인지 보장 필요.
+        // setUp 직후 item1 은 판매중이라 OK.
+
+        ExecutorService exec = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(2);
+        AtomicInteger success = new AtomicInteger();
+        AtomicInteger insufficient = new AtomicInteger();
+        AtomicInteger otherError = new AtomicInteger();
+
+        Runnable a = () -> tryReserveCounted(txA, start, done, success, insufficient, otherError);
+        Runnable b = () -> tryReserveCounted(txB, start, done, success, insufficient, otherError);
+
+        exec.submit(a);
+        exec.submit(b);
+        start.countDown();
+        boolean finished = done.await(10, TimeUnit.SECONDS);
+        exec.shutdown();
+
+        assertThat(finished).as("두 호출 10초 안에 완료").isTrue();
+        assertThat(success.get()).as("정확히 1건만 reserve 성공").isEqualTo(1);
+        assertThat(insufficient.get()).as("나머지 1건은 INSUFFICIENT_POINT").isEqualTo(1);
+        assertThat(otherError.get()).as("그 외 에러 없음").isZero();
+
+        // buyer 잔액: 50000 → 0 (1건 hold), point_hold = 50000
+        Long balance = (Long) em.createNativeQuery("SELECT point_balance FROM users WHERE id = ?")
+                .setParameter(1, buyer1Id).getSingleResult();
+        Long hold = (Long) em.createNativeQuery("SELECT point_hold FROM users WHERE id = ?")
+                .setParameter(1, buyer1Id).getSingleResult();
+        assertThat(balance).isZero();
+        assertThat(hold).isEqualTo(50_000L);
+
+        cleanup();
+    }
+
+    /**
+     * 라운드 11 — 동일 거래의 reserve 직후 cancel / markHandover 동시 호출. Transaction 비관적 락이
+     * 직렬화. cancel 이 먼저면 markHandover 가 TRANSACTION_INVALID_STATE, 반대도 마찬가지. 정확히 1건만 성공.
+     */
+    @Test
+    @DisplayName("라운드 11 — 예약된 거래에 cancel / handover 동시_정확히 1건만 성공 (Transaction 락 직렬화)")
+    void cancel_handover_race() throws Exception {
+        // tx1 reserve (buyer1) 먼저
+        txTemplate.execute(status -> {
+            transactionService.reserve(tx1Id, sellerId);
+            return null;
+        });
+
+        ExecutorService exec = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(2);
+        AtomicInteger cancelOk = new AtomicInteger();
+        AtomicInteger handoverOk = new AtomicInteger();
+        AtomicInteger invalidState = new AtomicInteger();
+        AtomicInteger otherError = new AtomicInteger();
+
+        Runnable cancelTask = () -> {
+            try {
+                start.await();
+                transactionService.cancel(tx1Id, buyer1Id, "race");
+                cancelOk.incrementAndGet();
+            } catch (BusinessException e) {
+                if (e.getErrorCode() == ErrorCode.TRANSACTION_INVALID_STATE) invalidState.incrementAndGet();
+                else otherError.incrementAndGet();
+            } catch (Exception e) {
+                otherError.incrementAndGet();
+            } finally {
+                done.countDown();
+            }
+        };
+        Runnable handoverTask = () -> {
+            try {
+                start.await();
+                transactionService.markHandover(tx1Id, sellerId);
+                handoverOk.incrementAndGet();
+            } catch (BusinessException e) {
+                if (e.getErrorCode() == ErrorCode.TRANSACTION_INVALID_STATE) invalidState.incrementAndGet();
+                else otherError.incrementAndGet();
+            } catch (Exception e) {
+                otherError.incrementAndGet();
+            } finally {
+                done.countDown();
+            }
+        };
+
+        exec.submit(cancelTask);
+        exec.submit(handoverTask);
+        start.countDown();
+        boolean finished = done.await(10, TimeUnit.SECONDS);
+        exec.shutdown();
+
+        assertThat(finished).as("두 호출 10초 안에 완료").isTrue();
+        assertThat(cancelOk.get() + handoverOk.get()).as("정확히 1건만 성공").isEqualTo(1);
+        assertThat(invalidState.get()).as("패배자는 TRANSACTION_INVALID_STATE").isEqualTo(1);
+        assertThat(otherError.get()).as("그 외 에러 없음").isZero();
+
+        // 결과 status 검증 — 취소 또는 인계완료 중 하나
+        TransactionStatus finalStatus = txTemplate.execute(status ->
+                transactionService.getById(tx1Id, sellerId).status());
+        assertThat(finalStatus).isIn(TransactionStatus.취소, TransactionStatus.인계완료);
+
+        cleanup();
+    }
+
+    private void tryReserveCounted(Long txId, CountDownLatch start, CountDownLatch done,
+                                   AtomicInteger success, AtomicInteger insufficient, AtomicInteger otherError) {
+        try {
+            start.await();
+            transactionService.reserve(txId, sellerId);
+            success.incrementAndGet();
+        } catch (BusinessException e) {
+            if (e.getErrorCode() == ErrorCode.INSUFFICIENT_POINT) insufficient.incrementAndGet();
+            else otherError.incrementAndGet();
+        } catch (Exception e) {
+            otherError.incrementAndGet();
+        } finally {
+            done.countDown();
+        }
+    }
+
+    private void cleanup() {
+        txTemplate.execute(status -> {
+            em.createNativeQuery("DELETE FROM point_histories").executeUpdate();
+            em.createNativeQuery("DELETE FROM transactions").executeUpdate();
+            em.createNativeQuery("DELETE FROM items").executeUpdate();
+            em.createNativeQuery("DELETE FROM users").executeUpdate();
+            return null;
+        });
     }
 
     private Long persistUser(String suffix) {

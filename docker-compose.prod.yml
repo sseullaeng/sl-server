@@ -136,6 +136,10 @@ services:
       APP_EMAIL_VERIFICATION_URL_BASE: ${APP_EMAIL_VERIFICATION_URL_BASE:-}
       # === 토스 webhook replay 허용 (옵션) ===
       TOSS_WEBHOOK_REPLAY_TOLERANCE: ${TOSS_WEBHOOK_REPLAY_TOLERANCE:-300}
+      # !!! dev/QA 한정 !!! true 면 토스 confirm 검증 우회. 운영 진입 시 false 복귀 (보안).
+      TOSS_SKIP_VERIFY: ${TOSS_SKIP_VERIFY:-false}
+      # OAuth 로그인 시 ROLE_ADMIN JWT 발급 email 화이트리스트 (콤마구분). 빈 값이면 모두 USER.
+      ADMIN_USER_EMAILS: ${ADMIN_USER_EMAILS:-}
       # === Swagger 노출 (옵션, default false — 운영 보안) ===
       APP_SWAGGER_ENABLED: ${APP_SWAGGER_ENABLED:-false}
       # === 로그 경로 (logback-spring.xml LOG_PATH 변수) ===

@@ -20,11 +20,20 @@ public record MeResponse(
         @Schema(description = "프로필 이미지 URL (없으면 null)") String profileImage,
         @Schema(description = "LOCAL / KAKAO / GOOGLE") SocialProvider socialProvider,
         @Schema(example = "true", description = "이메일 인증 여부 — false 면 자금/거래 API 가 403") boolean emailVerified,
-        @Schema(example = "50000", description = "포인트 잔액 (KRW)") long pointBalance,
+        @Schema(example = "50000", description = "즉시 사용 가능 포인트 (KRW). 라운드 11 부터 거래 hold 분 제외.") long pointBalance,
+        @Schema(example = "10000", description = "거래 hold 잔액 (라운드 11). 헤더/카드에 작은 텍스트 안내용.") long pointHold,
         @Schema(example = "4.7", description = "리뷰 평균. 리뷰 0건이면 null") BigDecimal trustScore,
-        @Schema(example = "12") int reviewCount
+        @Schema(example = "12") int reviewCount,
+        @Schema(example = "USER",
+                description = "현재 세션의 권한 — \"USER\" 또는 \"ADMIN\". 프론트가 마이페이지 → 관리 페이지 redirect 분기 결정용. "
+                        + "JWT role claim 그대로 노출.",
+                allowableValues = {"USER", "ADMIN"})
+        String role
 ) {
-    public static MeResponse from(User u) {
+    /**
+     * @param role 현재 세션의 role ("USER" / "ADMIN"). 호출자가 Authentication 또는 JwtClaims 에서 추출해 전달.
+     */
+    public static MeResponse from(User u, String role) {
         return new MeResponse(
                 u.getId(),
                 u.getEmail(),
@@ -33,8 +42,10 @@ public record MeResponse(
                 u.getSocialProvider(),
                 u.isEmailVerified(),
                 u.getPointBalance(),
+                u.getPointHold(),
                 u.getTrustScore(),
-                u.getReviewCount()
+                u.getReviewCount(),
+                (role == null || role.isBlank()) ? "USER" : role
         );
     }
 }

@@ -139,8 +139,8 @@ class SettlementRollbackIT {
     }
 
     @Test
-    @DisplayName("complete 정산 실패 (buyer 잔액 부족)_Item/Tx/PointHistory 모두 원복")
-    void complete_정산_실패_롤백() {
+    @DisplayName("라운드 11 — reserve 시 buyer 잔액 부족_INSUFFICIENT_POINT + Item/Tx/잔액/history 모두 원복")
+    void reserve_hold_실패_롤백() {
         Long sellerId = txTemplate.execute(s -> persistUser("seller"));
         Long buyerId = txTemplate.execute(s -> persistUser("buyer"));
         // buyer 잔액 = 10000 (price 50000 보다 부족)
@@ -156,35 +156,30 @@ class SettlementRollbackIT {
         Long txId = txTemplate.execute(s -> transactionService.create(
                 new TransactionCreateCommand(itemId, buyerId, null, null)
         ));
-        txTemplate.execute(s -> {
-            transactionService.reserve(txId, sellerId);
-            return null;
-        });
 
-        // 정산 시도 → buyer 잔액 부족으로 INSUFFICIENT_POINT
+        // reserve 시 hold 시도 → 잔액 부족으로 INSUFFICIENT_POINT (라운드 11 — 옛 정책은 거래완료 시점)
         assertThatThrownBy(() -> txTemplate.execute(s -> {
-            transactionService.complete(txId, sellerId);
+            transactionService.reserve(txId, sellerId);
             return null;
         }))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.INSUFFICIENT_POINT);
 
-        // verify — Item / Transaction / PointHistory / 잔액 모두 원복
+        // verify — Item / Transaction / PointHistory / 잔액 모두 원복 (markItemAsReserved 도 롤백)
         Item item = itemRepository.findById(itemId).orElseThrow();
-        assertThat(item.getStatus()).as("Item 은 예약 상태 유지 (거래완료 전이 X)").isEqualTo(ItemStatus.예약);
+        assertThat(item.getStatus()).as("Item 은 판매중 유지 (예약 전이 X)").isEqualTo(ItemStatus.판매중);
 
         Transaction tx = transactionRepository.findById(txId).orElseThrow();
-        assertThat(tx.getStatus()).as("Transaction 은 예약 상태 유지").isEqualTo(TransactionStatus.예약);
-        assertThat(tx.getCompletedAt()).isNull();
+        assertThat(tx.getStatus()).as("Tx 는 채팅중 유지").isEqualTo(TransactionStatus.채팅중);
+        assertThat(tx.getReservedAt()).isNull();
+        assertThat(tx.getEscrowHoldAmount()).isZero();
 
         assertThat(pointHistoryRepository.findByUserIdOrderByCreatedAtDesc(buyerId))
-                .as("buyer history 미적재").isEmpty();
-        assertThat(pointHistoryRepository.findByUserIdOrderByCreatedAtDesc(sellerId))
-                .as("seller history 미적재 (선행 적립도 함께 롤백)").isEmpty();
+                .as("buyer history 미적재 (거래보관 X)").isEmpty();
 
         assertThat(userRepository.findPointBalance(buyerId)).isEqualTo(10_000L);
-        assertThat(userRepository.findPointBalance(sellerId)).isZero();
+        assertThat(userRepository.findPointHold(buyerId)).as("hold 도 0").isZero();
     }
 
     @Test

@@ -14,6 +14,7 @@ import com.sseulang.domain.item.domain.ItemStatus;
 import com.sseulang.domain.item.domain.TradeType;
 import com.sseulang.domain.point.application.InMemoryFakePointHistoryRepository;
 import com.sseulang.domain.point.application.PointApplicationService;
+import com.sseulang.domain.point.domain.PointHistoryType;
 import com.sseulang.domain.transaction.application.dto.TransactionCreateCommand;
 import com.sseulang.domain.transaction.application.dto.TransactionResult;
 import com.sseulang.domain.transaction.domain.TransactionStatus;
@@ -22,6 +23,9 @@ import com.sseulang.global.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -32,6 +36,7 @@ class TransactionApplicationServiceTest {
     private InMemoryFakeItemRepository itemRepo;
     private InMemoryFakeUserRepository userRepo;
     private InMemoryFakePointHistoryRepository pointHistoryRepo;
+    private List<Object> publishedEvents;
     private ItemApplicationService itemSvc;
     private TransactionApplicationService service;
     private Long itemId;
@@ -45,11 +50,22 @@ class TransactionApplicationServiceTest {
         itemRepo = new InMemoryFakeItemRepository();
         userRepo = new InMemoryFakeUserRepository();
         pointHistoryRepo = new InMemoryFakePointHistoryRepository();
+        publishedEvents = new ArrayList<>();
         CategoryApplicationService catSvc = new CategoryApplicationService(new InMemoryFakeCategoryRepository());
-        UserApplicationService userSvc = new UserApplicationService(userRepo, new com.sseulang.domain.transaction.application.InMemoryFakeTransactionRepository(), new com.sseulang.domain.report.application.InMemoryFakeUserReportRepository(), new com.sseulang.domain.auth.application.NoOpRefreshTokenStore(), java.time.Clock.systemDefaultZone());
-        itemSvc = new ItemApplicationService(itemRepo, catSvc, userSvc, new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(), new com.sseulang.domain.item.application.NoOpWishlistView());
+        UserApplicationService userSvc = new UserApplicationService(
+                userRepo,
+                new com.sseulang.domain.transaction.application.InMemoryFakeTransactionRepository(),
+                new com.sseulang.domain.report.application.InMemoryFakeUserReportRepository(),
+                new com.sseulang.domain.auth.application.NoOpRefreshTokenStore(),
+                java.time.Clock.systemDefaultZone());
+        itemSvc = new ItemApplicationService(
+                itemRepo, catSvc, userSvc,
+                new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(),
+                new com.sseulang.domain.item.application.NoOpWishlistView());
         PointApplicationService pointSvc = new PointApplicationService(userSvc, pointHistoryRepo);
-        service = new TransactionApplicationService(txRepo, itemSvc, pointSvc, userSvc, java.time.Clock.systemDefaultZone());
+        org.springframework.context.ApplicationEventPublisher publisher = publishedEvents::add;
+        service = new TransactionApplicationService(
+                txRepo, itemSvc, pointSvc, userSvc, publisher, java.time.Clock.systemDefaultZone());
 
         SELLER = userRepo.save(User.createSocialUser(
                 SocialProvider.KAKAO, "k-seller", new Email("seller@x.com"), "seller", null
@@ -67,6 +83,8 @@ class TransactionApplicationServiceTest {
         itemId = item.getId();
     }
 
+    // ───────── create ─────────
+
     @Test
     @DisplayName("create 정상_status=채팅중")
     void create_정상() {
@@ -78,6 +96,7 @@ class TransactionApplicationServiceTest {
         assertThat(r.buyerId()).isEqualTo(BUYER);
         assertThat(r.status()).isEqualTo(TransactionStatus.채팅중);
         assertThat(r.price()).isEqualTo(50_000L);
+        assertThat(r.escrowHoldAmount()).isZero();  // 라운드 11 — hold 는 reserve 시점부터
     }
 
     @Test
@@ -114,15 +133,38 @@ class TransactionApplicationServiceTest {
                 .isEqualTo(ErrorCode.ITEM_NOT_FOUND);
     }
 
+    // ───────── reserve (hold 흐름) ─────────
+
     @Test
-    @DisplayName("reserve seller 정상_Transaction.예약 + Item.예약")
-    void reserve_정상() {
+    @DisplayName("reserve 정상_buyer balance↓ + hold↑ + escrowHoldAmount + 거래보관 history + ReservedEvent")
+    void reserve_정상_hold() {
         Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        userRepo.creditPointBalance(BUYER, 50_000L);  // 잔액 충전
 
         service.reserve(txId, SELLER);
 
-        assertThat(service.getById(txId, SELLER).status()).isEqualTo(TransactionStatus.예약);
+        TransactionResult r = service.getById(txId, SELLER);
+        assertThat(r.status()).isEqualTo(TransactionStatus.예약);
+        assertThat(r.escrowHoldAmount()).isEqualTo(50_000L);
         assertThat(itemRepo.findById(itemId).orElseThrow().getStatus()).isEqualTo(ItemStatus.예약);
+        assertThat(userRepo.findPointBalance(BUYER)).isZero();
+        assertThat(userRepo.findPointHold(BUYER)).isEqualTo(50_000L);
+        assertThat(pointHistoryRepo.size()).isEqualTo(1);  // 거래보관 1건
+        assertThat(publishedEvents)
+                .hasSize(1)
+                .first().isInstanceOf(com.sseulang.domain.transaction.domain.event.TransactionReservedEvent.class);
+    }
+
+    @Test
+    @DisplayName("reserve 잔액 부족_INSUFFICIENT_POINT")
+    void reserve_잔액부족_거부() {
+        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        userRepo.creditPointBalance(BUYER, 10_000L);  // 부족
+
+        assertThatThrownBy(() -> service.reserve(txId, SELLER))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INSUFFICIENT_POINT);
     }
 
     @Test
@@ -154,79 +196,126 @@ class TransactionApplicationServiceTest {
                 SocialProvider.KAKAO, "k-buyer2-" + System.nanoTime(),
                 new Email("buyer2-" + System.nanoTime() + "@x.com"), "buyer2", null
         )).getId();
+        userRepo.creditPointBalance(BUYER, 50_000L);
+        userRepo.creditPointBalance(buyer2, 50_000L);
         Long tx1 = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
         Long tx2 = service.create(new TransactionCreateCommand(itemId, buyer2, null, null));
 
-        // 첫 reserve 성공
         service.reserve(tx1, SELLER);
 
-        // 두 번째 reserve 는 Item.status=예약 으로 인해 거부
         assertThatThrownBy(() -> service.reserve(tx2, SELLER))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TRANSACTION_RESERVED_BY_OTHER);
     }
 
-    @Test
-    @DisplayName("complete 정상_seller 호출_Item.판매완료 + 포인트 정산 + history 두 건")
-    void complete_정상() {
-        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
-        service.reserve(txId, SELLER);
-        userRepo.creditPointBalance(BUYER, 50_000L);  // buyer 잔액 충전
+    // ───────── markHandover (라운드 11) ─────────
 
-        service.complete(txId, SELLER);
+    @Test
+    @DisplayName("markHandover seller 정상_status=인계완료 + HandoverEvent")
+    void handover_정상() {
+        Long txId = reservedTxByBuyer();
+
+        service.markHandover(txId, SELLER);
 
         TransactionResult r = service.getById(txId, SELLER);
+        assertThat(r.status()).isEqualTo(TransactionStatus.인계완료);
+        assertThat(r.handoverConfirmedAt()).isNotNull();
+        assertThat(itemRepo.findById(itemId).orElseThrow().getStatus()).isEqualTo(ItemStatus.예약);  // 아직 sold X
+        assertThat(userRepo.findPointBalance(BUYER)).isZero();  // hold 유지
+        assertThat(userRepo.findPointHold(BUYER)).isEqualTo(50_000L);
+        assertThat(eventTypes()).contains("TransactionHandoverConfirmedEvent");
+    }
+
+    @Test
+    @DisplayName("markHandover buyer 호출_TRANSACTION_HANDOVER_NOT_ALLOWED")
+    void handover_buyer_거부() {
+        Long txId = reservedTxByBuyer();
+
+        assertThatThrownBy(() -> service.markHandover(txId, BUYER))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.TRANSACTION_HANDOVER_NOT_ALLOWED);
+    }
+
+    @Test
+    @DisplayName("markHandover 멱등_이미 인계완료면 no-op")
+    void handover_멱등() {
+        Long txId = reservedTxByBuyer();
+        service.markHandover(txId, SELLER);
+        int eventsBefore = publishedEvents.size();
+
+        service.markHandover(txId, SELLER);  // 두 번째 — no-op
+
+        assertThat(service.getById(txId, SELLER).status()).isEqualTo(TransactionStatus.인계완료);
+        assertThat(publishedEvents).hasSize(eventsBefore);  // 추가 발행 X
+    }
+
+    // ───────── markReceived (라운드 11) ─────────
+
+    @Test
+    @DisplayName("markReceived buyer 정상_정산_buyer hold↓ + seller balance↑ + 판매정산 history + ReceiveEvent")
+    void receive_정상() {
+        Long txId = reservedTxByBuyer();
+        service.markHandover(txId, SELLER);
+
+        service.markReceived(txId, BUYER);
+
+        TransactionResult r = service.getById(txId, BUYER);
         assertThat(r.status()).isEqualTo(TransactionStatus.거래완료);
+        assertThat(r.receiveConfirmedAt()).isNotNull();
+        assertThat(r.completedAt()).isEqualTo(r.receiveConfirmedAt());
         assertThat(itemRepo.findById(itemId).orElseThrow().getStatus()).isEqualTo(ItemStatus.거래완료);
         assertThat(userRepo.findPointBalance(BUYER)).isZero();
+        assertThat(userRepo.findPointHold(BUYER)).isZero();  // 해제됨
         assertThat(userRepo.findPointBalance(SELLER)).isEqualTo(50_000L);
+        // history: 거래보관(buyer, reserve) + 판매정산(seller, receive) = 2건
         assertThat(pointHistoryRepo.size()).isEqualTo(2);
+        assertThat(eventTypes()).contains("TransactionReceiveConfirmedEvent");
     }
 
     @Test
-    @DisplayName("complete buyer 호출_TRANSACTION_FORBIDDEN")
-    void complete_buyer_금지() {
-        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
-        service.reserve(txId, SELLER);
-        userRepo.creditPointBalance(BUYER, 50_000L);
+    @DisplayName("markReceived seller 호출_TRANSACTION_RECEIVE_NOT_ALLOWED")
+    void receive_seller_거부() {
+        Long txId = reservedTxByBuyer();
+        service.markHandover(txId, SELLER);
 
-        assertThatThrownBy(() -> service.complete(txId, BUYER))
+        assertThatThrownBy(() -> service.markReceived(txId, SELLER))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.TRANSACTION_FORBIDDEN);
-        assertThat(itemRepo.findById(itemId).orElseThrow().getStatus()).isEqualTo(ItemStatus.예약);
-        assertThat(userRepo.findPointBalance(BUYER)).isEqualTo(50_000L);  // 차감 X
+                .isEqualTo(ErrorCode.TRANSACTION_RECEIVE_NOT_ALLOWED);
     }
 
     @Test
-    @DisplayName("complete buyer 잔액 부족_INSUFFICIENT_POINT_seller 적립도 롤백")
-    void complete_buyer_잔액부족() {
-        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
-        service.reserve(txId, SELLER);
-        userRepo.creditPointBalance(BUYER, 10_000L);  // 부족
+    @DisplayName("markReceived 인계 전_TRANSACTION_INVALID_STATE")
+    void receive_인계전_거부() {
+        Long txId = reservedTxByBuyer();
 
-        assertThatThrownBy(() -> service.complete(txId, SELLER))
+        assertThatThrownBy(() -> service.markReceived(txId, BUYER))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.INSUFFICIENT_POINT);
-
-        // 트랜잭션 롤백 — fake 는 롤백 시뮬 못 하지만 잔액/Item/Tx 상태로 상위 흐름 검증
-        // (실제 prod 트랜잭션 IT 는 후속 #23)
+                .isEqualTo(ErrorCode.TRANSACTION_INVALID_STATE);
     }
 
     @Test
-    @DisplayName("complete 채팅중 상태_TRANSACTION_INVALID_STATE")
-    void complete_채팅중_거부() {
-        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
-        userRepo.creditPointBalance(BUYER, 50_000L);
+    @DisplayName("markReceived 멱등_이미 거래완료면 no-op (재호출 시 더블 정산 X)")
+    void receive_멱등() {
+        Long txId = reservedTxByBuyer();
+        service.markHandover(txId, SELLER);
+        service.markReceived(txId, BUYER);
+        long sellerBalance = userRepo.findPointBalance(SELLER);
+        int historyBefore = pointHistoryRepo.size();
 
-        assertThatThrownBy(() -> service.complete(txId, SELLER))
-                .isInstanceOf(BusinessException.class);
+        service.markReceived(txId, BUYER);  // 멱등
+
+        assertThat(userRepo.findPointBalance(SELLER)).isEqualTo(sellerBalance);
+        assertThat(pointHistoryRepo.size()).isEqualTo(historyBefore);
     }
 
+    // ───────── cancel 단계별 환불 (라운드 11) ─────────
+
     @Test
-    @DisplayName("cancel 채팅중 buyer_정상_Item 변경 없음")
+    @DisplayName("cancel 채팅중 buyer_정상_Item 변경 없음 + 잔액 변동 없음")
     void cancel_채팅중() {
         Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
 
@@ -234,18 +323,39 @@ class TransactionApplicationServiceTest {
 
         assertThat(service.getById(txId, BUYER).status()).isEqualTo(TransactionStatus.취소);
         assertThat(itemRepo.findById(itemId).orElseThrow().getStatus()).isEqualTo(ItemStatus.판매중);
+        assertThat(userRepo.findPointBalance(BUYER)).isZero();
+        assertThat(userRepo.findPointHold(BUYER)).isZero();
     }
 
     @Test
-    @DisplayName("cancel 예약 상태_Item.판매중 으로 복원")
-    void cancel_예약_복원() {
-        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
-        service.reserve(txId, SELLER);
+    @DisplayName("cancel 예약 상태_Item 복원 + buyer hold 환불 + 거래환불 history + CancelEvent")
+    void cancel_예약_환불() {
+        Long txId = reservedTxByBuyer();
+        int historyBefore = pointHistoryRepo.size();
 
         service.cancel(txId, SELLER, "물건 파손");
 
         assertThat(service.getById(txId, SELLER).status()).isEqualTo(TransactionStatus.취소);
         assertThat(itemRepo.findById(itemId).orElseThrow().getStatus()).isEqualTo(ItemStatus.판매중);
+        assertThat(userRepo.findPointBalance(BUYER)).isEqualTo(50_000L);  // 환불
+        assertThat(userRepo.findPointHold(BUYER)).isZero();
+        assertThat(pointHistoryRepo.size()).isEqualTo(historyBefore + 1);
+        assertThat(pointHistoryRepo.findByUserIdOrderByCreatedAtDesc(BUYER))
+                .extracting("pointType")
+                .contains(PointHistoryType.거래보관, PointHistoryType.거래환불);
+        assertThat(eventTypes()).contains("TransactionCanceledEvent");
+    }
+
+    @Test
+    @DisplayName("cancel 인계완료 이후_TRANSACTION_INVALID_STATE (R2 분쟁 영역)")
+    void cancel_인계완료_거부() {
+        Long txId = reservedTxByBuyer();
+        service.markHandover(txId, SELLER);
+
+        assertThatThrownBy(() -> service.cancel(txId, SELLER, "사후 취소"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.TRANSACTION_INVALID_STATE);
     }
 
     @Test
@@ -271,20 +381,37 @@ class TransactionApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("cancel 후 다른 buyer 가 같은 Item 으로 거래 시작 가능")
+    @DisplayName("cancel 후 다른 buyer 가 같은 Item 으로 거래 시작 가능 + hold 환불 받음")
     void cancel_후_새_거래() {
         Long buyer2 = userRepo.save(User.createSocialUser(
                 SocialProvider.KAKAO, "k-buyer2-" + System.nanoTime(),
                 new Email("buyer2-" + System.nanoTime() + "@x.com"), "buyer2", null
         )).getId();
+        userRepo.creditPointBalance(BUYER, 50_000L);
+        userRepo.creditPointBalance(buyer2, 50_000L);
+
         Long tx1 = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
         service.reserve(tx1, SELLER);
         service.cancel(tx1, SELLER, "재예약 가능");
+        assertThat(userRepo.findPointBalance(BUYER)).isEqualTo(50_000L);  // 환불 OK
 
-        // Item 이 판매중으로 복원 → 새 거래 시작 OK
         Long tx2 = service.create(new TransactionCreateCommand(itemId, buyer2, null, null));
         service.reserve(tx2, SELLER);
 
         assertThat(service.getById(tx2, SELLER).status()).isEqualTo(TransactionStatus.예약);
+    }
+
+    // ───────── helpers ─────────
+
+    /** buyer 충전 + 거래 생성 + reserve 까지 진행한 trasaction id 반환. */
+    private Long reservedTxByBuyer() {
+        userRepo.creditPointBalance(BUYER, 50_000L);
+        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        service.reserve(txId, SELLER);
+        return txId;
+    }
+
+    private List<String> eventTypes() {
+        return publishedEvents.stream().map(e -> e.getClass().getSimpleName()).toList();
     }
 }

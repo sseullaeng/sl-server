@@ -3,7 +3,6 @@ package com.sseulang.domain.transaction.application;
 import com.sseulang.domain.item.application.ItemApplicationService;
 import com.sseulang.domain.item.application.dto.ItemForTransactionResult;
 import com.sseulang.domain.point.application.PointApplicationService;
-import com.sseulang.domain.point.domain.PointReferenceType;
 import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.domain.transaction.application.dto.PendingReviewableResult;
 import com.sseulang.domain.transaction.application.dto.ReviewableTransactionResult;
@@ -15,8 +14,13 @@ import com.sseulang.domain.transaction.domain.Transaction;
 import com.sseulang.domain.transaction.domain.TransactionRepository;
 import com.sseulang.domain.transaction.domain.TransactionStatus;
 import com.sseulang.domain.transaction.domain.TransactionStatusCount;
+import com.sseulang.domain.transaction.domain.event.TransactionCanceledEvent;
+import com.sseulang.domain.transaction.domain.event.TransactionHandoverConfirmedEvent;
+import com.sseulang.domain.transaction.domain.event.TransactionReceiveConfirmedEvent;
+import com.sseulang.domain.transaction.domain.event.TransactionReservedEvent;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -49,6 +53,7 @@ public class TransactionApplicationService {
     private final ItemApplicationService itemApplicationService;
     private final PointApplicationService pointApplicationService;
     private final UserApplicationService userApplicationService;
+    private final ApplicationEventPublisher eventPublisher;
     private final java.time.Clock clock;
 
     public TransactionApplicationService(
@@ -56,12 +61,14 @@ public class TransactionApplicationService {
             ItemApplicationService itemApplicationService,
             PointApplicationService pointApplicationService,
             UserApplicationService userApplicationService,
+            ApplicationEventPublisher eventPublisher,
             java.time.Clock clock
     ) {
         this.transactionRepository = transactionRepository;
         this.itemApplicationService = itemApplicationService;
         this.pointApplicationService = pointApplicationService;
         this.userApplicationService = userApplicationService;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
@@ -86,6 +93,23 @@ public class TransactionApplicationService {
         return transactionRepository.save(tx).getId();
     }
 
+    /**
+     * 거래 예약 — seller 가 호출. 라운드 11 흐름:
+     * <ol>
+     *   <li>Transaction 비관적 락 (findByIdForUpdate)</li>
+     *   <li>seller 권한 가드 (TRANSACTION_FORBIDDEN)</li>
+     *   <li>Item 락 + markItemAsReserved (락 순서 Transaction → Item — deadlock 회피)</li>
+     *   <li>Transaction.markAsReserved(now, price) — escrowHoldAmount 동기 set</li>
+     *   <li>price &gt; 0 이면 PointApplicationService.escrowHold — buyer point_balance↓ + point_hold↑
+     *       + 거래보관 history. 잔액 부족 시 INSUFFICIENT_POINT 트랜잭션 롤백 (Item/Tx 도 원복).</li>
+     * </ol>
+     *
+     * <p>락 순서: Transaction → Item → User(buyer). 다른 거래의 reserve 와는 Item 락이, 같은 buyer 의
+     * 다른 거래 reserve 동시 시도는 buyer 행 락이 직렬화. 두 거래 모두 잔액 충분이면 차례로 통과,
+     * 한 쪽만 충분이면 다른 쪽은 INSUFFICIENT_POINT.</p>
+     *
+     * <p>나눔 거래 (price=0) 는 escrowHold 호출 X — escrowHoldAmount 도 0.</p>
+     */
     @Transactional
     public void reserve(Long transactionId, Long requesterId) {
         Transaction tx = findOrThrowForUpdate(transactionId);
@@ -94,43 +118,99 @@ public class TransactionApplicationService {
         }
         // Item 락 + 상태 전이 — 락 순서 Transaction → Item 고정 (deadlock 회피)
         itemApplicationService.markItemAsReserved(tx.getItemId());
-        tx.markAsReserved(LocalDateTime.now(clock));
+        LocalDateTime now = LocalDateTime.now(clock);
+        long holdAmount = tx.getPrice();
+        tx.markAsReserved(now, holdAmount);
+        if (holdAmount > 0) {
+            pointApplicationService.escrowHold(
+                    tx.getBuyerId(),
+                    holdAmount,
+                    tx.getId(),
+                    "거래 #" + tx.getId() + " 보관"
+            );
+        }
+        eventPublisher.publishEvent(new TransactionReservedEvent(
+                tx.getId(), tx.getBuyerId(), tx.getSellerId(), tx.getPrice()));
     }
 
     /**
-     * 거래 완료 — Day 8 활성화. 흐름:
-     * <ol>
-     *   <li>Transaction 비관적 락 → seller 권한 검증 + 상태 검증 (예약 상태에서만 완료 가능)</li>
-     *   <li>Item 락 → markAsSold (락 순서 Transaction → Item 고정, deadlock 방지)</li>
-     *   <li>PointApplicationService.transfer — buyer 차감 → seller 적립 (id-asc 락 순서, 가이드 §5.3) + history 두 건 적재</li>
-     *   <li>Transaction.markAsCompleted</li>
-     * </ol>
+     * 라운드 11 — seller 인계확인. 예약 → 인계완료 전이.
      *
-     * <p>buyer 잔액 부족 → INSUFFICIENT_POINT 트랜잭션 롤백 → seller 의 선행 적립도 함께 원복 (정합성 보장).</p>
-     * <p>현재 PR 범위는 price 정산만. 대여 보증금 처리는 가이드 §4.13 — 관리자 수동 (Day 9 영역).</p>
+     * <ul>
+     *   <li>seller 가 아니면 TRANSACTION_HANDOVER_NOT_ALLOWED</li>
+     *   <li>이미 인계완료 상태이면 멱등 (no-op) — PATCH 재시도 시 사용자 혼란 방지</li>
+     *   <li>그 외 status (채팅중/거래완료/취소) 에서 호출 시 TRANSACTION_INVALID_STATE</li>
+     * </ul>
+     *
+     * <p>buyer 잔액/hold 변동 X — 단순 status 전이. Item 도 변동 X (markAsSold 는 markReceived 시점).</p>
      */
     @Transactional
-    public void complete(Long transactionId, Long requesterId) {
+    public void markHandover(Long transactionId, Long requesterId) {
         Transaction tx = findOrThrowForUpdate(transactionId);
         if (!tx.isSeller(requesterId)) {
-            throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
+            throw new BusinessException(ErrorCode.TRANSACTION_HANDOVER_NOT_ALLOWED);
         }
-        // Item 락 + 상태 전이 — 락 순서 Transaction → Item 고정 (deadlock 회피, reserve/cancel 와 동일)
-        itemApplicationService.markItemAsSold(tx.getItemId());
-        // 포인트 정산 — price > 0 인 거래만 (나눔 거래는 0 일 수 있음, 가이드 §4.11)
-        if (tx.getPrice() > 0) {
-            pointApplicationService.transfer(
-                    tx.getBuyerId(),
-                    tx.getSellerId(),
-                    tx.getPrice(),
-                    PointReferenceType.TRANSACTION,
-                    tx.getId(),
-                    "거래 결제: tx#" + tx.getId()
-            );
+        if (tx.getStatus() == TransactionStatus.인계완료) {
+            return;  // 멱등 — 이미 인계완료
         }
-        tx.markAsCompleted(LocalDateTime.now(clock));
+        tx.markHandover(LocalDateTime.now(clock));
+        eventPublisher.publishEvent(new TransactionHandoverConfirmedEvent(tx.getId(), tx.getBuyerId()));
     }
 
+    /**
+     * 라운드 11 — buyer 인수확인. 인계완료 → 거래완료 자동 전이 + 정산.
+     *
+     * <ol>
+     *   <li>Transaction 락 + buyer 권한 가드 (TRANSACTION_RECEIVE_NOT_ALLOWED)</li>
+     *   <li>이미 거래완료 상태이면 멱등 (no-op)</li>
+     *   <li>Item 락 + markItemAsSold (락 순서 Transaction → Item — reserve 와 동일)</li>
+     *   <li>escrowHoldAmount &gt; 0 이면 PointApplicationService.escrowRelease — buyer hold↓ + seller balance↑
+     *       (id-asc 락 순서, 가이드 §5.3) + 판매정산 history 1건</li>
+     *   <li>Transaction.markReceived — status=거래완료, receiveConfirmedAt + completedAt 동기 set</li>
+     * </ol>
+     *
+     * <p>buyer hold 부족 (운영 이상) → TRANSACTION_HOLD_FAILED. 트랜잭션 롤백으로 Item / Tx / 잔액
+     * 모두 원복. 나눔 거래 (escrowHoldAmount=0) 는 escrowRelease skip.</p>
+     */
+    @Transactional
+    public void markReceived(Long transactionId, Long requesterId) {
+        Transaction tx = findOrThrowForUpdate(transactionId);
+        if (!tx.isBuyer(requesterId)) {
+            throw new BusinessException(ErrorCode.TRANSACTION_RECEIVE_NOT_ALLOWED);
+        }
+        if (tx.getStatus() == TransactionStatus.거래완료) {
+            return;  // 멱등 — 이미 거래완료
+        }
+        // Item 락 + markAsSold (락 순서 Transaction → Item)
+        itemApplicationService.markItemAsSold(tx.getItemId());
+        long settleAmount = tx.getEscrowHoldAmount();
+        if (settleAmount > 0) {
+            pointApplicationService.escrowRelease(
+                    tx.getBuyerId(),
+                    tx.getSellerId(),
+                    settleAmount,
+                    tx.getId(),
+                    "거래 #" + tx.getId() + " 정산 수령"
+            );
+        }
+        tx.markReceived(LocalDateTime.now(clock));
+        eventPublisher.publishEvent(new TransactionReceiveConfirmedEvent(
+                tx.getId(), tx.getSellerId(), settleAmount));
+    }
+
+    /**
+     * 거래 취소 — 양쪽 참여자 누구나 호출. 라운드 11 단계별 환불:
+     *
+     * <ul>
+     *   <li>채팅중 단계: hold 없음 → 단순 status 전이만</li>
+     *   <li>예약 단계: Item 판매중 복원 + escrowRefund (buyer hold↓, balance↑) + 거래환불 history</li>
+     *   <li>인계완료 / 거래완료 / 취소 단계: Transaction.cancel 의 canCancel() 가드가 거부 (TRANSACTION_INVALID_STATE).
+     *       라운드 11 합의 (B-3) — 인계 후 환불은 R2 분쟁 endpoint 영역</li>
+     * </ul>
+     *
+     * <p>예약 단계 환불 시 락 순서: Transaction → Item → User(buyer). reserve 와 동일 순서라 deadlock 회피.
+     * 호출 시점에 escrowHoldAmount 를 미리 캡처 — tx.cancel() 후에도 컬럼은 유지되지만 명확성을 위해.</p>
+     */
     @Transactional
     public void cancel(Long transactionId, Long requesterId, String reason) {
         Transaction tx = findOrThrowForUpdate(transactionId);
@@ -138,11 +218,25 @@ public class TransactionApplicationService {
             throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
         }
         boolean wasReserved = tx.getStatus() == TransactionStatus.예약;
+        long holdAmount = tx.getEscrowHoldAmount();
+        // canCancel() 가드 — 인계완료 이후 status 는 TRANSACTION_INVALID_STATE
         tx.cancel(LocalDateTime.now(clock), reason);
         if (wasReserved) {
             // 예약 상태였던 거래만 Item 을 판매중으로 복원 (가이드 §5.2 채팅 재활성화)
             itemApplicationService.restoreItemFromReserved(tx.getItemId());
+            if (holdAmount > 0) {
+                // 라운드 11 — buyer escrow 환불 (hold↓, balance↑) + 거래환불 history.
+                // hold 부족 (운영 이상) → TRANSACTION_HOLD_FAILED 트랜잭션 롤백 (Item/Tx 도 원복).
+                pointApplicationService.escrowRefund(
+                        tx.getBuyerId(),
+                        holdAmount,
+                        tx.getId(),
+                        "거래 #" + tx.getId() + " 취소 환불"
+                );
+            }
         }
+        eventPublisher.publishEvent(new TransactionCanceledEvent(
+                tx.getId(), tx.getBuyerId(), tx.getSellerId(), requesterId));
     }
 
     public TransactionResult getById(Long id, Long requesterId) {
@@ -177,6 +271,18 @@ public class TransactionApplicationService {
         }
         Long revieweeId = tx.isSeller(requesterId) ? tx.getBuyerId() : tx.getSellerId();
         return new ReviewableTransactionResult(tx.getId(), requesterId, revieweeId, tx.getCompletedAt());
+    }
+
+    /** 차트 dashboard — 기간 [from, to) tradeType 별 카운트 (created_at 기준). */
+    public java.util.List<com.sseulang.domain.transaction.domain.TransactionRepository.TradeTypeCount>
+            countByTradeTypeBetween(java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return transactionRepository.countByTradeTypeBetween(from, to);
+    }
+
+    /** 차트 dashboard — 기간 [from, to) status 별 카운트 (라운드 11 5단계, created_at 기준). */
+    public java.util.List<TransactionStatusCount> countByStatusBetween(
+            java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return transactionRepository.countByStatusBetween(from, to);
     }
 
     /**

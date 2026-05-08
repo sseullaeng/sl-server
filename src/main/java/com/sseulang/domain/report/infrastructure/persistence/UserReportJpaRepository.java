@@ -29,4 +29,8 @@ interface UserReportJpaRepository extends JpaRepository<UserReport, Long> {
         Long getUserId();
         Long getCnt();
     }
+
+    /** 차트 dashboard summary — 처리 대기 (접수 또는 처리중) 신고 수. */
+    @Query("SELECT COUNT(r) FROM UserReport r WHERE r.status IN (com.sseulang.domain.report.domain.ReportStatus.접수, com.sseulang.domain.report.domain.ReportStatus.처리중)")
+    long countPending();
 }

@@ -33,6 +33,26 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
             """)
     List<TransactionStatusCount> countGroupByStatusJpql();
 
+    /** 차트 dashboard — 기간 [from, to) tradeType 별 카운트. created_at 기준. */
+    @Query("""
+            SELECT new com.sseulang.domain.transaction.domain.TransactionRepository$TradeTypeCount(t.tradeType, COUNT(t))
+              FROM Transaction t
+             WHERE t.createdAt >= :from AND t.createdAt < :to
+             GROUP BY t.tradeType
+            """)
+    List<com.sseulang.domain.transaction.domain.TransactionRepository.TradeTypeCount> countByTradeTypeBetweenJpql(
+            @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /** 차트 dashboard — 기간 [from, to) status 별 카운트. created_at 기준. */
+    @Query("""
+            SELECT new com.sseulang.domain.transaction.domain.TransactionStatusCount(t.status, COUNT(t))
+              FROM Transaction t
+             WHERE t.createdAt >= :from AND t.createdAt < :to
+             GROUP BY t.status
+            """)
+    List<TransactionStatusCount> countByStatusBetweenJpql(
+            @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
     /**
      * Admin 거래 검색 (round 9 + round 10). created_at [start, end] + tradeType / status / keywordId / matchedUserIds.
      * 모두 nullable. 최신순.

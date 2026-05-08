@@ -118,6 +118,23 @@ public class User extends BaseEntity {
     private long pointBalance;
 
     /**
+     * 거래 보관 잔액 (escrow hold) — 가이드 §5.1 라운드 11. 예약 시 buyer point_balance 에서
+     * 차감해 본 컬럼에 적립. 거래완료(인수확인) 시 hold 해제 + seller credit, 취소 시 buyer 환불.
+     *
+     * <p>point_balance 와 분리한 이유 (라운드 11 합의 B-3 A안):
+     * <ul>
+     *   <li>잔액 표시 — 즉시 사용 가능(balance) vs 거래 보관(hold) 3분할 UI</li>
+     *   <li>가이드 §5.3 원자 연산 — 단일 SQL UPDATE 로 두 컬럼 동시 변경, race-safe</li>
+     *   <li>잔액 부족 가드 — WHERE point_balance &gt;= :amount 가 hold 무관하게 깔끔</li>
+     * </ul>
+     *
+     * <p>본 필드 setter 없음 — UserRepository.holdForEscrow / releaseHold / refundHold
+     * atomic 메서드만이 갱신. CHECK point_hold &gt;= 0 (V16).</p>
+     */
+    @Column(name = "point_hold", nullable = false)
+    private long pointHold;
+
+    /**
      * JPA optimistic lock — V7 마이그레이션. LOCAL takeover 처럼 read-modify-write 흐름에서 두
      * 트랜잭션이 같은 user 를 동시 변경하면 OptimisticLockException 으로 한 쪽이 실패한다 (게이트 1).
      * 단순 atomic UPDATE (point_balance 등) 는 본 컬럼을 갱신하지 않는다 — JPA dirty-check 시점에만 동작.

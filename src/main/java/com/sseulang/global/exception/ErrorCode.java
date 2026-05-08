@@ -50,7 +50,9 @@ public enum ErrorCode {
     TRANSACTION_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서 수행할 수 없는 동작입니다."),
     TRANSACTION_RESERVED_BY_OTHER(HttpStatus.CONFLICT, "이미 다른 사용자와 예약된 거래입니다."),
     TRANSACTION_SELF_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "본인의 물품으로는 거래를 시작할 수 없습니다."),
-    TRANSACTION_COMPLETION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "거래 완료 처리는 결제·포인트 도메인 합류 후 활성화됩니다."),
+    TRANSACTION_HANDOVER_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "인계 확인은 판매자만 수행할 수 있습니다."),
+    TRANSACTION_RECEIVE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "인수 확인은 구매자만 수행할 수 있습니다."),
+    TRANSACTION_HOLD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "거래 보관 잔액 처리에 실패했습니다."),
 
     // 결제 / 포인트
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "결제 정보를 찾을 수 없습니다."),

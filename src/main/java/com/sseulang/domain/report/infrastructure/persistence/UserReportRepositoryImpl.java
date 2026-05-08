@@ -44,4 +44,9 @@ public class UserReportRepositoryImpl implements UserReportRepository {
         }
         return result;
     }
+
+    @Override
+    public long countPending() {
+        return jpa.countPending();
+    }
 }

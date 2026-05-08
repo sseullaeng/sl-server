@@ -42,7 +42,11 @@ class AdminStatsServiceTest {
         paymentService = mock(PaymentApplicationService.class);
         withdrawalService = mock(WithdrawalApplicationService.class);
         deliveryService = mock(DeliveryApplicationService.class);
-        statsService = new AdminStatsService(userService, transactionService, paymentService, withdrawalService, deliveryService);
+        var userReportService = mock(com.sseulang.domain.report.application.UserReportApplicationService.class);
+        statsService = new AdminStatsService(
+                userService, transactionService, paymentService, withdrawalService, deliveryService,
+                userReportService,
+                java.time.Clock.systemDefaultZone());
     }
 
     @Test

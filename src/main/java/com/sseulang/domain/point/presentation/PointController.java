@@ -2,7 +2,9 @@ package com.sseulang.domain.point.presentation;
 
 import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.point.domain.PointHistoryType;
+import com.sseulang.domain.point.presentation.dto.PointBalanceResponse;
 import com.sseulang.domain.point.presentation.dto.PointHistoryResponse;
+import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,10 +19,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 본인 포인트 관련 endpoint. 잔액은 {@code GET /api/v1/users/me} 의 {@code pointBalance} 로 노출되므로
- * 별도 balance endpoint 는 두지 않음. 본 컨트롤러는 history 페이징만.
+ * 본인 포인트 관련 endpoint. 라운드 11: 잔액 페이지 3분할 표시용 balance endpoint 추가
+ * (사용 가능 / 거래 보관 / 합산). 헤더/카드 용도는 GET /users/me 의 pointBalance + pointHold 활용.
  */
-@Tag(name = "Point", description = "본인 포인트 히스토리 페이징")
+@Tag(name = "Point", description = "본인 포인트 잔액 / 히스토리")
 @RestController
 @RequestMapping("/api/v1/users/me/point")
 public class PointController {
@@ -28,14 +30,28 @@ public class PointController {
     private static final int MAX_PAGE_SIZE = 100;
 
     private final PointApplicationService pointService;
+    private final UserApplicationService userApplicationService;
 
-    public PointController(PointApplicationService pointService) {
+    public PointController(
+            PointApplicationService pointService,
+            UserApplicationService userApplicationService
+    ) {
         this.pointService = pointService;
+        this.userApplicationService = userApplicationService;
+    }
+
+    @Operation(summary = "본인 포인트 잔액 (라운드 11)",
+            description = "사용 가능(balance) / 거래 보관(holdAmount) / 합산(totalBalance) 3분할. "
+                    + "두 컬럼을 단일 SELECT 로 읽어 동시 reserve/cancel/refund 사이의 합산 어긋남 방지 (게이트 1 W-1).")
+    @GetMapping
+    public ApiResponse<PointBalanceResponse> getMyBalance(@AuthenticationPrincipal Long userId) {
+        var snapshot = userApplicationService.getPointSnapshot(userId);
+        return ApiResponse.ok(PointBalanceResponse.of(snapshot.balance(), snapshot.hold()));
     }
 
     @Operation(summary = "본인 포인트 히스토리 페이징",
-            description = "잔액 변동 내역 (충전/결제/판매정산/출금/환불/배달결제/배달정산). type 미지정 시 전체. "
-                    + "정렬: createdAt DESC. 잔액 자체는 GET /users/me 의 pointBalance 사용.")
+            description = "잔액 변동 내역 (충전/결제/판매정산/출금/환불/배달결제/배달정산/거래보관/거래환불). "
+                    + "type 미지정 시 전체. 정렬: createdAt DESC. 잔액 자체는 GET /api/v1/users/me/point 또는 GET /users/me 사용.")
     @GetMapping("/history")
     public ApiResponse<PageResponse<PointHistoryResponse>> getMyHistory(
             @AuthenticationPrincipal Long userId,

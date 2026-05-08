@@ -45,4 +45,22 @@ public class AdminStatsController {
                 .map(com.sseulang.domain.stats.presentation.dto.MonthlyTradeStatResponse::from)
                 .toList());
     }
+
+    @Operation(summary = "차트 dashboard (recharts 친화)",
+            description = "카드 4종 + signupTrend(AreaChart) + tradeByType(BarChart) + tradeByStatus(PieChart). "
+                    + "기간 [startDate 00:00, endDate 23:59:59.999) — endDate inclusive. "
+                    + "default (양쪽 미지정): 최근 14일 (today-13 ~ today).")
+    @GetMapping("/dashboard/charts")
+    public ApiResponse<com.sseulang.domain.stats.presentation.dto.AdminDashboardChartsResponse> dashboardCharts(
+            @org.springframework.web.bind.annotation.RequestParam(name = "startDate", required = false)
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            java.time.LocalDate startDate,
+            @org.springframework.web.bind.annotation.RequestParam(name = "endDate", required = false)
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            java.time.LocalDate endDate
+    ) {
+        return ApiResponse.ok(com.sseulang.domain.stats.presentation.dto.AdminDashboardChartsResponse.from(
+                statsService.dashboardCharts(startDate, endDate)
+        ));
+    }
 }

@@ -49,7 +49,10 @@ class ReviewApplicationServiceTest {
         UserApplicationService userSvc = new UserApplicationService(userRepo, new com.sseulang.domain.transaction.application.InMemoryFakeTransactionRepository(), new com.sseulang.domain.report.application.InMemoryFakeUserReportRepository(), new com.sseulang.domain.auth.application.NoOpRefreshTokenStore(), java.time.Clock.systemDefaultZone());
         ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, userSvc, new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(), new com.sseulang.domain.item.application.NoOpWishlistView());
         PointApplicationService pointSvc = new PointApplicationService(userSvc, new InMemoryFakePointHistoryRepository());
-        TransactionApplicationService txSvc = new TransactionApplicationService(txRepo, itemSvc, pointSvc, userSvc, java.time.Clock.systemDefaultZone());
+        TransactionApplicationService txSvc = new TransactionApplicationService(
+                txRepo, itemSvc, pointSvc, userSvc,
+                (org.springframework.context.ApplicationEventPublisher) event -> {},
+                java.time.Clock.systemDefaultZone());
         service = new ReviewApplicationService(reviewRepo, txSvc, userSvc);
 
         Item item = itemRepo.save(Item.create(

@@ -69,6 +69,20 @@ public class Transaction extends BaseEntity {
     @Column(name = "reserved_at")
     private LocalDateTime reservedAt;
 
+    /**
+     * 라운드 11 — seller 인계확인 시각 (V16). 예약 → 인계완료 전이 시점.
+     * 본 필드 set 만으로는 의미 없음 — markHandover 가 status 함께 전이.
+     */
+    @Column(name = "handover_confirmed_at")
+    private LocalDateTime handoverConfirmedAt;
+
+    /**
+     * 라운드 11 — buyer 인수확인 시각 (V16). 인계완료 → 거래완료 전이 시점 + 정산 트리거.
+     * 본 필드 set 만으로는 의미 없음 — markReceived 가 status 함께 전이 + completedAt 동기 set.
+     */
+    @Column(name = "receive_confirmed_at")
+    private LocalDateTime receiveConfirmedAt;
+
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
@@ -77,6 +91,14 @@ public class Transaction extends BaseEntity {
 
     @Column(name = "cancel_reason", length = 255)
     private String cancelReason;
+
+    /**
+     * 라운드 11 — 예약 시 buyer point_balance 에서 본 컬럼으로 hold 한 금액 (V16). 일반적으로 price 와
+     * 동일하지만, 환불/감사 추적용으로 명시 컬럼화. 채팅중/예약 외 단계에서 cancel 시 환불 금액 결정 키.
+     * 나눔 거래 (price=0) 또는 옛 정책 거래는 0.
+     */
+    @Column(name = "escrow_hold_amount", nullable = false)
+    private long escrowHoldAmount;
 
     public static Transaction create(
             Long itemId,
@@ -121,21 +143,58 @@ public class Transaction extends BaseEntity {
         return t;
     }
 
+    /**
+     * 나눔 거래용 (price=0, hold 0) — 가이드 §4.11. 라운드 11 일반 판매/대여는
+     * {@link #markAsReserved(LocalDateTime, long)} 으로 hold 금액 명시.
+     */
     public void markAsReserved(LocalDateTime now) {
+        markAsReserved(now, 0L);
+    }
+
+    /**
+     * 라운드 11 예약 — status=예약 + reservedAt + escrowHoldAmount 동기 set. ApplicationService 가
+     * 같은 트랜잭션 안에서 PointApplicationService.escrowHold 호출 (buyer balance↓, hold↑).
+     *
+     * @param holdAmount 0 (나눔/옛) 또는 양수 (price 와 동일). 음수는 IllegalArgumentException.
+     */
+    public void markAsReserved(LocalDateTime now, long holdAmount) {
         if (!status.canReserve()) {
             throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
         }
+        if (holdAmount < 0) {
+            throw new IllegalArgumentException("holdAmount 는 0 이상이어야 합니다");
+        }
         this.status = TransactionStatus.예약;
         this.reservedAt = now;
+        this.escrowHoldAmount = holdAmount;
     }
 
-    public void markAsCompleted(LocalDateTime now) {
-        if (!status.canComplete()) {
+    /**
+     * 라운드 11 — seller 인계확인. 예약 → 인계완료 전이. ApplicationService 가 권한 가드 (seller 만)
+     * 후 호출. 잘못된 status 에서 호출 시 TRANSACTION_INVALID_STATE.
+     */
+    public void markHandover(LocalDateTime now) {
+        if (!status.canHandover()) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
+        }
+        this.status = TransactionStatus.인계완료;
+        this.handoverConfirmedAt = now;
+    }
+
+    /**
+     * 라운드 11 — buyer 인수확인. 인계완료 → 거래완료 자동 전이 + completedAt 동기 set.
+     * ApplicationService 가 같은 트랜잭션 안에서 PointApplicationService.escrowRelease (정산) 호출.
+     * receiveConfirmedAt 과 completedAt 은 같은 시각 (자동 전이 의미).
+     */
+    public void markReceived(LocalDateTime now) {
+        if (!status.canReceive()) {
             throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
         }
         this.status = TransactionStatus.거래완료;
+        this.receiveConfirmedAt = now;
         this.completedAt = now;
     }
+
 
     public void cancel(LocalDateTime now, String reason) {
         if (!status.canCancel()) {

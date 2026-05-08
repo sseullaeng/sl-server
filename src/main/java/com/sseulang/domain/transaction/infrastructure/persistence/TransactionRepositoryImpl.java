@@ -43,6 +43,17 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public List<com.sseulang.domain.transaction.domain.TransactionRepository.TradeTypeCount>
+            countByTradeTypeBetween(java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return jpa.countByTradeTypeBetweenJpql(from, to);
+    }
+
+    @Override
+    public List<TransactionStatusCount> countByStatusBetween(java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return jpa.countByStatusBetweenJpql(from, to);
+    }
+
+    @Override
     public java.util.Map<Long, Long> countByUserIdsAsParticipant(java.util.Collection<Long> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return java.util.Collections.emptyMap();

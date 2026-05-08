@@ -17,21 +17,27 @@ class TransactionTest {
     private static final Long SELLER = 100L;
     private static final Long BUYER = 200L;
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 5, 1, 12, 0);
+    private static final long PRICE = 50_000L;
+
+    // ───────── create ─────────
 
     @Test
     @DisplayName("create 판매_정상_status=채팅중, deposit/rental null")
     void create_판매_정상() {
-        Transaction t = Transaction.create(ITEM, SELLER, BUYER, TradeType.판매, 50_000L, null, null, null);
+        Transaction t = Transaction.create(ITEM, SELLER, BUYER, TradeType.판매, PRICE, null, null, null);
 
         assertThat(t.getItemId()).isEqualTo(ITEM);
         assertThat(t.getSellerId()).isEqualTo(SELLER);
         assertThat(t.getBuyerId()).isEqualTo(BUYER);
         assertThat(t.getTradeType()).isEqualTo(TradeType.판매);
-        assertThat(t.getPrice()).isEqualTo(50_000L);
+        assertThat(t.getPrice()).isEqualTo(PRICE);
         assertThat(t.getStatus()).isEqualTo(TransactionStatus.채팅중);
         assertThat(t.getReservedAt()).isNull();
+        assertThat(t.getHandoverConfirmedAt()).isNull();
+        assertThat(t.getReceiveConfirmedAt()).isNull();
         assertThat(t.getCompletedAt()).isNull();
         assertThat(t.getCanceledAt()).isNull();
+        assertThat(t.getEscrowHoldAmount()).isZero();
     }
 
     @Test
@@ -98,45 +104,123 @@ class TransactionTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    // ───────── markAsReserved ─────────
+
     @Test
-    @DisplayName("markAsReserved 정상_status=예약 + reservedAt")
-    void reserve_정상() {
+    @DisplayName("markAsReserved(now) 나눔용_holdAmount=0")
+    void reserve_old_signature_나눔() {
         Transaction t = sale();
         t.markAsReserved(NOW);
+
         assertThat(t.getStatus()).isEqualTo(TransactionStatus.예약);
         assertThat(t.getReservedAt()).isEqualTo(NOW);
+        assertThat(t.getEscrowHoldAmount()).isZero();
+    }
+
+    @Test
+    @DisplayName("markAsReserved(now, holdAmount) 정상_escrowHoldAmount 동기 set (라운드 11)")
+    void reserve_hold_정상() {
+        Transaction t = sale();
+        t.markAsReserved(NOW, PRICE);
+
+        assertThat(t.getStatus()).isEqualTo(TransactionStatus.예약);
+        assertThat(t.getReservedAt()).isEqualTo(NOW);
+        assertThat(t.getEscrowHoldAmount()).isEqualTo(PRICE);
+    }
+
+    @Test
+    @DisplayName("markAsReserved 음수 holdAmount_거부")
+    void reserve_음수_hold_거부() {
+        Transaction t = sale();
+        assertThatThrownBy(() -> t.markAsReserved(NOW, -1L))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     @DisplayName("markAsReserved 채팅중 외_TRANSACTION_INVALID_STATE")
     void reserve_상태_위반() {
         Transaction t = sale();
-        t.markAsReserved(NOW);
-        assertThatThrownBy(() -> t.markAsReserved(NOW))
+        t.markAsReserved(NOW, PRICE);
+        assertThatThrownBy(() -> t.markAsReserved(NOW, PRICE))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.TRANSACTION_INVALID_STATE);
+    }
+
+    // ───────── markHandover (라운드 11) ─────────
+
+    @Test
+    @DisplayName("markHandover 정상_예약→인계완료 + handoverConfirmedAt")
+    void handover_정상() {
+        Transaction t = sale();
+        t.markAsReserved(NOW, PRICE);
+        t.markHandover(NOW.plusHours(1));
+
+        assertThat(t.getStatus()).isEqualTo(TransactionStatus.인계완료);
+        assertThat(t.getHandoverConfirmedAt()).isEqualTo(NOW.plusHours(1));
+        assertThat(t.getReceiveConfirmedAt()).isNull();
+        assertThat(t.getCompletedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("markHandover 채팅중에서 직행_TRANSACTION_INVALID_STATE")
+    void handover_채팅중_거부() {
+        Transaction t = sale();
+        assertThatThrownBy(() -> t.markHandover(NOW))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TRANSACTION_INVALID_STATE);
     }
 
     @Test
-    @DisplayName("markAsCompleted 정상_예약→거래완료")
-    void complete_정상() {
+    @DisplayName("markHandover 인계완료 후 재호출_TRANSACTION_INVALID_STATE (Aggregate 가드 — 멱등은 ApplicationService 책임)")
+    void handover_재호출_거부() {
         Transaction t = sale();
-        t.markAsReserved(NOW);
-        t.markAsCompleted(NOW.plusHours(1));
+        t.markAsReserved(NOW, PRICE);
+        t.markHandover(NOW.plusHours(1));
+        assertThatThrownBy(() -> t.markHandover(NOW.plusHours(2)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.TRANSACTION_INVALID_STATE);
+    }
+
+    // ───────── markReceived (라운드 11) ─────────
+
+    @Test
+    @DisplayName("markReceived 정상_인계완료→거래완료 + receiveConfirmedAt + completedAt 동기")
+    void receive_정상() {
+        Transaction t = sale();
+        t.markAsReserved(NOW, PRICE);
+        t.markHandover(NOW.plusHours(1));
+        t.markReceived(NOW.plusHours(2));
+
         assertThat(t.getStatus()).isEqualTo(TransactionStatus.거래완료);
-        assertThat(t.getCompletedAt()).isEqualTo(NOW.plusHours(1));
+        assertThat(t.getReceiveConfirmedAt()).isEqualTo(NOW.plusHours(2));
+        assertThat(t.getCompletedAt()).isEqualTo(NOW.plusHours(2));
     }
 
     @Test
-    @DisplayName("markAsCompleted 채팅중에서 직행_거부")
-    void complete_채팅중에서_거부() {
+    @DisplayName("markReceived 예약 상태에서_TRANSACTION_INVALID_STATE (인계완료 거쳐야 함)")
+    void receive_예약에서_거부() {
         Transaction t = sale();
-        assertThatThrownBy(() -> t.markAsCompleted(NOW))
+        t.markAsReserved(NOW, PRICE);
+        assertThatThrownBy(() -> t.markReceived(NOW))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TRANSACTION_INVALID_STATE);
     }
+
+    @Test
+    @DisplayName("markReceived 채팅중에서 직행_TRANSACTION_INVALID_STATE")
+    void receive_채팅중_거부() {
+        Transaction t = sale();
+        assertThatThrownBy(() -> t.markReceived(NOW))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.TRANSACTION_INVALID_STATE);
+    }
+
+    // ───────── cancel 단계별 (라운드 11) ─────────
 
     @Test
     @DisplayName("cancel 채팅중에서 정상")
@@ -149,21 +233,38 @@ class TransactionTest {
     }
 
     @Test
-    @DisplayName("cancel 예약에서 정상")
+    @DisplayName("cancel 예약에서 정상_escrowHoldAmount 보존 (환불 금액 추적)")
     void cancel_예약() {
         Transaction t = sale();
-        t.markAsReserved(NOW);
+        t.markAsReserved(NOW, PRICE);
         t.cancel(NOW.plusHours(1), null);
+
         assertThat(t.getStatus()).isEqualTo(TransactionStatus.취소);
+        assertThat(t.getEscrowHoldAmount()).isEqualTo(PRICE);  // 보존 — ApplicationService 가 환불 시 참조
     }
 
     @Test
-    @DisplayName("cancel 거래완료_거부")
+    @DisplayName("cancel 인계완료 이후_TRANSACTION_INVALID_STATE (라운드 11 — R2 분쟁 영역)")
+    void cancel_인계완료_거부() {
+        Transaction t = sale();
+        t.markAsReserved(NOW, PRICE);
+        t.markHandover(NOW.plusHours(1));
+
+        assertThatThrownBy(() -> t.cancel(NOW.plusHours(2), null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.TRANSACTION_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("cancel 거래완료 후_거부")
     void cancel_거래완료_거부() {
         Transaction t = sale();
-        t.markAsReserved(NOW);
-        t.markAsCompleted(NOW.plusHours(1));
-        assertThatThrownBy(() -> t.cancel(NOW.plusHours(2), null))
+        t.markAsReserved(NOW, PRICE);
+        t.markHandover(NOW.plusHours(1));
+        t.markReceived(NOW.plusHours(2));
+
+        assertThatThrownBy(() -> t.cancel(NOW.plusHours(3), null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.TRANSACTION_INVALID_STATE);
@@ -178,6 +279,8 @@ class TransactionTest {
                 .isInstanceOf(BusinessException.class);
     }
 
+    // ───────── helpers ─────────
+
     @Test
     @DisplayName("isSeller / isBuyer / isParticipant")
     void participants() {
@@ -191,6 +294,6 @@ class TransactionTest {
     }
 
     private static Transaction sale() {
-        return Transaction.create(ITEM, SELLER, BUYER, TradeType.판매, 50_000L, null, null, null);
+        return Transaction.create(ITEM, SELLER, BUYER, TradeType.판매, PRICE, null, null, null);
     }
 }

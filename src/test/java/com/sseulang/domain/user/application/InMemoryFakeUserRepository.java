@@ -85,6 +85,48 @@ public class InMemoryFakeUserRepository implements UserRepository {
     }
 
     @Override
+    public synchronized int holdForEscrow(Long userId, long amount) {
+        User user = store.get(userId);
+        if (user == null) return 0;
+        if (user.getPointBalance() < amount) return 0;
+        ReflectionTestUtils.setField(user, "pointBalance", user.getPointBalance() - amount);
+        ReflectionTestUtils.setField(user, "pointHold", user.getPointHold() + amount);
+        return 1;
+    }
+
+    @Override
+    public synchronized int releaseHold(Long userId, long amount) {
+        User user = store.get(userId);
+        if (user == null) return 0;
+        if (user.getPointHold() < amount) return 0;
+        ReflectionTestUtils.setField(user, "pointHold", user.getPointHold() - amount);
+        return 1;
+    }
+
+    @Override
+    public synchronized int refundHold(Long userId, long amount) {
+        User user = store.get(userId);
+        if (user == null) return 0;
+        if (user.getPointHold() < amount) return 0;
+        ReflectionTestUtils.setField(user, "pointHold", user.getPointHold() - amount);
+        ReflectionTestUtils.setField(user, "pointBalance", user.getPointBalance() + amount);
+        return 1;
+    }
+
+    @Override
+    public Long findPointHold(Long userId) {
+        User user = store.get(userId);
+        return user == null ? null : user.getPointHold();
+    }
+
+    @Override
+    public synchronized java.util.Optional<PointSnapshot> findPointSnapshot(Long userId) {
+        User user = store.get(userId);
+        if (user == null) return java.util.Optional.empty();
+        return java.util.Optional.of(new PointSnapshot(user.getPointBalance(), user.getPointHold()));
+    }
+
+    @Override
     public Page<User> findAllForAdmin(Pageable pageable) {
         List<User> all = store.values().stream()
                 .sorted(Comparator.comparing(User::getId).reversed())
@@ -110,6 +152,29 @@ public class InMemoryFakeUserRepository implements UserRepository {
     @Override
     public long countActive() {
         return store.values().stream().filter(u -> !u.isBlocked() && !u.isDeleted()).count();
+    }
+
+    @Override
+    public long countSignupsBetween(java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return store.values().stream()
+                .filter(u -> {
+                    java.time.LocalDateTime c = u.getCreatedAt();
+                    return c != null && !c.isBefore(from) && c.isBefore(to);
+                })
+                .count();
+    }
+
+    @Override
+    public java.util.List<DailyCount> findDailySignups(java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        java.util.Map<java.time.LocalDate, Long> grouped = new java.util.TreeMap<>();
+        for (User u : store.values()) {
+            java.time.LocalDateTime c = u.getCreatedAt();
+            if (c == null || c.isBefore(from) || !c.isBefore(to)) continue;
+            grouped.merge(c.toLocalDate(), 1L, Long::sum);
+        }
+        return grouped.entrySet().stream()
+                .map(e -> new DailyCount(e.getKey(), e.getValue()))
+                .toList();
     }
 
     @Override

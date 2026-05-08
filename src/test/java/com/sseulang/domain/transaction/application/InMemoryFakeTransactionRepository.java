@@ -54,6 +54,31 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
                 .toList();
     }
 
+    @Override
+    public List<com.sseulang.domain.transaction.domain.TransactionRepository.TradeTypeCount>
+            countByTradeTypeBetween(java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return store.values().stream()
+                .filter(t -> withinRange(t.getCreatedAt(), from, to))
+                .collect(Collectors.groupingBy(Transaction::getTradeType, Collectors.counting()))
+                .entrySet().stream()
+                .map(e -> new com.sseulang.domain.transaction.domain.TransactionRepository.TradeTypeCount(e.getKey(), e.getValue()))
+                .toList();
+    }
+
+    @Override
+    public List<TransactionStatusCount> countByStatusBetween(java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return store.values().stream()
+                .filter(t -> withinRange(t.getCreatedAt(), from, to))
+                .collect(Collectors.groupingBy(Transaction::getStatus, Collectors.counting()))
+                .entrySet().stream()
+                .map(e -> new TransactionStatusCount(e.getKey(), e.getValue()))
+                .toList();
+    }
+
+    private static boolean withinRange(java.time.LocalDateTime when, java.time.LocalDateTime from, java.time.LocalDateTime to) {
+        return when != null && !when.isBefore(from) && when.isBefore(to);
+    }
+
     /**
      * 단위 테스트용 — Review 도메인을 cross-aggregate 로 알 수 없으므로 외부에서 (txId, reviewerId) pair 를
      * 주입받아 NOT EXISTS 시뮬레이션. 비어 있으면 모든 거래완료 거래가 pending 으로 반환됨.

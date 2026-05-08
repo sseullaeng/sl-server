@@ -198,7 +198,7 @@ class EndToEndGuardScenariosIT {
     // ───────── 시나리오 2: 잔액 부족 정산 실패 ─────────
 
     @Test
-    @DisplayName("buyer 충전 안 한 상태_거래완료 시 INSUFFICIENT_POINT + 모든 상태 롤백")
+    @DisplayName("라운드 11 — buyer 충전 안 한 상태_예약 시점에 INSUFFICIENT_POINT + Item/Tx 모두 롤백")
     void scenario_잔액부족_롤백() throws Exception {
         // Seller — OAuth (verified=true). Item 등록.
         Cookie sellerAt = oauthLoginAndExtractAt("SELLER", "kakao-seller-" + UUID.randomUUID(),
@@ -212,26 +212,20 @@ class EndToEndGuardScenariosIT {
         // 거래 생성 — 채팅중 (자금 이동 없음).
         Long txId = createTransaction(buyerAt, itemId);
 
-        // Seller 예약 → 거래완료 시 정산 시도. buyer 잔액 0 < 50000 → INSUFFICIENT_POINT.
+        // 라운드 11 — Seller 예약 시 buyer hold 시도 → 잔액 0 < 50000 → INSUFFICIENT_POINT.
+        // (옛 정책은 거래완료 시점에 차감, 라운드 11 부터는 reserve 시점에 hold 함.)
         mvc.perform(patch("/api/v1/transactions/" + txId)
                         .with(csrf())
                         .cookie(sellerAt)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"action\":\"예약\"}"))
-                .andExpect(status().isOk());
-
-        mvc.perform(patch("/api/v1/transactions/" + txId)
-                        .with(csrf())
-                        .cookie(sellerAt)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"action\":\"거래완료\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INSUFFICIENT_POINT"));
 
-        // 트랜잭션 롤백 검증 — Tx 상태 = 예약 (거래완료 X).
+        // 트랜잭션 롤백 검증 — Tx 상태 = 채팅중 (예약 X), Item 도 판매중 유지.
         mvc.perform(get("/api/v1/transactions/" + txId).cookie(buyerAt))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("예약"));
+                .andExpect(jsonPath("$.data.status").value("채팅중"));
     }
 
     // ───────── 시나리오 3: 출금 멱등성 ─────────

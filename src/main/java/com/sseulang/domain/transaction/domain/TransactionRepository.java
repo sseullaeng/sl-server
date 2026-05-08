@@ -32,6 +32,21 @@ public interface TransactionRepository {
     List<TransactionStatusCount> countGroupByStatus();
 
     /**
+     * 차트 dashboard — 기간 안 (created_at &gt;= from AND created_at &lt; to) tradeType 별 거래 카운트.
+     * to 는 exclusive. 빈 type 은 결과에 미포함 (호출자가 0 채움).
+     */
+    List<TradeTypeCount> countByTradeTypeBetween(LocalDateTime from, LocalDateTime to);
+
+    /**
+     * 차트 dashboard — 기간 안 status 별 거래 카운트. 라운드 11 의 5단계 status 그대로 반환.
+     * 그룹핑 (진행중/완료/취소) 은 ApplicationService 가 변환.
+     */
+    List<TransactionStatusCount> countByStatusBetween(LocalDateTime from, LocalDateTime to);
+
+    /** 차트용 — (tradeType, count) record. */
+    record TradeTypeCount(com.sseulang.domain.item.domain.TradeType tradeType, long count) { }
+
+    /**
      * Admin 회원 카드용 — userId 가 buyer 또는 seller 로 참여한 transaction 의 (userId → count) 맵.
      * 빈 입력은 빈 맵. 단일 GROUP BY 쿼리 — N+1 회피.
      */
