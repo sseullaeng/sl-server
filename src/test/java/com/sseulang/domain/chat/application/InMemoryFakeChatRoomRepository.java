@@ -36,7 +36,7 @@ public class InMemoryFakeChatRoomRepository implements ChatRoomRepository {
     @Override
     public Page<ChatRoom> findMine(Long userId, Pageable pageable) {
         List<ChatRoom> mine = store.values().stream()
-                .filter(c -> c.isParticipant(userId))
+                .filter(c -> c.isParticipant(userId) && !c.iLeft(userId))
                 .sorted(Comparator
                         .comparing((ChatRoom c) -> c.getLastMessageAt() == null ? 1 : 0)
                         .thenComparing(c -> c.getLastMessageAt(), Comparator.nullsLast(Comparator.reverseOrder()))
@@ -78,6 +78,23 @@ public class InMemoryFakeChatRoomRepository implements ChatRoomRepository {
             ReflectionTestUtils.setField(room, "user1Unread", 0);
         } else {
             ReflectionTestUtils.setField(room, "user2Unread", 0);
+        }
+        return 1;
+    }
+
+    @Override
+    public int markAsLeft(Long chatRoomId, Long userId) {
+        ChatRoom room = store.get(chatRoomId);
+        if (room == null || !room.isParticipant(userId)) return 0;
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        if (userId.equals(room.getUser1Id())) {
+            if (room.getUser1LeftAt() == null) {
+                ReflectionTestUtils.setField(room, "user1LeftAt", now);
+            }
+        } else {
+            if (room.getUser2LeftAt() == null) {
+                ReflectionTestUtils.setField(room, "user2LeftAt", now);
+            }
         }
         return 1;
     }

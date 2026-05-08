@@ -120,6 +120,40 @@ public class ChatRoomApplicationService {
     }
 
     /**
+     * 메시지 송신 가능 여부 검증 — 참여자 + 본인 left X + 상대방 left X.
+     * 본인 left → CHAT_FORBIDDEN (이미 나간 방).
+     * 상대방 left → CHAT_ROOM_OPPONENT_LEFT (상대방이 나가서 차단).
+     */
+    public void requireSendable(Long chatRoomId, Long userId) {
+        ChatRoom room = chatRoomRepository.findById(chatRoomId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        if (!room.isParticipant(userId)) {
+            throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
+        }
+        if (room.iLeft(userId)) {
+            throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
+        }
+        if (room.opponentLeft(userId)) {
+            throw new BusinessException(ErrorCode.CHAT_ROOM_OPPONENT_LEFT);
+        }
+    }
+
+    /**
+     * 채팅방 나가기 (soft hide) — 본인 측 left_at = NOW(). 데이터/메시지 보존.
+     * 본인 listMine 에서 제외, 상대방은 opponentLeft=true 응답 받음.
+     * 비참여자 호출은 CHAT_FORBIDDEN. 이미 left 상태도 idempotent (재호출 OK).
+     */
+    @Transactional
+    public void leave(Long roomId, Long userId) {
+        ChatRoom room = chatRoomRepository.findById(roomId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        if (!room.isParticipant(userId)) {
+            throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
+        }
+        chatRoomRepository.markAsLeft(roomId, userId);
+    }
+
+    /**
      * 1:1 채팅방의 상대방 userId 반환. requireParticipant 검증을 동시에 수행.
      * 메시지 broadcast 시 상대방 알림 push 용.
      */

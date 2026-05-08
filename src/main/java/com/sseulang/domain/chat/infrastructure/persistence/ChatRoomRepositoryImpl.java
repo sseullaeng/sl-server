@@ -48,4 +48,9 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepository {
     public int markAsRead(Long chatRoomId, Long userId) {
         return jpa.markAsRead(chatRoomId, userId);
     }
+
+    @Override
+    public int markAsLeft(Long chatRoomId, Long userId) {
+        return jpa.markAsLeft(chatRoomId, userId, java.time.LocalDateTime.now());
+    }
 }

@@ -25,9 +25,14 @@ interface ChatRoomJpaRepository extends JpaRepository<ChatRoom, Long> {
             @Param("u2") Long u2
     );
 
+    /**
+     * 본인 visibility 기준 채팅방 목록. user1 이면 user1LeftAt IS NULL, user2 면 user2LeftAt IS NULL.
+     * 본인이 left 한 방은 목록에서 제외 (soft hide). 상대방이 left 한 방은 그대로 노출.
+     */
     @Query("""
         SELECT c FROM ChatRoom c
-        WHERE c.user1Id = :userId OR c.user2Id = :userId
+        WHERE (c.user1Id = :userId AND c.user1LeftAt IS NULL)
+           OR (c.user2Id = :userId AND c.user2LeftAt IS NULL)
         ORDER BY
           CASE WHEN c.lastMessageAt IS NULL THEN 1 ELSE 0 END,
           c.lastMessageAt DESC,
@@ -65,4 +70,22 @@ interface ChatRoomJpaRepository extends JpaRepository<ChatRoom, Long> {
           AND (c.user1Id = :userId OR c.user2Id = :userId)
     """)
     int markAsRead(@Param("roomId") Long roomId, @Param("userId") Long userId);
+
+    /**
+     * 본인 측 left_at 을 atomic UPDATE. 이미 nonnull 이면 보존 (idempotent).
+     * 비참여자는 0 행 영향. 본인 user 위치에 따라 한쪽 컬럼만 변경.
+     */
+    @Modifying
+    @Query("""
+        UPDATE ChatRoom c
+        SET c.user1LeftAt = CASE WHEN c.user1Id = :userId AND c.user1LeftAt IS NULL THEN :leftAt ELSE c.user1LeftAt END,
+            c.user2LeftAt = CASE WHEN c.user2Id = :userId AND c.user2LeftAt IS NULL THEN :leftAt ELSE c.user2LeftAt END
+        WHERE c.id = :roomId
+          AND (c.user1Id = :userId OR c.user2Id = :userId)
+    """)
+    int markAsLeft(
+            @Param("roomId") Long roomId,
+            @Param("userId") Long userId,
+            @Param("leftAt") LocalDateTime leftAt
+    );
 }

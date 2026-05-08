@@ -151,4 +151,87 @@ class ChatRoomApplicationServiceTest {
                 .containsExactly(room1)
                 .doesNotContain(room2);
     }
+
+    @Test
+    @DisplayName("leave 정상_본인 listMine 에서 제외 + 상대방 opponentLeft=true")
+    void leave_정상() {
+        Long roomId = service.openFor(BUYER, itemId).id();
+
+        service.leave(roomId, BUYER);
+
+        // BUYER 측 listMine 에서 제외
+        Page<ChatRoomResult> buyerView = service.listMine(BUYER, PageRequest.of(0, 10));
+        assertThat(buyerView.getContent()).isEmpty();
+
+        // SELLER 입장에서 상대(BUYER)가 left → opponentLeft=true
+        ChatRoomResult sellerView = service.getOne(roomId, SELLER);
+        assertThat(sellerView.iLeft()).isFalse();
+        assertThat(sellerView.opponentLeft()).isTrue();
+
+        // BUYER 본인 입장에서 iLeft=true (단건 조회는 가능 — soft hide 라 데이터 보존)
+        ChatRoomResult buyerOne = service.getOne(roomId, BUYER);
+        assertThat(buyerOne.iLeft()).isTrue();
+    }
+
+    @Test
+    @DisplayName("leave 비참여자_CHAT_FORBIDDEN")
+    void leave_비참여자() {
+        Long roomId = service.openFor(BUYER, itemId).id();
+
+        assertThatThrownBy(() -> service.leave(roomId, OTHER))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CHAT_FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("leave 없는 방_CHAT_ROOM_NOT_FOUND")
+    void leave_없음() {
+        assertThatThrownBy(() -> service.leave(9999L, BUYER))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CHAT_ROOM_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("leave idempotent — 두 번 호출해도 OK")
+    void leave_idempotent() {
+        Long roomId = service.openFor(BUYER, itemId).id();
+        service.leave(roomId, BUYER);
+        // 두 번째 호출은 예외 X
+        service.leave(roomId, BUYER);
+    }
+
+    @Test
+    @DisplayName("requireSendable 본인 left → CHAT_FORBIDDEN")
+    void requireSendable_본인left() {
+        Long roomId = service.openFor(BUYER, itemId).id();
+        service.leave(roomId, BUYER);
+
+        assertThatThrownBy(() -> service.requireSendable(roomId, BUYER))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CHAT_FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("requireSendable 상대방 left → CHAT_ROOM_OPPONENT_LEFT")
+    void requireSendable_상대left() {
+        Long roomId = service.openFor(BUYER, itemId).id();
+        service.leave(roomId, BUYER);
+
+        assertThatThrownBy(() -> service.requireSendable(roomId, SELLER))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CHAT_ROOM_OPPONENT_LEFT);
+    }
+
+    @Test
+    @DisplayName("requireSendable 정상 — 양쪽 모두 안 나간 상태")
+    void requireSendable_정상() {
+        Long roomId = service.openFor(BUYER, itemId).id();
+        // throws X
+        service.requireSendable(roomId, BUYER);
+        service.requireSendable(roomId, SELLER);
+    }
 }

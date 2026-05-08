@@ -74,6 +74,8 @@ public enum ErrorCode {
     // 채팅 / 알림
     CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "채팅방을 찾을 수 없습니다."),
     CHAT_FORBIDDEN(HttpStatus.FORBIDDEN, "채팅방에 접근할 권한이 없습니다."),
+    CHAT_ROOM_OPPONENT_LEFT(HttpStatus.BAD_REQUEST, "상대방이 채팅방을 나가서 더 이상 메시지를 보낼 수 없습니다."),
+    CHAT_ROOM_ALREADY_LEFT(HttpStatus.BAD_REQUEST, "이미 나간 채팅방입니다."),
 
     // 리뷰
     REVIEW_DUPLICATED(HttpStatus.CONFLICT, "이미 작성한 리뷰입니다."),
