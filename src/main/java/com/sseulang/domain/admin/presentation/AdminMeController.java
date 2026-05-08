@@ -26,9 +26,12 @@ public class AdminMeController {
     }
 
     @Operation(summary = "[관리자] 본인 정보 조회",
-            description = "AT(role=ADMIN) 쿠키 기반 인증된 admin 본인 정보. 프론트가 admin 페이지 store 초기화에 사용.")
+            description = "AT(role=ADMIN) 쿠키 기반 인증된 admin 본인 정보. 두 출처 모두 처리: "
+                    + "(1) admins 테이블 (username/password 로그인) → admin.username/name. "
+                    + "(2) OAuth allowlist 매치 (app.admin.user-emails) → user.email/nickname. "
+                    + "프론트가 admin 페이지 store 초기화에 사용.")
     @GetMapping
-    public ApiResponse<AdminMeResponse> getMe(@AuthenticationPrincipal Long adminId) {
-        return ApiResponse.ok(AdminMeResponse.from(adminService.getById(adminId)));
+    public ApiResponse<AdminMeResponse> getMe(@AuthenticationPrincipal Long subjectId) {
+        return ApiResponse.ok(adminService.getMe(subjectId));
     }
 }
