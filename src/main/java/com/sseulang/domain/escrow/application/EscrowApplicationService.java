@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.sseulang.domain.escrow.application.dto.EscrowApplicationCreateCommand;
+import com.sseulang.domain.escrow.application.dto.EscrowApplicationCreateInternalCommand;
 import com.sseulang.domain.escrow.application.dto.EscrowApplicationPreviewCommand;
 import com.sseulang.domain.escrow.application.dto.EscrowApplicationPreviewResult;
 import com.sseulang.domain.escrow.application.dto.EscrowApplicationResult;
@@ -67,6 +68,8 @@ public class EscrowApplicationService {
     private final PointApplicationService pointApplicationService;
     private final DeliveryRepository deliveryRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final com.sseulang.domain.chat.application.ChatRoomApplicationService chatRoomApplicationService;
+    private final com.sseulang.domain.item.application.ItemApplicationService itemApplicationService;
     private final int linkExpiryHours;
 
     public EscrowApplicationService(
@@ -77,6 +80,8 @@ public class EscrowApplicationService {
             PointApplicationService pointApplicationService,
             DeliveryRepository deliveryRepository,
             ApplicationEventPublisher eventPublisher,
+            com.sseulang.domain.chat.application.ChatRoomApplicationService chatRoomApplicationService,
+            com.sseulang.domain.item.application.ItemApplicationService itemApplicationService,
             @Value("${app.escrow.link.expiry-hours:24}") int linkExpiryHours
     ) {
         this.linkRepository = linkRepository;
@@ -86,6 +91,8 @@ public class EscrowApplicationService {
         this.pointApplicationService = pointApplicationService;
         this.deliveryRepository = deliveryRepository;
         this.eventPublisher = eventPublisher;
+        this.chatRoomApplicationService = chatRoomApplicationService;
+        this.itemApplicationService = itemApplicationService;
         this.linkExpiryHours = linkExpiryHours;
     }
 
@@ -121,6 +128,70 @@ public class EscrowApplicationService {
                 sellerPayable,
                 fee.commissionRate()
         );
+    }
+
+    // =============================================================
+    // Use case 0b — 내부 신청 (PR-B-3 라운드 12). 채팅방 안에서 판매자가 한 번에 양쪽 정보 입력.
+    // 외부 link 흐름 (createApplication) 와 분리.
+    // 검증: chatRoom 참여자 + chatRoom.itemId == cmd.itemId + 본인 == item.sellerId.
+    // =============================================================
+    @Transactional
+    public EscrowApplicationResult createInternalApplication(EscrowApplicationCreateInternalCommand cmd) {
+        userApplicationService.requireVerified(cmd.requesterId());
+
+        // chatRoom 참여자 검증 + 메타 (itemId)
+        com.sseulang.domain.chat.application.ChatRoomApplicationService.ChatRoomMeta meta =
+                chatRoomApplicationService.findMetaForParticipant(cmd.chatRoomId(), cmd.requesterId());
+        if (!meta.itemId().equals(cmd.itemId())) {
+            throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+        }
+        if (meta.iLeft() || meta.opponentLeft()) {
+            throw new BusinessException(ErrorCode.CHAT_ROOM_OPPONENT_LEFT);
+        }
+
+        // 판매자 검증 — itemId → item.sellerId == requesterId
+        var itemInfo = itemApplicationService.findActiveForTransaction(cmd.itemId());
+        if (!itemInfo.sellerId().equals(cmd.requesterId())) {
+            throw new BusinessException(ErrorCode.ESCROW_SELLER_ONLY);
+        }
+
+        // buyer = chatRoom 의 상대방
+        Long buyerId = chatRoomApplicationService.findOpponent(cmd.chatRoomId(), cmd.requesterId());
+
+        // fee 산정 (외부 흐름과 동일 방식)
+        EscrowFeeSettings settings = feeSettingsRepository.findSingleton();
+        BigDecimal calculatedDistance = EscrowFeeCalculator.distanceKm(
+                cmd.pickupLat().doubleValue(), cmd.pickupLng().doubleValue(),
+                cmd.deliveryLat().doubleValue(), cmd.deliveryLng().doubleValue()
+        );
+        FeeBreakdown calculated = EscrowFeeCalculator.calculate(
+                settings, cmd.tradeMode(), cmd.itemPrice(), calculatedDistance,
+                cmd.weight(), cmd.volume(), cmd.fragility()
+        );
+        EscrowFeeCalculator.verifyTolerance(
+                calculated, cmd.submittedDeliveryFee(), cmd.submittedCommissionFee(), cmd.submittedTotalFee()
+        );
+
+        // share 산정. initiator = seller, receiver = buyer (내부 흐름은 seller 가 시작).
+        long buyerOwed = computeBuyerOwed(cmd.tradeMode(), cmd.itemPrice(), calculated, cmd.feePayer());
+        long sellerOwed = computeSellerOwed(calculated, cmd.feePayer());
+        long initiatorShare = sellerOwed;
+        long receiverShare = buyerOwed;
+
+        EscrowApplication app = EscrowApplication.createInternal(
+                cmd.chatRoomId(),
+                cmd.requesterId(),  // initiator = seller
+                buyerId,            // receiver = buyer
+                cmd.tradeMode(), cmd.feePayer(),
+                cmd.itemPrice(), cmd.itemDescription(),
+                cmd.pickupAddress(), cmd.pickupLat(), cmd.pickupLng(),
+                cmd.deliveryAddress(), cmd.deliveryLat(), cmd.deliveryLng(),
+                cmd.weight(), cmd.volume(), cmd.fragility(), cmd.deliveryNotes(),
+                calculated, initiatorShare, receiverShare,
+                serializeImageUrls(cmd.imageUrls())
+        );
+        EscrowApplication saved = applicationRepository.save(app);
+        return EscrowApplicationResult.from(saved, parseImageUrls(saved.getImageUrls()));
     }
 
     // =============================================================
