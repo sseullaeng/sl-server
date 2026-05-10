@@ -26,6 +26,14 @@ public interface TransactionRepository {
 
     Transaction save(Transaction transaction);
 
+    /**
+     * 라운드 12 (#3.2) — 한 채팅방 = 1 active transaction 정책 가드.
+     *
+     * <p>active 정의: status NOT IN (거래완료, 취소). 즉 채팅중 / 예약 / 인계완료 단계는 모두 active.
+     * legacy chat_room_id IS NULL 거래는 본 쿼리 영향 X (chat_room_id 컬럼 = ? 매칭).</p>
+     */
+    boolean existsActiveByChatRoomId(Long chatRoomId);
+
     // ───────── 관리자 통계 ─────────
 
     /** 단일 GROUP BY 집계 — (status, count) 행 리스트 (가능한 모든 status 행 포함, 0 인 status 는 없음). */

@@ -24,7 +24,7 @@ class TransactionTest {
     @Test
     @DisplayName("create 판매_정상_status=채팅중, deposit/rental null")
     void create_판매_정상() {
-        Transaction t = Transaction.create(ITEM, SELLER, BUYER, TradeType.판매, PRICE, null, null, null);
+        Transaction t = Transaction.create(ITEM, SELLER, BUYER, TradeType.판매, PRICE, null, null, null, null);
 
         assertThat(t.getItemId()).isEqualTo(ITEM);
         assertThat(t.getSellerId()).isEqualTo(SELLER);
@@ -45,7 +45,7 @@ class TransactionTest {
     void create_대여_정상() {
         LocalDateTime start = NOW.plusDays(1);
         LocalDateTime end = NOW.plusDays(7);
-        Transaction t = Transaction.create(ITEM, SELLER, BUYER, TradeType.대여, 5_000L, 50_000L, start, end);
+        Transaction t = Transaction.create(ITEM, SELLER, BUYER, TradeType.대여, 5_000L, 50_000L, start, end, null);
 
         assertThat(t.getDeposit()).isEqualTo(50_000L);
         assertThat(t.getRentalStart()).isEqualTo(start);
@@ -56,7 +56,7 @@ class TransactionTest {
     @DisplayName("create seller==buyer_거부")
     void create_self_거부() {
         assertThatThrownBy(() ->
-                Transaction.create(ITEM, SELLER, SELLER, TradeType.판매, 1L, null, null, null))
+                Transaction.create(ITEM, SELLER, SELLER, TradeType.판매, 1L, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -64,10 +64,10 @@ class TransactionTest {
     @DisplayName("create 대여인데 deposit/rental 누락_거부")
     void create_대여_누락_거부() {
         assertThatThrownBy(() ->
-                Transaction.create(ITEM, SELLER, BUYER, TradeType.대여, 1L, null, NOW, NOW.plusDays(1)))
+                Transaction.create(ITEM, SELLER, BUYER, TradeType.대여, 1L, null, NOW, NOW.plusDays(1), null))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() ->
-                Transaction.create(ITEM, SELLER, BUYER, TradeType.대여, 1L, 10_000L, null, NOW.plusDays(1)))
+                Transaction.create(ITEM, SELLER, BUYER, TradeType.대여, 1L, 10_000L, null, NOW.plusDays(1), null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -75,10 +75,10 @@ class TransactionTest {
     @DisplayName("create 판매인데 deposit/rental 박으면_거부")
     void create_판매_보증금_거부() {
         assertThatThrownBy(() ->
-                Transaction.create(ITEM, SELLER, BUYER, TradeType.판매, 1L, 10_000L, null, null))
+                Transaction.create(ITEM, SELLER, BUYER, TradeType.판매, 1L, 10_000L, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() ->
-                Transaction.create(ITEM, SELLER, BUYER, TradeType.판매, 1L, null, NOW, NOW.plusDays(1)))
+                Transaction.create(ITEM, SELLER, BUYER, TradeType.판매, 1L, null, NOW, NOW.plusDays(1), null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -86,10 +86,10 @@ class TransactionTest {
     @DisplayName("create 음수 price/deposit_거부")
     void create_음수_거부() {
         assertThatThrownBy(() ->
-                Transaction.create(ITEM, SELLER, BUYER, TradeType.판매, -1L, null, null, null))
+                Transaction.create(ITEM, SELLER, BUYER, TradeType.판매, -1L, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() ->
-                Transaction.create(ITEM, SELLER, BUYER, TradeType.대여, 1L, -1L, NOW, NOW.plusDays(1)))
+                Transaction.create(ITEM, SELLER, BUYER, TradeType.대여, 1L, -1L, NOW, NOW.plusDays(1), null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -97,10 +97,10 @@ class TransactionTest {
     @DisplayName("create rentalEnd <= rentalStart_거부")
     void create_rental_역전_거부() {
         assertThatThrownBy(() ->
-                Transaction.create(ITEM, SELLER, BUYER, TradeType.대여, 1L, 1_000L, NOW.plusDays(2), NOW.plusDays(1)))
+                Transaction.create(ITEM, SELLER, BUYER, TradeType.대여, 1L, 1_000L, NOW.plusDays(2), NOW.plusDays(1), null))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() ->
-                Transaction.create(ITEM, SELLER, BUYER, TradeType.대여, 1L, 1_000L, NOW, NOW))
+                Transaction.create(ITEM, SELLER, BUYER, TradeType.대여, 1L, 1_000L, NOW, NOW, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -294,6 +294,6 @@ class TransactionTest {
     }
 
     private static Transaction sale() {
-        return Transaction.create(ITEM, SELLER, BUYER, TradeType.판매, PRICE, null, null, null);
+        return Transaction.create(ITEM, SELLER, BUYER, TradeType.판매, PRICE, null, null, null, null);
     }
 }

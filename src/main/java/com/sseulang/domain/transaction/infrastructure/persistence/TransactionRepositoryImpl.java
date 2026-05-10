@@ -38,6 +38,14 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public boolean existsActiveByChatRoomId(Long chatRoomId) {
+        if (chatRoomId == null) {
+            return false;
+        }
+        return jpa.existsActiveByChatRoomIdJpql(chatRoomId);
+    }
+
+    @Override
     public List<TransactionStatusCount> countGroupByStatus() {
         return jpa.countGroupByStatusJpql();
     }

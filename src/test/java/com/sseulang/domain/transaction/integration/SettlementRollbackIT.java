@@ -2,6 +2,7 @@ package com.sseulang.domain.transaction.integration;
 
 import com.sseulang.domain.category.application.CategoryApplicationService;
 import com.sseulang.domain.category.infrastructure.persistence.CategoryRepositoryImpl;
+import com.sseulang.domain.chat.domain.ChatRoom;
 import com.sseulang.domain.file.application.NoOpPresignedUrlGenerator;
 import com.sseulang.domain.file.domain.PresignedUrlGenerator;
 import com.sseulang.domain.item.application.ItemApplicationService;
@@ -88,7 +89,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         TransactionRepositoryImpl.class,
         TransactionApplicationService.class,
         // v8b — UserApplicationService 가 UserReportRepository 도 의존
-        com.sseulang.domain.report.infrastructure.persistence.UserReportRepositoryImpl.class
+        com.sseulang.domain.report.infrastructure.persistence.UserReportRepositoryImpl.class,
+        // 라운드 12 (#3.2) — TransactionApplicationService 가 ChatRoomApplicationService 의존 추가
+        com.sseulang.domain.chat.infrastructure.persistence.ChatRoomRepositoryImpl.class,
+        com.sseulang.domain.chat.application.ChatRoomApplicationService.class,
+        com.sseulang.domain.user.infrastructure.persistence.UserViewAdapter.class,
+        com.sseulang.domain.item.infrastructure.persistence.ItemViewAdapter.class
 })
 @Testcontainers
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -153,8 +159,9 @@ class SettlementRollbackIT {
                 sellerId, null, "물건", "설명", 50_000L, null, null, TradeType.판매,
                 "서울", null, null
         )));
+        Long chatRoomId = txTemplate.execute(s -> persistChatRoom(itemId, sellerId, buyerId));
         Long txId = txTemplate.execute(s -> transactionService.create(
-                new TransactionCreateCommand(itemId, buyerId, null, null)
+                new TransactionCreateCommand(itemId, sellerId, chatRoomId, null, null)
         ));
 
         // reserve 시 hold 시도 → 잔액 부족으로 INSUFFICIENT_POINT (라운드 11 — 옛 정책은 거래완료 시점)
@@ -258,5 +265,12 @@ class SettlementRollbackIT {
         em.persist(user);
         em.flush();
         return user.getId();
+    }
+
+    private Long persistChatRoom(Long itemId, Long userA, Long userB) {
+        ChatRoom cr = ChatRoom.openFor(itemId, userA, userB);
+        em.persist(cr);
+        em.flush();
+        return cr.getId();
     }
 }

@@ -1,5 +1,6 @@
 package com.sseulang.domain.transaction.application;
 
+import com.sseulang.domain.chat.application.ChatRoomApplicationService;
 import com.sseulang.domain.item.application.ItemApplicationService;
 import com.sseulang.domain.item.application.dto.ItemForTransactionResult;
 import com.sseulang.domain.point.application.PointApplicationService;
@@ -53,6 +54,7 @@ public class TransactionApplicationService {
     private final ItemApplicationService itemApplicationService;
     private final PointApplicationService pointApplicationService;
     private final UserApplicationService userApplicationService;
+    private final ChatRoomApplicationService chatRoomApplicationService;
     private final ApplicationEventPublisher eventPublisher;
     private final java.time.Clock clock;
 
@@ -61,6 +63,7 @@ public class TransactionApplicationService {
             ItemApplicationService itemApplicationService,
             PointApplicationService pointApplicationService,
             UserApplicationService userApplicationService,
+            ChatRoomApplicationService chatRoomApplicationService,
             ApplicationEventPublisher eventPublisher,
             java.time.Clock clock
     ) {
@@ -68,27 +71,65 @@ public class TransactionApplicationService {
         this.itemApplicationService = itemApplicationService;
         this.pointApplicationService = pointApplicationService;
         this.userApplicationService = userApplicationService;
+        this.chatRoomApplicationService = chatRoomApplicationService;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
+    /**
+     * 거래 생성 — 라운드 12 (#3.2 + 판매자만 정책): 판매자가 채팅방 안에서 거래 시작.
+     *
+     * <p>검증 순서 (의도적):</p>
+     * <ol>
+     *   <li>chatRoomId 누락 → TX_CHATROOM_REQUIRED (다른 검증보다 먼저)</li>
+     *   <li>호출자(seller) verified — 자금 영향이라 이메일 인증 필수</li>
+     *   <li>chat_room 참여자 검증 + chatRoom.itemId == cmd.itemId 일치</li>
+     *   <li>호출자 == item.sellerId — 판매자만 거래 시작 가능 (TX_SELLER_ONLY)</li>
+     *   <li>한 채팅방 = 1 active transaction</li>
+     *   <li>buyer 도출 — chatRoom 의 상대방</li>
+     * </ol>
+     */
     @Transactional
     public Long create(TransactionCreateCommand cmd) {
-        // 거래 시작은 자금 영향 — 이메일 인증 필수 (게이트 1: 미인증 사용자 차단).
-        userApplicationService.requireVerified(cmd.buyerId());
-        ItemForTransactionResult info = itemApplicationService.findActiveForTransaction(cmd.itemId());
-        if (info.sellerId().equals(cmd.buyerId())) {
-            throw new BusinessException(ErrorCode.TRANSACTION_SELF_NOT_ALLOWED);
+        if (cmd.chatRoomId() == null) {
+            throw new BusinessException(ErrorCode.TX_CHATROOM_REQUIRED);
         }
+        // 호출자(seller) 인증 — 자금 흐름 진입자라 이메일 인증 필수.
+        userApplicationService.requireVerified(cmd.requesterId());
+
+        // Item 조회 먼저 — 미존재면 ITEM_NOT_FOUND (chatRoom 검증보다 우선).
+        ItemForTransactionResult info = itemApplicationService.findActiveForTransaction(cmd.itemId());
+
+        // 채팅방 가드 — 참여자 + chatRoom.itemId 일치 검증
+        ChatRoomApplicationService.ChatRoomMeta meta =
+                chatRoomApplicationService.findMetaForParticipant(cmd.chatRoomId(), cmd.requesterId());
+        if (!meta.itemId().equals(cmd.itemId())) {
+            throw new BusinessException(ErrorCode.TX_CHATROOM_ITEM_MISMATCH);
+        }
+
+        // 판매자만 거래 시작 가능 (#3.2 round 12 정책 변경)
+        if (!info.sellerId().equals(cmd.requesterId())) {
+            throw new BusinessException(ErrorCode.TX_SELLER_ONLY);
+        }
+
+        // 한 채팅방 = 1 active transaction 가드 (#3.2)
+        if (transactionRepository.existsActiveByChatRoomId(cmd.chatRoomId())) {
+            throw new BusinessException(ErrorCode.TX_ALREADY_ACTIVE_IN_ROOM);
+        }
+
+        // buyer 도출 — chatRoom 참여자 중 seller 가 아닌 쪽
+        Long buyerId = chatRoomApplicationService.findOpponent(cmd.chatRoomId(), cmd.requesterId());
+
         Transaction tx = Transaction.create(
                 info.itemId(),
                 info.sellerId(),
-                cmd.buyerId(),
+                buyerId,
                 info.tradeType(),
                 info.price(),
                 info.deposit(),
                 cmd.rentalStart(),
-                cmd.rentalEnd()
+                cmd.rentalEnd(),
+                cmd.chatRoomId()
         );
         return transactionRepository.save(tx).getId();
     }

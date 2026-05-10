@@ -34,14 +34,16 @@ public class TransactionController {
         this.transactionService = transactionService;
     }
 
-    @Operation(summary = "거래 생성 (buyer)",
-            description = "이메일 인증 필수. 본인 물품 / 비활성(예약/삭제) 물품 거부. 생성 즉시 status=채팅중.")
+    @Operation(summary = "거래 생성 (판매자)",
+            description = "이메일 인증 필수. 라운드 12 (#3.2): 판매자만 호출 가능 (TX_SELLER_ONLY). "
+                    + "chatRoomId 필수 — 채팅방 안에서만 거래 시작. buyerId 는 chatRoom 의 상대방에서 백엔드가 도출. "
+                    + "본인 물품 / 비활성(예약/삭제) 물품 거부. 생성 즉시 status=채팅중.")
     @PostMapping
     public ResponseEntity<ApiResponse<TransactionIdResponse>> create(
-            @AuthenticationPrincipal Long buyerId,
+            @AuthenticationPrincipal Long requesterId,
             @Valid @RequestBody TransactionCreateRequest request
     ) {
-        Long id = transactionService.create(request.toCommand(buyerId));
+        Long id = transactionService.create(request.toCommand(requesterId));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok(new TransactionIdResponse(id)));
     }
