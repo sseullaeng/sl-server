@@ -2,6 +2,7 @@ package com.sseulang.domain.transaction.integration;
 
 import com.sseulang.domain.category.application.CategoryApplicationService;
 import com.sseulang.domain.category.infrastructure.persistence.CategoryRepositoryImpl;
+import com.sseulang.domain.chat.domain.ChatRoom;
 import com.sseulang.domain.file.application.NoOpPresignedUrlGenerator;
 import com.sseulang.domain.item.application.NoOpWishlistView;
 import com.sseulang.domain.item.application.ItemApplicationService;
@@ -78,7 +79,12 @@ import static org.assertj.core.api.Assertions.assertThat;
         TransactionRepositoryImpl.class,
         TransactionApplicationService.class,
         // v8b — UserApplicationService 가 UserReportRepository 도 의존
-        com.sseulang.domain.report.infrastructure.persistence.UserReportRepositoryImpl.class
+        com.sseulang.domain.report.infrastructure.persistence.UserReportRepositoryImpl.class,
+        // 라운드 12 (#3.2) — TransactionApplicationService 가 ChatRoomApplicationService 의존 추가
+        com.sseulang.domain.chat.infrastructure.persistence.ChatRoomRepositoryImpl.class,
+        com.sseulang.domain.chat.application.ChatRoomApplicationService.class,
+        com.sseulang.domain.user.infrastructure.persistence.UserViewAdapter.class,
+        com.sseulang.domain.item.infrastructure.persistence.ItemViewAdapter.class
 })
 @Testcontainers
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -124,6 +130,8 @@ class TransactionConcurrencyIT {
     private Long buyer1Id;
     private Long buyer2Id;
     private Long itemId;
+    private Long chatRoom1Id;
+    private Long chatRoom2Id;
     private Long tx1Id;
     private Long tx2Id;
 
@@ -146,8 +154,12 @@ class TransactionConcurrencyIT {
                     "서울", null, null
             ));
 
-            tx1Id = transactionService.create(new TransactionCreateCommand(itemId, buyer1Id, null, null));
-            tx2Id = transactionService.create(new TransactionCreateCommand(itemId, buyer2Id, null, null));
+            // 라운드 12 — 거래 시작은 채팅방 안에서만 + 판매자만. buyer 별 별도 채팅방.
+            chatRoom1Id = persistChatRoom(itemId, sellerId, buyer1Id);
+            chatRoom2Id = persistChatRoom(itemId, sellerId, buyer2Id);
+
+            tx1Id = transactionService.create(new TransactionCreateCommand(itemId, sellerId, chatRoom1Id, null, null));
+            tx2Id = transactionService.create(new TransactionCreateCommand(itemId, sellerId, chatRoom2Id, null, null));
             return null;
         });
     }
@@ -210,17 +222,16 @@ class TransactionConcurrencyIT {
     @Test
     @DisplayName("라운드 11 — 같은 buyer 두 거래 동시 reserve_잔액 한건만 충당_정확히 1건만 성공")
     void buyer_hold_race() throws Exception {
-        // 별도 두 Item + 두 거래 (buyer 동일, 잔액 50000 한 건만 가능)
+        // 별도 두 Item + 두 거래 (buyer 동일, 잔액 50000 한 건만 가능). 라운드 12 — 거래는 채팅방 안에서만 (판매자만).
         Long item2Id = txTemplate.execute(status -> itemService.register(new ItemRegisterCommand(
                 sellerId, null, "물건2", "설명", 50_000L, null, null, TradeType.판매, "서울", null, null
         )));
-        Long txA = txTemplate.execute(status ->
-                transactionService.create(new TransactionCreateCommand(itemId, buyer1Id, null, null)));
+        // setUp 의 tx1Id (item1+buyer1, chatRoom1) 그대로 사용 — buyer1 의 첫 번째 거래.
+        // 두 번째 거래는 item2 + 새 채팅방 (item2, seller, buyer1).
+        Long chatRoomB = txTemplate.execute(status -> persistChatRoom(item2Id, sellerId, buyer1Id));
+        Long txA = tx1Id;
         Long txB = txTemplate.execute(status ->
-                transactionService.create(new TransactionCreateCommand(item2Id, buyer1Id, null, null)));
-        // 기존 setUp 의 tx1 (item1, buyer1) 를 cancel 해 같은 Item 재예약 가능 상태로
-        // → 위 txA 가 새 Item 거래라 tx1Id 는 무시 가능. 단, item.status=판매중 인지 보장 필요.
-        // setUp 직후 item1 은 판매중이라 OK.
+                transactionService.create(new TransactionCreateCommand(item2Id, sellerId, chatRoomB, null, null)));
 
         ExecutorService exec = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -360,5 +371,12 @@ class TransactionConcurrencyIT {
         em.persist(user);
         em.flush();
         return user.getId();
+    }
+
+    private Long persistChatRoom(Long itemId, Long userA, Long userB) {
+        ChatRoom cr = ChatRoom.openFor(itemId, userA, userB);
+        em.persist(cr);
+        em.flush();
+        return cr.getId();
     }
 }

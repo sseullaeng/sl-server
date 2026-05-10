@@ -46,6 +46,15 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
     }
 
     @Override
+    public boolean existsActiveByChatRoomId(Long chatRoomId) {
+        if (chatRoomId == null) return false;
+        return store.values().stream()
+                .anyMatch(t -> chatRoomId.equals(t.getChatRoomId())
+                        && t.getStatus() != TransactionStatus.거래완료
+                        && t.getStatus() != TransactionStatus.취소);
+    }
+
+    @Override
     public List<TransactionStatusCount> countGroupByStatus() {
         return store.values().stream()
                 .collect(Collectors.groupingBy(Transaction::getStatus, Collectors.counting()))

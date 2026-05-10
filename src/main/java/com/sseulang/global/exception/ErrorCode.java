@@ -53,6 +53,10 @@ public enum ErrorCode {
     TRANSACTION_HANDOVER_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "인계 확인은 판매자만 수행할 수 있습니다."),
     TRANSACTION_RECEIVE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "인수 확인은 구매자만 수행할 수 있습니다."),
     TRANSACTION_HOLD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "거래 보관 잔액 처리에 실패했습니다."),
+    TX_CHATROOM_REQUIRED(HttpStatus.BAD_REQUEST, "거래 시작은 채팅방 안에서만 가능합니다 (chatRoomId 필수)."),
+    TX_CHATROOM_ITEM_MISMATCH(HttpStatus.BAD_REQUEST, "채팅방의 물품과 거래 요청 물품이 다릅니다."),
+    TX_ALREADY_ACTIVE_IN_ROOM(HttpStatus.BAD_REQUEST, "해당 채팅방에 진행 중인 거래가 이미 있습니다."),
+    TX_SELLER_ONLY(HttpStatus.FORBIDDEN, "거래 시작은 판매자만 가능합니다."),
 
     // 결제 / 포인트
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "결제 정보를 찾을 수 없습니다."),
@@ -74,6 +78,8 @@ public enum ErrorCode {
     // 채팅 / 알림
     CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "채팅방을 찾을 수 없습니다."),
     CHAT_FORBIDDEN(HttpStatus.FORBIDDEN, "채팅방에 접근할 권한이 없습니다."),
+    CHAT_ROOM_OPPONENT_LEFT(HttpStatus.BAD_REQUEST, "상대방이 채팅방을 나가서 더 이상 메시지를 보낼 수 없습니다."),
+    CHAT_ROOM_ALREADY_LEFT(HttpStatus.BAD_REQUEST, "이미 나간 채팅방입니다."),
 
     // 리뷰
     REVIEW_DUPLICATED(HttpStatus.CONFLICT, "이미 작성한 리뷰입니다."),
@@ -117,6 +123,9 @@ public enum ErrorCode {
     ESCROW_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서 수행할 수 없는 동작입니다."),
     ESCROW_FORM_INVALID(HttpStatus.BAD_REQUEST, "거래대행 신청 입력값이 올바르지 않습니다."),
     ESCROW_FEE_MISMATCH(HttpStatus.BAD_REQUEST, "수수료 정책이 변경되었습니다. 새 금액 확인 후 다시 시도해주세요."),
+    ESCROW_CHATROOM_REQUIRED(HttpStatus.BAD_REQUEST, "거래대행 신청은 채팅방 안에서만 가능합니다 (chatRoomId 필수)."),
+    ESCROW_TX_CHATROOM_MISMATCH(HttpStatus.BAD_REQUEST, "쓸랭 거래의 채팅방과 거래대행 신청 채팅방이 다릅니다."),
+    ESCROW_SELLER_ONLY(HttpStatus.FORBIDDEN, "거래대행 신청은 판매자만 가능합니다."),
 
     PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "요청 본문 크기가 한도를 초과합니다.");
 

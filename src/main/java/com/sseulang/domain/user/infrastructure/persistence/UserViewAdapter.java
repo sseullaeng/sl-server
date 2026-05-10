@@ -13,11 +13,11 @@ import java.util.Map;
  * 단일 SELECT IN — N+1 회피.
  */
 @Component
-class UserViewAdapter implements UserView {
+public class UserViewAdapter implements UserView {
 
     private final UserJpaRepository jpa;
 
-    UserViewAdapter(UserJpaRepository jpa) {
+    public UserViewAdapter(UserJpaRepository jpa) {
         this.jpa = jpa;
     }
 

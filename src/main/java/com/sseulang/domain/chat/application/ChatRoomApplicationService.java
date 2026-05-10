@@ -110,6 +110,33 @@ public class ChatRoomApplicationService {
         return enrichOne(room, userId);
     }
 
+    /**
+     * 라운드 12 (#3.2 #3.3) — 거래/거래대행이 채팅방 안에서 시작되는지 가드용. 참여자 검증 +
+     * chatRoom 메타 (itemId, left flags) 노출. 호출자가 itemId 일치 / leftFlags 별로 분기.
+     *
+     * <ul>
+     *   <li>ChatRoom 미존재 → CHAT_ROOM_NOT_FOUND</li>
+     *   <li>비참여자 → CHAT_FORBIDDEN</li>
+     * </ul>
+     *
+     * <p>본 메서드는 read-only — 잔액/상태 변경 가드는 호출자 ApplicationService 가 책임.</p>
+     */
+    public ChatRoomMeta findMetaForParticipant(Long chatRoomId, Long userId) {
+        ChatRoom room = chatRoomRepository.findById(chatRoomId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        if (!room.isParticipant(userId)) {
+            throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
+        }
+        return new ChatRoomMeta(room.getId(), room.getItemId(),
+                room.iLeft(userId), room.opponentLeft(userId));
+    }
+
+    /**
+     * 라운드 12 — 외부 도메인용 chat_room 메타 read model. {@code itemId} 는 거래 영역의
+     * chat_room ↔ item 일치 검증, {@code iLeft / opponentLeft} 는 거래대행 신청 시 한쪽 left 차단용.
+     */
+    public record ChatRoomMeta(Long chatRoomId, Long itemId, boolean iLeft, boolean opponentLeft) { }
+
     /** Message 도메인이 메시지 보낼 권한 검증 시 호출. 참여자 아니면 CHAT_FORBIDDEN. */
     public void requireParticipant(Long chatRoomId, Long userId) {
         ChatRoom room = chatRoomRepository.findById(chatRoomId)
@@ -117,6 +144,40 @@ public class ChatRoomApplicationService {
         if (!room.isParticipant(userId)) {
             throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
         }
+    }
+
+    /**
+     * 메시지 송신 가능 여부 검증 — 참여자 + 본인 left X + 상대방 left X.
+     * 본인 left → CHAT_FORBIDDEN (이미 나간 방).
+     * 상대방 left → CHAT_ROOM_OPPONENT_LEFT (상대방이 나가서 차단).
+     */
+    public void requireSendable(Long chatRoomId, Long userId) {
+        ChatRoom room = chatRoomRepository.findById(chatRoomId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        if (!room.isParticipant(userId)) {
+            throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
+        }
+        if (room.iLeft(userId)) {
+            throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
+        }
+        if (room.opponentLeft(userId)) {
+            throw new BusinessException(ErrorCode.CHAT_ROOM_OPPONENT_LEFT);
+        }
+    }
+
+    /**
+     * 채팅방 나가기 (soft hide) — 본인 측 left_at = NOW(). 데이터/메시지 보존.
+     * 본인 listMine 에서 제외, 상대방은 opponentLeft=true 응답 받음.
+     * 비참여자 호출은 CHAT_FORBIDDEN. 이미 left 상태도 idempotent (재호출 OK).
+     */
+    @Transactional
+    public void leave(Long roomId, Long userId) {
+        ChatRoom room = chatRoomRepository.findById(roomId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        if (!room.isParticipant(userId)) {
+            throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
+        }
+        chatRoomRepository.markAsLeft(roomId, userId);
     }
 
     /**

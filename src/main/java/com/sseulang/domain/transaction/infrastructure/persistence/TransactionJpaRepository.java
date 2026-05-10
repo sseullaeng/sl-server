@@ -23,6 +23,20 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
     Optional<Transaction> findByIdForUpdate(@Param("id") Long id);
 
     /**
+     * 라운드 12 (#3.2) — 한 채팅방 = 1 active transaction 가드.
+     * active = status NOT IN (거래완료, 취소). chat_room_id 미지정 (legacy) 거래는 매칭 X.
+     */
+    @Query("""
+            SELECT (COUNT(t) > 0) FROM Transaction t
+             WHERE t.chatRoomId = :chatRoomId
+               AND t.status NOT IN (
+                   com.sseulang.domain.transaction.domain.TransactionStatus.거래완료,
+                   com.sseulang.domain.transaction.domain.TransactionStatus.취소
+               )
+            """)
+    boolean existsActiveByChatRoomIdJpql(@Param("chatRoomId") Long chatRoomId);
+
+    /**
      * status 별 거래 건수 집계. 단일 쿼리 — N+1 없음. 결과는 status 가 한 번이라도 등장한 행만 옴
      * (0 건인 status 는 application 단에서 0 으로 채움). status 컬럼 인덱스 권장.
      */

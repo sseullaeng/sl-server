@@ -49,8 +49,12 @@ class ReviewApplicationServiceTest {
         UserApplicationService userSvc = new UserApplicationService(userRepo, new com.sseulang.domain.transaction.application.InMemoryFakeTransactionRepository(), new com.sseulang.domain.report.application.InMemoryFakeUserReportRepository(), new com.sseulang.domain.auth.application.NoOpRefreshTokenStore(), java.time.Clock.systemDefaultZone());
         ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, userSvc, new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(), new com.sseulang.domain.item.application.NoOpWishlistView());
         PointApplicationService pointSvc = new PointApplicationService(userSvc, new InMemoryFakePointHistoryRepository());
+        com.sseulang.domain.chat.application.ChatRoomApplicationService chatSvc =
+                new com.sseulang.domain.chat.application.ChatRoomApplicationService(
+                        new com.sseulang.domain.chat.application.InMemoryFakeChatRoomRepository(),
+                        itemSvc, userSvc, null, null);
         TransactionApplicationService txSvc = new TransactionApplicationService(
-                txRepo, itemSvc, pointSvc, userSvc,
+                txRepo, itemSvc, pointSvc, userSvc, chatSvc,
                 (org.springframework.context.ApplicationEventPublisher) event -> {},
                 java.time.Clock.systemDefaultZone());
         service = new ReviewApplicationService(reviewRepo, txSvc, userSvc);
@@ -179,7 +183,7 @@ class ReviewApplicationServiceTest {
     }
 
     private Long persistTransaction(Long itemId, TransactionStatus status, LocalDateTime completedAt) {
-        Transaction tx = Transaction.create(itemId, SELLER, BUYER, TradeType.판매, 50_000L, null, null, null);
+        Transaction tx = Transaction.create(itemId, SELLER, BUYER, TradeType.판매, 50_000L, null, null, null, null);
         ReflectionTestUtils.setField(tx, "status", status);
         if (completedAt != null) {
             ReflectionTestUtils.setField(tx, "completedAt", completedAt);

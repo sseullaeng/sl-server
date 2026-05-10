@@ -36,6 +36,7 @@ class TransactionApplicationServiceTest {
     private InMemoryFakeItemRepository itemRepo;
     private InMemoryFakeUserRepository userRepo;
     private InMemoryFakePointHistoryRepository pointHistoryRepo;
+    private com.sseulang.domain.chat.application.InMemoryFakeChatRoomRepository chatRoomRepo;
     private List<Object> publishedEvents;
     private ItemApplicationService itemSvc;
     private TransactionApplicationService service;
@@ -43,6 +44,7 @@ class TransactionApplicationServiceTest {
     private Long SELLER;
     private Long BUYER;
     private Long OUTSIDER;
+    private Long chatRoomId;
 
     @BeforeEach
     void setUp() {
@@ -63,9 +65,13 @@ class TransactionApplicationServiceTest {
                 new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(),
                 new com.sseulang.domain.item.application.NoOpWishlistView());
         PointApplicationService pointSvc = new PointApplicationService(userSvc, pointHistoryRepo);
+        chatRoomRepo = new com.sseulang.domain.chat.application.InMemoryFakeChatRoomRepository();
+        com.sseulang.domain.chat.application.ChatRoomApplicationService chatSvc =
+                new com.sseulang.domain.chat.application.ChatRoomApplicationService(
+                        chatRoomRepo, itemSvc, userSvc, null, null);
         org.springframework.context.ApplicationEventPublisher publisher = publishedEvents::add;
         service = new TransactionApplicationService(
-                txRepo, itemSvc, pointSvc, userSvc, publisher, java.time.Clock.systemDefaultZone());
+                txRepo, itemSvc, pointSvc, userSvc, chatSvc, publisher, java.time.Clock.systemDefaultZone());
 
         SELLER = userRepo.save(User.createSocialUser(
                 SocialProvider.KAKAO, "k-seller", new Email("seller@x.com"), "seller", null
@@ -81,6 +87,10 @@ class TransactionApplicationServiceTest {
                 SELLER, null, "물건", "설명", 50_000L, null, null, TradeType.판매, "서울"
         ));
         itemId = item.getId();
+        // 라운드 12 (#3.2) — chatRoom 가드. BUYER ↔ SELLER 채팅방 미리 생성.
+        com.sseulang.domain.chat.domain.ChatRoom room =
+                com.sseulang.domain.chat.domain.ChatRoom.openFor(itemId, BUYER, SELLER);
+        chatRoomId = chatRoomRepo.save(room).getId();
     }
 
     // ───────── create ─────────
@@ -88,7 +98,7 @@ class TransactionApplicationServiceTest {
     @Test
     @DisplayName("create 정상_status=채팅중")
     void create_정상() {
-        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        Long txId = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
 
         TransactionResult r = service.getById(txId, BUYER);
         assertThat(r.itemId()).isEqualTo(itemId);
@@ -100,13 +110,13 @@ class TransactionApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("create 본인 물품_TRANSACTION_SELF_NOT_ALLOWED")
-    void create_본인_거부() {
+    @DisplayName("create buyer 호출_TX_SELLER_ONLY (라운드 12 정책)")
+    void create_buyer_거부() {
         assertThatThrownBy(() ->
-                service.create(new TransactionCreateCommand(itemId, SELLER, null, null)))
+                service.create(new TransactionCreateCommand(itemId, BUYER, chatRoomId, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.TRANSACTION_SELF_NOT_ALLOWED);
+                .isEqualTo(ErrorCode.TX_SELLER_ONLY);
     }
 
     @Test
@@ -117,7 +127,7 @@ class TransactionApplicationServiceTest {
         itemRepo.save(item);
 
         assertThatThrownBy(() ->
-                service.create(new TransactionCreateCommand(itemId, BUYER, null, null)))
+                service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
@@ -127,7 +137,7 @@ class TransactionApplicationServiceTest {
     @DisplayName("create 없는 Item_ITEM_NOT_FOUND")
     void create_없는_item() {
         assertThatThrownBy(() ->
-                service.create(new TransactionCreateCommand(9999L, BUYER, null, null)))
+                service.create(new TransactionCreateCommand(9999L, SELLER, chatRoomId, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.ITEM_NOT_FOUND);
@@ -138,7 +148,7 @@ class TransactionApplicationServiceTest {
     @Test
     @DisplayName("reserve 정상_buyer balance↓ + hold↑ + escrowHoldAmount + 거래보관 history + ReservedEvent")
     void reserve_정상_hold() {
-        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        Long txId = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
         userRepo.creditPointBalance(BUYER, 50_000L);  // 잔액 충전
 
         service.reserve(txId, SELLER);
@@ -158,7 +168,7 @@ class TransactionApplicationServiceTest {
     @Test
     @DisplayName("reserve 잔액 부족_INSUFFICIENT_POINT")
     void reserve_잔액부족_거부() {
-        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        Long txId = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
         userRepo.creditPointBalance(BUYER, 10_000L);  // 부족
 
         assertThatThrownBy(() -> service.reserve(txId, SELLER))
@@ -170,7 +180,7 @@ class TransactionApplicationServiceTest {
     @Test
     @DisplayName("reserve buyer 호출_TRANSACTION_FORBIDDEN")
     void reserve_buyer_거부() {
-        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        Long txId = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
 
         assertThatThrownBy(() -> service.reserve(txId, BUYER))
                 .isInstanceOf(BusinessException.class)
@@ -181,7 +191,7 @@ class TransactionApplicationServiceTest {
     @Test
     @DisplayName("reserve 외부인_TRANSACTION_FORBIDDEN")
     void reserve_외부인_거부() {
-        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        Long txId = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
 
         assertThatThrownBy(() -> service.reserve(txId, OUTSIDER))
                 .isInstanceOf(BusinessException.class)
@@ -198,8 +208,12 @@ class TransactionApplicationServiceTest {
         )).getId();
         userRepo.creditPointBalance(BUYER, 50_000L);
         userRepo.creditPointBalance(buyer2, 50_000L);
-        Long tx1 = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
-        Long tx2 = service.create(new TransactionCreateCommand(itemId, buyer2, null, null));
+        // 라운드 12: SELLER 가 두 buyer 와 각 채팅방에서 거래 시작 (두 채팅방 = 두 active 가능).
+        com.sseulang.domain.chat.domain.ChatRoom room2 =
+                com.sseulang.domain.chat.domain.ChatRoom.openFor(itemId, buyer2, SELLER);
+        Long chatRoomId2 = chatRoomRepo.save(room2).getId();
+        Long tx1 = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
+        Long tx2 = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId2, null, null));
 
         service.reserve(tx1, SELLER);
 
@@ -317,7 +331,7 @@ class TransactionApplicationServiceTest {
     @Test
     @DisplayName("cancel 채팅중 buyer_정상_Item 변경 없음 + 잔액 변동 없음")
     void cancel_채팅중() {
-        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        Long txId = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
 
         service.cancel(txId, BUYER, "변심");
 
@@ -361,7 +375,7 @@ class TransactionApplicationServiceTest {
     @Test
     @DisplayName("cancel 외부인_TRANSACTION_FORBIDDEN")
     void cancel_외부인_거부() {
-        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        Long txId = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
 
         assertThatThrownBy(() -> service.cancel(txId, OUTSIDER, null))
                 .isInstanceOf(BusinessException.class)
@@ -372,7 +386,7 @@ class TransactionApplicationServiceTest {
     @Test
     @DisplayName("getById 비참여자_TRANSACTION_FORBIDDEN")
     void getById_외부인_거부() {
-        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        Long txId = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
 
         assertThatThrownBy(() -> service.getById(txId, OUTSIDER))
                 .isInstanceOf(BusinessException.class)
@@ -390,12 +404,16 @@ class TransactionApplicationServiceTest {
         userRepo.creditPointBalance(BUYER, 50_000L);
         userRepo.creditPointBalance(buyer2, 50_000L);
 
-        Long tx1 = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        Long tx1 = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
         service.reserve(tx1, SELLER);
         service.cancel(tx1, SELLER, "재예약 가능");
         assertThat(userRepo.findPointBalance(BUYER)).isEqualTo(50_000L);  // 환불 OK
 
-        Long tx2 = service.create(new TransactionCreateCommand(itemId, buyer2, null, null));
+        // 라운드 12 — buyer2 와 SELLER 의 새 chatRoom 필요 (한 채팅방=1 active 정책 + 거래 시작은 판매자만).
+        com.sseulang.domain.chat.domain.ChatRoom room2 =
+                com.sseulang.domain.chat.domain.ChatRoom.openFor(itemId, buyer2, SELLER);
+        Long chatRoom2Id = chatRoomRepo.save(room2).getId();
+        Long tx2 = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoom2Id, null, null));
         service.reserve(tx2, SELLER);
 
         assertThat(service.getById(tx2, SELLER).status()).isEqualTo(TransactionStatus.예약);
@@ -406,7 +424,7 @@ class TransactionApplicationServiceTest {
     /** buyer 충전 + 거래 생성 + reserve 까지 진행한 trasaction id 반환. */
     private Long reservedTxByBuyer() {
         userRepo.creditPointBalance(BUYER, 50_000L);
-        Long txId = service.create(new TransactionCreateCommand(itemId, BUYER, null, null));
+        Long txId = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
         service.reserve(txId, SELLER);
         return txId;
     }

@@ -83,4 +83,16 @@ public class ChatRoomController {
     ) {
         return ApiResponse.ok(ChatRoomResponse.from(chatRoomService.markAsRead(id, requesterId)));
     }
+
+    @Operation(summary = "채팅방 나가기 (soft hide)",
+            description = "본인 측에서 채팅방 hide. 본인 listMine 에서 제외, 상대방은 opponentLeft=true 응답 받음 + 메시지 send 차단. "
+                    + "데이터·메시지는 보존 (audit 용). 참여자만 호출 (그 외 403 CHAT_FORBIDDEN). idempotent.")
+    @PatchMapping("/{id}/leave")
+    public ApiResponse<Void> leave(
+            @AuthenticationPrincipal Long requesterId,
+            @PathVariable("id") Long id
+    ) {
+        chatRoomService.leave(id, requesterId);
+        return ApiResponse.ok();
+    }
 }

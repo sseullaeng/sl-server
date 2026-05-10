@@ -27,6 +27,8 @@ public record ChatRoomResult(
         String itemTitle,
         String itemThumbnailUrl,
         boolean isSeller,                 // viewer 가 이 채팅방의 아이템 판매자인지
+        boolean iLeft,                    // 본인이 채팅방을 나갔는지 (soft hide)
+        boolean opponentLeft,             // 상대방이 채팅방을 나갔는지
         // 메타
         String lastMessage,
         LocalDateTime lastMessageAt,
@@ -61,12 +63,15 @@ public record ChatRoomResult(
             myUnread = 0;
         }
         boolean isSeller = itemSellerId != null && viewerId != null && itemSellerId.equals(viewerId);
+        boolean iLeft = c.iLeft(viewerId);
+        boolean opponentLeft = c.opponentLeft(viewerId);
         return new ChatRoomResult(
                 c.getId(), c.getItemId(),
                 c.getUser1Id(), c.getUser2Id(),
                 c.getUser1Unread(), c.getUser2Unread(),
                 opponentId, opponentNickname, opponentProfileImage, myUnread,
                 itemTitle, itemThumbnailUrl, isSeller,
+                iLeft, opponentLeft,
                 c.getLastMessage(), c.getLastMessageAt(),
                 c.isActive(),
                 c.getCreatedAt(), c.getUpdatedAt()

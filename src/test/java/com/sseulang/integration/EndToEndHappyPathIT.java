@@ -239,12 +239,21 @@ class EndToEndHappyPathIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("완료"));
 
-        // ───────── 5. Buyer Transaction create ─────────
-        MvcResult txResult = mvc.perform(post("/api/v1/transactions")
+        // ───────── 5. Buyer 채팅방 개설 + Seller Transaction create (라운드 12) ─────────
+        MvcResult roomResult = mvc.perform(post("/api/v1/chat-rooms")
                         .with(csrf())
                         .cookie(buyerAt)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"itemId\":" + itemId + "}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        Long chatRoomId = readId(roomResult, "$.data.id");
+
+        MvcResult txResult = mvc.perform(post("/api/v1/transactions")
+                        .with(csrf())
+                        .cookie(sellerAt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itemId\":" + itemId + ",\"chatRoomId\":" + chatRoomId + "}"))
                 .andExpect(status().isCreated())
                 .andReturn();
         Long txId = readId(txResult, "$.data.id");

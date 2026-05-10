@@ -46,6 +46,13 @@ public class Transaction extends BaseEntity {
     @Column(name = "buyer_id", nullable = false)
     private Long buyerId;
 
+    /**
+     * 라운드 12 (#3.2) — 거래 시작 채팅방 가드. V19 추가. 거래는 채팅방 안에서만 시작 가능,
+     * 한 채팅방 = 1 active transaction 정책. 이전 라운드 row 는 NULL (legacy).
+     */
+    @Column(name = "chat_room_id")
+    private Long chatRoomId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "trade_type", nullable = false)
     private TradeType tradeType;
@@ -108,7 +115,8 @@ public class Transaction extends BaseEntity {
             long price,
             Long deposit,
             LocalDateTime rentalStart,
-            LocalDateTime rentalEnd
+            LocalDateTime rentalEnd,
+            Long chatRoomId
     ) {
         if (itemId == null || itemId <= 0) {
             throw new IllegalArgumentException("itemId 는 양수여야 합니다");
@@ -128,6 +136,9 @@ public class Transaction extends BaseEntity {
         if (price < 0) {
             throw new IllegalArgumentException("price 는 0 이상이어야 합니다");
         }
+        if (chatRoomId != null && chatRoomId <= 0) {
+            throw new IllegalArgumentException("chatRoomId 는 양수여야 합니다");
+        }
         validateRentalFields(tradeType, deposit, rentalStart, rentalEnd);
 
         Transaction t = new Transaction();
@@ -139,6 +150,7 @@ public class Transaction extends BaseEntity {
         t.deposit = deposit;
         t.rentalStart = rentalStart;
         t.rentalEnd = rentalEnd;
+        t.chatRoomId = chatRoomId;
         t.status = TransactionStatus.채팅중;
         return t;
     }

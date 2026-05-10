@@ -66,6 +66,8 @@ public class MessageApplicationService {
      */
     @Transactional
     public MessageResult send(MessageSendCommand cmd) {
+        // soft hide 가드 — 본인이 left 한 방에 송신 X / 상대방이 left 한 방도 송신 X (#3.1).
+        chatRoomApplicationService.requireSendable(cmd.chatRoomId(), cmd.senderId());
         Long opponentId = chatRoomApplicationService.findOpponent(cmd.chatRoomId(), cmd.senderId());
 
         Message saved;

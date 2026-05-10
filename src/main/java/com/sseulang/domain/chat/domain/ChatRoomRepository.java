@@ -29,4 +29,10 @@ public interface ChatRoomRepository {
      * 본인 unread 만 0 으로 atomic UPDATE. 비참여자는 영향 0. 권한 검증은 서비스 책임.
      */
     int markAsRead(Long chatRoomId, Long userId);
+
+    /**
+     * 본인 측 left_at 을 NOW() 로 atomic UPDATE (soft hide). 이미 left 면 그 값 유지.
+     * 비참여자는 0 행 영향 — 서비스가 사전 권한 검증. 이미 left 상태도 1 행 영향 가능 (CASE WHEN 로 보존).
+     */
+    int markAsLeft(Long chatRoomId, Long userId);
 }

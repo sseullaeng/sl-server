@@ -160,7 +160,7 @@ class EndToEndGuardScenariosIT {
                         .with(csrf())
                         .cookie(atCookie)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":1}"))
+                        .content("{\"itemId\":1, \"chatRoomId\":1}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("AUTH_EMAIL_NOT_VERIFIED"));
 
@@ -209,8 +209,9 @@ class EndToEndGuardScenariosIT {
         Cookie buyerAt = oauthLoginAndExtractAt("BUYER", "kakao-buyer-" + UUID.randomUUID(),
                 "buyer-" + System.nanoTime() + "@e2e.test", "바이어");
 
-        // 거래 생성 — 채팅중 (자금 이동 없음).
-        Long txId = createTransaction(buyerAt, itemId);
+        // 거래 생성 — 채팅중 (자금 이동 없음). 라운드 12: buyer 가 채팅방 개설, seller 가 거래 시작.
+        Long chatRoomId = createChatRoom(buyerAt, itemId);
+        Long txId = createTransaction(sellerAt, itemId, chatRoomId);
 
         // 라운드 11 — Seller 예약 시 buyer hold 시도 → 잔액 0 < 50000 → INSUFFICIENT_POINT.
         // (옛 정책은 거래완료 시점에 차감, 라운드 11 부터는 reserve 시점에 hold 함.)
@@ -325,12 +326,23 @@ class EndToEndGuardScenariosIT {
         return readLong(result, "/data/id");
     }
 
-    private Long createTransaction(Cookie buyerAt, Long itemId) throws Exception {
-        MvcResult result = mvc.perform(post("/api/v1/transactions")
+    private Long createChatRoom(Cookie buyerAt, Long itemId) throws Exception {
+        MvcResult result = mvc.perform(post("/api/v1/chat-rooms")
                         .with(csrf())
                         .cookie(buyerAt)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"itemId\":" + itemId + "}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        return readLong(result, "/data/id");
+    }
+
+    private Long createTransaction(Cookie sellerAt, Long itemId, Long chatRoomId) throws Exception {
+        MvcResult result = mvc.perform(post("/api/v1/transactions")
+                        .with(csrf())
+                        .cookie(sellerAt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itemId\":" + itemId + ",\"chatRoomId\":" + chatRoomId + "}"))
                 .andExpect(status().isCreated())
                 .andReturn();
         return readLong(result, "/data/id");

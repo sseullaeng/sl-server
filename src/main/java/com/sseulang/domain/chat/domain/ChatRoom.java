@@ -56,6 +56,12 @@ public class ChatRoom extends BaseEntity {
     @Column(name = "is_active", nullable = false)
     private boolean active;
 
+    @Column(name = "user1_left_at")
+    private LocalDateTime user1LeftAt;
+
+    @Column(name = "user2_left_at")
+    private LocalDateTime user2LeftAt;
+
     /**
      * {@code (itemId, requesterId, opponentId)} 로 채팅방 생성. {@code user1Id < user2Id} 강제 정규화.
      */
@@ -100,5 +106,49 @@ public class ChatRoom extends BaseEntity {
         } else if (userId.equals(user2Id)) {
             this.user2Unread = 0;
         }
+    }
+
+    /**
+     * 본인 측 채팅방을 soft hide. 본인이 user1 이면 user1LeftAt = now, user2 면 user2LeftAt = now.
+     * 이미 left 상태면 no-op (idempotent). 비참여자 호출은 IllegalStateException — 서비스가 사전 검증해야 함.
+     */
+    public void leave(Long userId, LocalDateTime now) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId 는 필수입니다");
+        }
+        if (now == null) {
+            throw new IllegalArgumentException("now 는 필수입니다");
+        }
+        if (userId.equals(user1Id)) {
+            if (this.user1LeftAt == null) {
+                this.user1LeftAt = now;
+            }
+        } else if (userId.equals(user2Id)) {
+            if (this.user2LeftAt == null) {
+                this.user2LeftAt = now;
+            }
+        } else {
+            throw new IllegalStateException("채팅방 참여자만 나갈 수 있습니다 — userId=" + userId);
+        }
+    }
+
+    /**
+     * 본인이 채팅방을 나갔는지. 비참여자는 false (의미 없는 질문이라 false 로 통일).
+     */
+    public boolean iLeft(Long userId) {
+        if (userId == null) return false;
+        if (userId.equals(user1Id)) return this.user1LeftAt != null;
+        if (userId.equals(user2Id)) return this.user2LeftAt != null;
+        return false;
+    }
+
+    /**
+     * 상대방이 채팅방을 나갔는지. 비참여자는 false (의미 없는 질문이라 false 로 통일).
+     */
+    public boolean opponentLeft(Long userId) {
+        if (userId == null) return false;
+        if (userId.equals(user1Id)) return this.user2LeftAt != null;
+        if (userId.equals(user2Id)) return this.user1LeftAt != null;
+        return false;
     }
 }
