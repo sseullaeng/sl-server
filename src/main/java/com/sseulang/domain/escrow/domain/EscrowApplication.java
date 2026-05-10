@@ -37,8 +37,18 @@ public class EscrowApplication extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "link_id", nullable = false, updatable = false)
+    /**
+     * 외부 link 흐름의 link.id. 내부 chatRoom 흐름은 NULL (V20 라운드 12 PR-B-2).
+     */
+    @Column(name = "link_id", updatable = false)
     private Long linkId;
+
+    /**
+     * 진입 경로 — INTERNAL (채팅방 내 신청) | EXTERNAL (link 토큰 흐름).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "entry_type", nullable = false, length = 10, updatable = false)
+    private EntryType entryType;
 
     @Column(name = "initiator_id", nullable = false, updatable = false)
     private Long initiatorId;
@@ -179,6 +189,71 @@ public class EscrowApplication extends BaseEntity {
 
         EscrowApplication a = new EscrowApplication();
         a.linkId = linkId;
+        a.entryType = EntryType.EXTERNAL;
+        a.initiatorId = initiatorId;
+        a.receiverId = receiverId;
+        a.buyerId = buyerId;
+        a.sellerId = sellerId;
+        a.tradeMode = tradeMode;
+        a.feePayer = feePayer;
+        a.itemPrice = itemPrice;
+        a.itemDescription = itemDescription;
+        a.pickupAddress = pickupAddress;
+        a.pickupLat = pickupLat;
+        a.pickupLng = pickupLng;
+        a.deliveryAddress = deliveryAddress;
+        a.deliveryLat = deliveryLat;
+        a.deliveryLng = deliveryLng;
+        a.weight = weight;
+        a.volume = volume;
+        a.fragility = fragility;
+        a.deliveryNotes = deliveryNotes;
+        a.appliedDistanceKm = snapshot.distanceKm();
+        a.appliedDeliveryFee = snapshot.deliveryFee();
+        a.appliedCommissionFee = snapshot.commissionFee();
+        a.appliedTotalFee = snapshot.totalFee();
+        a.appliedCommissionRate = snapshot.commissionRate();
+        a.initiatorShare = initiatorShare;
+        a.receiverShare = receiverShare;
+        a.status = EscrowApplicationStatus.결제대기;
+        a.imageUrls = imageUrls;
+        return a;
+    }
+
+    /**
+     * 내부 chatRoom 흐름 (PR-B-2 라운드 12). 채팅방 안에서 판매자가 한 번에 양쪽 정보 입력.
+     *
+     * <p>특징 (외부 link 흐름과 차이):
+     * <ul>
+     *   <li>{@code linkId = null} — link 미사용</li>
+     *   <li>{@code entryType = INTERNAL}</li>
+     *   <li>initiator = 신청자 (판매자), receiver = 채팅방 상대방 (구매자) — 정책상 sellerOnly 라 initiatorRole=seller 고정</li>
+     * </ul>
+     */
+    public static EscrowApplication createInternal(
+            Long initiatorId, Long receiverId,
+            TradeMode tradeMode, FeePayer feePayer,
+            long itemPrice, String itemDescription,
+            String pickupAddress, BigDecimal pickupLat, BigDecimal pickupLng,
+            String deliveryAddress, BigDecimal deliveryLat, BigDecimal deliveryLng,
+            Weight weight, Volume volume, Fragility fragility, String deliveryNotes,
+            FeeBreakdown snapshot,
+            long initiatorShare, long receiverShare,
+            String imageUrls
+    ) {
+        if (initiatorId == null || receiverId == null) {
+            throw new IllegalArgumentException("ids required");
+        }
+        if (initiatorId.equals(receiverId)) {
+            throw new BusinessException(ErrorCode.ESCROW_SELF_NOT_ALLOWED);
+        }
+        // 내부 흐름은 판매자만 시작 — initiator = seller, receiver = buyer.
+        Long sellerId = initiatorId;
+        Long buyerId = receiverId;
+
+        EscrowApplication a = new EscrowApplication();
+        a.linkId = null;
+        a.entryType = EntryType.INTERNAL;
         a.initiatorId = initiatorId;
         a.receiverId = receiverId;
         a.buyerId = buyerId;
