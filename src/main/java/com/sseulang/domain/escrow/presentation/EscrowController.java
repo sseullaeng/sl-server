@@ -58,6 +58,20 @@ public class EscrowController {
     // =========================================================
     // Application
     // =========================================================
+    @Operation(summary = "거래대행 수수료 미리보기 (실시간)",
+            description = "폼 작성 중 좌표·물품·feePayer 보내면 거리·deliveryFee·commissionFee + buyer/seller 부담분 응답. application 생성 X.")
+    @PostMapping("/applications/preview")
+    public ApiResponse<com.sseulang.domain.escrow.presentation.dto.EscrowApplicationPreviewResponse> previewFee(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody com.sseulang.domain.escrow.presentation.dto.EscrowApplicationPreviewRequest request
+    ) {
+        return ApiResponse.ok(
+                com.sseulang.domain.escrow.presentation.dto.EscrowApplicationPreviewResponse.from(
+                        service.previewFee(request.toCommand())
+                )
+        );
+    }
+
     @Operation(summary = "거래대행 폼 제출 (수신자)",
             description = "이메일 인증 필수. linkToken 매칭 + atomic claim + snapshot 저장. 동일 사용자 재제출 시 idempotent.")
     @PostMapping("/applications")
