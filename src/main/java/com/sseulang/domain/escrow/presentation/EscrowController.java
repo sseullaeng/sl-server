@@ -83,6 +83,19 @@ public class EscrowController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(result));
     }
 
+    @Operation(summary = "거래대행 내부 신청 (판매자가 채팅방에서)",
+            description = "PR-B-3 라운드 12. 채팅방 안에서 판매자가 한 번에 양쪽 정보 입력. link 토큰 미사용. "
+                    + "검증: chatRoom 참여자 + chatRoom.itemId == cmd.itemId + 본인 == item.sellerId. "
+                    + "에러: ESCROW_FORM_INVALID, CHAT_ROOM_OPPONENT_LEFT, ESCROW_SELLER_ONLY.")
+    @PostMapping("/applications/internal")
+    public ResponseEntity<ApiResponse<EscrowApplicationResult>> createInternalApplication(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody com.sseulang.domain.escrow.presentation.dto.EscrowApplicationCreateInternalRequest request
+    ) {
+        EscrowApplicationResult result = service.createInternalApplication(request.toCommand(userId));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(result));
+    }
+
     @Operation(summary = "본인 거래대행 신청 목록", description = "최신순. 필터는 후속 (5/11 단순).")
     @GetMapping("/applications/me")
     public ApiResponse<PageResponse<EscrowApplicationResult>> listMine(

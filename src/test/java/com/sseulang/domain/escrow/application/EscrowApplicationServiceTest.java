@@ -63,9 +63,15 @@ class EscrowApplicationServiceTest {
         when(userService.getById(anyLong())).thenReturn(stub);
 
         deliveryRepo = new com.sseulang.domain.delivery.application.InMemoryFakeDeliveryRepository();
+        // 라운드 12 PR-B-3 — 내부 흐름 의존 추가 (외부 link 흐름 테스트엔 미사용 → mock 으로만 stub)
+        com.sseulang.domain.chat.application.ChatRoomApplicationService chatRoomService =
+                mock(com.sseulang.domain.chat.application.ChatRoomApplicationService.class);
+        com.sseulang.domain.item.application.ItemApplicationService itemAppService =
+                mock(com.sseulang.domain.item.application.ItemApplicationService.class);
         service = new EscrowApplicationService(
                 linkRepo, appRepo, settingsRepo,
                 userService, pointService, deliveryRepo, eventPublisher,
+                chatRoomService, itemAppService,
                 24
         );
     }
