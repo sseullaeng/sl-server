@@ -22,6 +22,7 @@ import java.util.List;
 public record EscrowApplicationCreateInternalCommand(
         Long requesterId,            // 판매자 = initiator
         Long chatRoomId,
+        Long itemId,                 // chatRoom 의 item 검증용
         TradeMode tradeMode,
         FeePayer feePayer,
         long itemPrice,

@@ -50,6 +50,12 @@ public class EscrowApplication extends BaseEntity {
     @Column(name = "entry_type", nullable = false, length = 10, updatable = false)
     private EntryType entryType;
 
+    /**
+     * 내부 흐름의 채팅방 ID (V19 컬럼). 외부 link 흐름은 NULL.
+     */
+    @Column(name = "chat_room_id", updatable = false)
+    private Long chatRoomId;
+
     @Column(name = "initiator_id", nullable = false, updatable = false)
     private Long initiatorId;
 
@@ -231,6 +237,7 @@ public class EscrowApplication extends BaseEntity {
      * </ul>
      */
     public static EscrowApplication createInternal(
+            Long chatRoomId,
             Long initiatorId, Long receiverId,
             TradeMode tradeMode, FeePayer feePayer,
             long itemPrice, String itemDescription,
@@ -251,9 +258,13 @@ public class EscrowApplication extends BaseEntity {
         Long sellerId = initiatorId;
         Long buyerId = receiverId;
 
+        if (chatRoomId == null) {
+            throw new IllegalArgumentException("chatRoomId required for INTERNAL");
+        }
         EscrowApplication a = new EscrowApplication();
         a.linkId = null;
         a.entryType = EntryType.INTERNAL;
+        a.chatRoomId = chatRoomId;
         a.initiatorId = initiatorId;
         a.receiverId = receiverId;
         a.buyerId = buyerId;
