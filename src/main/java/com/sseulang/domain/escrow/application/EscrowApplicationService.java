@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.sseulang.domain.escrow.application.dto.EscrowApplicationCreateCommand;
+import com.sseulang.domain.escrow.application.dto.EscrowApplicationPreviewCommand;
+import com.sseulang.domain.escrow.application.dto.EscrowApplicationPreviewResult;
 import com.sseulang.domain.escrow.application.dto.EscrowApplicationResult;
 import com.sseulang.domain.escrow.application.dto.EscrowLinkCreateCommand;
 import com.sseulang.domain.escrow.application.dto.EscrowLinkResult;
@@ -85,6 +87,40 @@ public class EscrowApplicationService {
         this.deliveryRepository = deliveryRepository;
         this.eventPublisher = eventPublisher;
         this.linkExpiryHours = linkExpiryHours;
+    }
+
+    // =============================================================
+    // Use case 0 — 폼 작성 중 수수료 미리보기 (PR-B 라운드 12)
+    // 좌표/물품/feePayer 받아서 거리·deliveryFee·commissionFee + buyer/seller 부담분 산정.
+    // application 생성 X — pure read.
+    // =============================================================
+    public EscrowApplicationPreviewResult previewFee(EscrowApplicationPreviewCommand cmd) {
+        if (cmd.tradeMode() == null || cmd.feePayer() == null
+                || cmd.weight() == null || cmd.volume() == null || cmd.fragility() == null
+                || cmd.pickupLat() == null || cmd.pickupLng() == null
+                || cmd.deliveryLat() == null || cmd.deliveryLng() == null) {
+            throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+        }
+        EscrowFeeSettings settings = feeSettingsRepository.findSingleton();
+        BigDecimal distance = EscrowFeeCalculator.distanceKm(
+                cmd.pickupLat().doubleValue(), cmd.pickupLng().doubleValue(),
+                cmd.deliveryLat().doubleValue(), cmd.deliveryLng().doubleValue()
+        );
+        FeeBreakdown fee = EscrowFeeCalculator.calculate(
+                settings, cmd.tradeMode(), cmd.itemPrice(), distance,
+                cmd.weight(), cmd.volume(), cmd.fragility()
+        );
+        long buyerPayable = computeBuyerOwed(cmd.tradeMode(), cmd.itemPrice(), fee, cmd.feePayer());
+        long sellerPayable = computeSellerOwed(fee, cmd.feePayer());
+        return new EscrowApplicationPreviewResult(
+                fee.distanceKm(),
+                fee.deliveryFee(),
+                fee.commissionFee(),
+                fee.totalFee(),
+                buyerPayable,
+                sellerPayable,
+                fee.commissionRate()
+        );
     }
 
     // =============================================================

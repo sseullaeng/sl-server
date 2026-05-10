@@ -106,6 +106,56 @@ class EscrowApplicationServiceTest {
         ))).isInstanceOf(BusinessException.class);
     }
 
+    // ------------------------------- previewFee -------------------------------
+
+    @Test
+    @DisplayName("previewFee_BOTH_buyer/seller_50:50_분담")
+    void previewFee_both_5050() {
+        com.sseulang.domain.escrow.application.dto.EscrowApplicationPreviewResult r =
+                service.previewFee(new com.sseulang.domain.escrow.application.dto.EscrowApplicationPreviewCommand(
+                        TradeMode.INTERNAL, 30_000L,
+                        new BigDecimal("37.5065"), new BigDecimal("127.0530"),
+                        new BigDecimal("37.5144"), new BigDecimal("127.1058"),
+                        Weight.R1TO3, Volume.M, Fragility.F3, FeePayer.both
+                ));
+        assertThat(r.deliveryFee()).isPositive();
+        assertThat(r.commissionFee()).isPositive();
+        long feeTotal = r.deliveryFee() + r.commissionFee();
+        // BOTH: buyer = item + fee/2, seller = fee - fee/2
+        assertThat(r.buyerPayable()).isEqualTo(30_000L + feeTotal / 2);
+        assertThat(r.sellerPayable()).isEqualTo(feeTotal - feeTotal / 2);
+    }
+
+    @Test
+    @DisplayName("previewFee_BUYER_단독_buyer가_전액_부담")
+    void previewFee_buyer_only() {
+        com.sseulang.domain.escrow.application.dto.EscrowApplicationPreviewResult r =
+                service.previewFee(new com.sseulang.domain.escrow.application.dto.EscrowApplicationPreviewCommand(
+                        TradeMode.INTERNAL, 30_000L,
+                        new BigDecimal("37.5065"), new BigDecimal("127.0530"),
+                        new BigDecimal("37.5144"), new BigDecimal("127.1058"),
+                        Weight.R1TO3, Volume.M, Fragility.F3, FeePayer.buyer
+                ));
+        long feeTotal = r.deliveryFee() + r.commissionFee();
+        assertThat(r.buyerPayable()).isEqualTo(30_000L + feeTotal);
+        assertThat(r.sellerPayable()).isZero();
+    }
+
+    @Test
+    @DisplayName("previewFee_필수_누락_ESCROW_FORM_INVALID")
+    void previewFee_invalid() {
+        assertThatThrownBy(() -> service.previewFee(
+                new com.sseulang.domain.escrow.application.dto.EscrowApplicationPreviewCommand(
+                        null, 30_000L,
+                        new BigDecimal("37.5065"), new BigDecimal("127.0530"),
+                        new BigDecimal("37.5144"), new BigDecimal("127.1058"),
+                        Weight.R1TO3, Volume.M, Fragility.F3, FeePayer.both
+                )
+        )).isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ESCROW_FORM_INVALID);
+    }
+
     // ------------------------------ createApplication ------------------------------
 
     /** 거리 8.51km / weight=1to3 / volume=m / fragility=f3 / itemPrice=1.8M 시점의 산정값 (default settings 기준). */
