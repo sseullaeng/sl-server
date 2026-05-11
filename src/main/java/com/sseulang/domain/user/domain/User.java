@@ -91,6 +91,13 @@ public class User extends BaseEntity {
     @Column(name = "suspend_days")
     private Integer suspendDays;
 
+    /**
+     * 활동 정지 누적 일수 (라운드 12 PR-F #8). 200일 이상 자동 탈퇴 (soft delete).
+     * suspend() 호출 시마다 += days. 기존 row 는 0 (V24 부터 누적 시작).
+     */
+    @Column(name = "cumulative_suspend_days", nullable = false)
+    private int cumulativeSuspendDays;
+
     @Column(name = "is_deleted", nullable = false)
     private boolean deleted;
 
@@ -274,7 +281,9 @@ public class User extends BaseEntity {
         this.lastLoginAt = now;
     }
 
-    /** 시한부 활동정지. days >= 1. now 부터 N일 동안. */
+    /**
+     * 시한부 활동정지. days >= 1. now 부터 N일 동안. 라운드 12 PR-F #8 — cumulative_suspend_days 누적.
+     */
     public void suspend(int days, LocalDateTime now) {
         if (days < 1) {
             throw new IllegalArgumentException("days 는 1 이상이어야 합니다");
@@ -284,6 +293,17 @@ public class User extends BaseEntity {
         }
         this.suspendedAt = now;
         this.suspendDays = days;
+        this.cumulativeSuspendDays += days;
+    }
+
+    /** 라운드 12 PR-F #8 — 누적 정지 200일 이상 도달 시 자동 탈퇴 대상. */
+    public boolean isAutoWithdrawTarget() {
+        return !this.deleted && this.cumulativeSuspendDays >= 200;
+    }
+
+    /** 라운드 12 PR-F #8 — 자동 탈퇴 처리 (soft delete). */
+    public void markAutoWithdrawn() {
+        this.deleted = true;
     }
 
     /** 활동정지 즉시 해제. */

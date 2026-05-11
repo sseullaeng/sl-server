@@ -41,6 +41,7 @@ class InquiryApplicationServiceTest {
         com.sseulang.domain.auth.domain.EmailSender emailSender = new com.sseulang.domain.auth.domain.EmailSender() {
             @Override public void sendVerificationEmail(String t, String u) { }
             @Override public void sendInquiryReplyEmail(String t, String s, String h) { }
+            @Override public void sendAutoWithdrawnEmail(String t, int d) { }
         };
         // 단위 테스트용 — AFTER_COMMIT 이벤트는 트랜잭션 밖이라 fire 안 됨. 알림/메일 사이드 이펙트는 별도 IT.
         org.springframework.context.ApplicationEventPublisher eventPublisher = event -> { };

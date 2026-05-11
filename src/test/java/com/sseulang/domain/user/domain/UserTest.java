@@ -3,6 +3,8 @@ package com.sseulang.domain.user.domain;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -96,5 +98,44 @@ class UserTest {
     void hasPassword_소셜() {
         User social = User.createSocialUser(SocialProvider.KAKAO, "k-1", EMAIL, "kakao", null);
         assertThat(social.hasPassword()).isFalse();
+    }
+
+    @Test
+    @DisplayName("suspend_여러번 호출시 cumulativeSuspendDays 합산")
+    void suspend_누적_합산() {
+        User u = User.createSocialUser(SocialProvider.KAKAO, "k-2", EMAIL, "n", null);
+        LocalDateTime now = LocalDateTime.now();
+        u.suspend(7, now);
+        u.suspend(30, now.plusDays(10));
+        u.suspend(60, now.plusDays(50));
+        assertThat(u.getCumulativeSuspendDays()).isEqualTo(97);
+    }
+
+    @Test
+    @DisplayName("isAutoWithdrawTarget_누적 200 미만은 false")
+    void isAutoWithdrawTarget_미달() {
+        User u = User.createSocialUser(SocialProvider.KAKAO, "k-3", EMAIL, "n", null);
+        u.suspend(150, LocalDateTime.now());
+        assertThat(u.isAutoWithdrawTarget()).isFalse();
+    }
+
+    @Test
+    @DisplayName("isAutoWithdrawTarget_누적 200 도달은 true (경계 포함)")
+    void isAutoWithdrawTarget_경계() {
+        User u = User.createSocialUser(SocialProvider.KAKAO, "k-4", EMAIL, "n", null);
+        u.suspend(100, LocalDateTime.now());
+        u.suspend(100, LocalDateTime.now().plusDays(50));
+        assertThat(u.getCumulativeSuspendDays()).isEqualTo(200);
+        assertThat(u.isAutoWithdrawTarget()).isTrue();
+    }
+
+    @Test
+    @DisplayName("isAutoWithdrawTarget_이미 deleted 이면 false")
+    void isAutoWithdrawTarget_이미_탈퇴() {
+        User u = User.createSocialUser(SocialProvider.KAKAO, "k-5", EMAIL, "n", null);
+        u.suspend(250, LocalDateTime.now());
+        u.markAutoWithdrawn();
+        assertThat(u.isDeleted()).isTrue();
+        assertThat(u.isAutoWithdrawTarget()).isFalse();
     }
 }

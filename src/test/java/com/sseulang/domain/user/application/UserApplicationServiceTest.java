@@ -263,4 +263,105 @@ class UserApplicationServiceTest {
                 .as("countActive 별도 쿼리라 이중 차감 없음 — 이전 (total - blocked - deleted) 방식이면 -4 였을 케이스")
                 .isEqualTo(1L);
     }
+
+    // ───────── 라운드 12 PR-F #8 — 활동 정지 누적 200일 자동 탈퇴 ─────────
+
+    @org.junit.jupiter.api.Nested
+    @DisplayName("adminSuspend / processAutoWithdrawal — 200일 누적 자동 탈퇴")
+    class AutoWithdraw {
+
+        private InMemoryFakeUserRepository userRepo;
+        private CapturingEmailSender mailFake;
+        private com.sseulang.domain.auth.application.NoOpRefreshTokenStore rtStore;
+        private UserApplicationService svc;
+
+        @org.junit.jupiter.api.BeforeEach
+        void setUp() {
+            userRepo = new InMemoryFakeUserRepository();
+            mailFake = new CapturingEmailSender();
+            rtStore = new com.sseulang.domain.auth.application.NoOpRefreshTokenStore();
+            svc = new UserApplicationService(
+                    userRepo,
+                    new com.sseulang.domain.transaction.application.InMemoryFakeTransactionRepository(),
+                    new com.sseulang.domain.report.application.InMemoryFakeUserReportRepository(),
+                    rtStore,
+                    mailFake,
+                    java.time.Clock.systemDefaultZone()
+            );
+        }
+
+        @Test
+        @DisplayName("adminSuspend_누적 200 미만은 자동 탈퇴 X")
+        void adminSuspend_미달() {
+            User u = userRepo.save(User.createSocialUser(SocialProvider.KAKAO, "k-1", EMAIL, "n", null));
+            svc.adminSuspend(u.getId(), 50);
+            svc.adminSuspend(u.getId(), 100);
+
+            assertThat(u.getCumulativeSuspendDays()).isEqualTo(150);
+            assertThat(u.isDeleted()).isFalse();
+            assertThat(mailFake.toCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("adminSuspend_누적 200 도달_markAutoWithdrawn + 안내 메일 발송")
+        void adminSuspend_도달_자동탈퇴() {
+            User u = userRepo.save(User.createSocialUser(SocialProvider.KAKAO, "k-2", EMAIL, "n", null));
+            svc.adminSuspend(u.getId(), 199);
+            assertThat(u.isDeleted()).as("199일은 아직 미만").isFalse();
+            assertThat(mailFake.toCount()).isZero();
+
+            svc.adminSuspend(u.getId(), 1);  // 누적 200
+
+            assertThat(u.isDeleted()).as("정확히 200 도달 시 자동 탈퇴").isTrue();
+            assertThat(u.getCumulativeSuspendDays()).isEqualTo(200);
+            assertThat(mailFake.toCount()).isOne();
+            assertThat(mailFake.lastTo).isEqualTo(EMAIL.value());
+            assertThat(mailFake.lastDays).isEqualTo(200);
+        }
+
+        @Test
+        @DisplayName("processAutoWithdrawal_이미 deleted 또는 미달 user 는 no-op")
+        void processAutoWithdrawal_noop() {
+            User u = userRepo.save(User.createSocialUser(SocialProvider.KAKAO, "k-3", EMAIL, "n", null));
+
+            assertThat(svc.processAutoWithdrawal(u.getId())).as("미달").isFalse();
+            assertThat(mailFake.toCount()).isZero();
+
+            u.suspend(300, java.time.LocalDateTime.now());
+            u.markAutoWithdrawn();
+            assertThat(svc.processAutoWithdrawal(u.getId())).as("이미 deleted").isFalse();
+            assertThat(mailFake.toCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("findAutoWithdrawTargetIds_200 이상 + 살아있는 user 만 반환")
+        void findTargets_filter() {
+            User a = userRepo.save(User.createSocialUser(SocialProvider.KAKAO, "k-a", new Email("a@x.com"), "n", null));
+            User b = userRepo.save(User.createSocialUser(SocialProvider.KAKAO, "k-b", new Email("b@x.com"), "n", null));
+            User c = userRepo.save(User.createSocialUser(SocialProvider.KAKAO, "k-c", new Email("c@x.com"), "n", null));
+            User d = userRepo.save(User.createSocialUser(SocialProvider.KAKAO, "k-d", new Email("d@x.com"), "n", null));
+
+            a.suspend(199, java.time.LocalDateTime.now());  // 미달
+            b.suspend(200, java.time.LocalDateTime.now());  // 대상
+            c.suspend(500, java.time.LocalDateTime.now());  // 대상
+            d.suspend(300, java.time.LocalDateTime.now());
+            d.markAutoWithdrawn();                            // 이미 처리됨
+
+            assertThat(svc.findAutoWithdrawTargetIds(100))
+                    .containsExactlyInAnyOrder(b.getId(), c.getId());
+        }
+    }
+
+    /** EmailSender 호출 capture — 발송 검증용 fake. */
+    private static class CapturingEmailSender implements com.sseulang.domain.auth.domain.EmailSender {
+        private final java.util.List<String> tos = new java.util.ArrayList<>();
+        String lastTo;
+        int lastDays;
+        @Override public void sendVerificationEmail(String to, String url) { }
+        @Override public void sendInquiryReplyEmail(String to, String s, String h) { }
+        @Override public void sendAutoWithdrawnEmail(String to, int days) {
+            tos.add(to); lastTo = to; lastDays = days;
+        }
+        int toCount() { return tos.size(); }
+    }
 }

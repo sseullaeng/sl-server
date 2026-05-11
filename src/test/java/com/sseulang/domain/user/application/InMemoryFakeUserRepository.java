@@ -214,4 +214,15 @@ public class InMemoryFakeUserRepository implements UserRepository {
                 .limit(limit)
                 .toList();
     }
+
+    @Override
+    public java.util.List<Long> findAutoWithdrawTargetIds(int threshold, int limit) {
+        if (limit <= 0) return java.util.Collections.emptyList();
+        return store.values().stream()
+                .filter(u -> !u.isDeleted() && u.getCumulativeSuspendDays() >= threshold)
+                .map(User::getId)
+                .sorted()
+                .limit(limit)
+                .toList();
+    }
 }

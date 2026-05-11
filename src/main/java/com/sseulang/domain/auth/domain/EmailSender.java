@@ -16,4 +16,10 @@ public interface EmailSender {
      * SMTP 미설치 환경에선 LogEmailSender 가 콘솔 출력만 하고 안전 fallback.
      */
     void sendInquiryReplyEmail(String toEmail, String subject, String html);
+
+    /**
+     * 활동 정지 누적 200일 도달로 자동 탈퇴 처리되었음을 안내 (round 12 PR-F #8).
+     * 발송 실패는 호출자에서 swallow — 자동 탈퇴 자체는 이미 commit 된 상태.
+     */
+    void sendAutoWithdrawnEmail(String toEmail, int cumulativeSuspendDays);
 }

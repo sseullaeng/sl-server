@@ -7,6 +7,8 @@ import com.sseulang.domain.user.domain.User;
 import com.sseulang.domain.user.domain.UserRepository;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,6 +21,8 @@ import java.util.Optional;
 @Transactional(readOnly = true)
 public class UserApplicationService {
 
+    private static final Logger log = LoggerFactory.getLogger(UserApplicationService.class);
+
     /** 휴면 판정 — 90일 이상 미접속이면 dormant. status derive 와 search 양쪽에서 공유. */
     private static final int DORMANT_THRESHOLD_DAYS = 90;
     private static final String USER_ROLE = "USER";
@@ -27,6 +31,7 @@ public class UserApplicationService {
     private final com.sseulang.domain.transaction.domain.TransactionRepository transactionRepository;
     private final com.sseulang.domain.report.domain.UserReportRepository userReportRepository;
     private final com.sseulang.domain.auth.domain.RefreshTokenStore refreshTokenStore;
+    private final com.sseulang.domain.auth.domain.EmailSender emailSender;
     private final java.time.Clock clock;
 
     public UserApplicationService(
@@ -34,12 +39,14 @@ public class UserApplicationService {
             com.sseulang.domain.transaction.domain.TransactionRepository transactionRepository,
             com.sseulang.domain.report.domain.UserReportRepository userReportRepository,
             com.sseulang.domain.auth.domain.RefreshTokenStore refreshTokenStore,
+            com.sseulang.domain.auth.domain.EmailSender emailSender,
             java.time.Clock clock
     ) {
         this.userRepository = userRepository;
         this.transactionRepository = transactionRepository;
         this.userReportRepository = userReportRepository;
         this.refreshTokenStore = refreshTokenStore;
+        this.emailSender = emailSender;
         this.clock = clock;
     }
 
@@ -307,12 +314,28 @@ public class UserApplicationService {
         }
     }
 
-    /** 관리자 시한부 활동정지 — N일 동안. days >= 1. RT 즉시 무효화. */
+    /**
+     * 관리자 시한부 활동정지 — N일 동안. days >= 1. RT 즉시 무효화.
+     * 라운드 12 PR-F #8 — 누적 정지 200일 이상 도달 시 자동 탈퇴 처리 + 안내 메일 발송.
+     */
     @Transactional
     public void adminSuspend(Long userId, int days) {
         User u = getById(userId);
         u.suspend(days, java.time.LocalDateTime.now(clock));
         refreshTokenStore.revokeAll(USER_ROLE, userId);
+        if (u.isAutoWithdrawTarget()) {
+            u.markAutoWithdrawn();
+            sendAutoWithdrawnNotice(u);
+        }
+    }
+
+    /** 발송 실패는 swallow — soft delete 자체는 트랜잭션 commit 으로 확정. */
+    private void sendAutoWithdrawnNotice(User u) {
+        try {
+            emailSender.sendAutoWithdrawnEmail(u.email().value(), u.getCumulativeSuspendDays());
+        } catch (RuntimeException e) {
+            log.error("[auto-withdraw] 안내 메일 발송 실패 userId={} reason={}", u.getId(), e.getMessage(), e);
+        }
     }
 
     /** 관리자 활동정지 즉시 해제. */
@@ -320,6 +343,30 @@ public class UserApplicationService {
     public void adminUnsuspend(Long userId) {
         User u = getById(userId);
         u.unsuspend();
+    }
+
+    /**
+     * 라운드 12 PR-F #8 — 자동 탈퇴 배치 후크. 누적 200일 이상 + 살아있는 사용자 일괄 처리.
+     * adminSuspend 직후 동기 분기는 1차 트리거이고, 이 메서드는 안전망 (DB 수동 변경/마이그레이션 케이스).
+     * 각 user 는 별도 트랜잭션으로 처리 — 한 건 실패해도 다음 건 진행.
+     */
+    public java.util.List<Long> findAutoWithdrawTargetIds(int limit) {
+        return userRepository.findAutoWithdrawTargetIds(200, limit);
+    }
+
+    /**
+     * 단건 자동 탈퇴 처리. 이미 deleted 거나 누적 미달이면 no-op. 안내 메일 발송 + RT 무효화.
+     */
+    @Transactional
+    public boolean processAutoWithdrawal(Long userId) {
+        User u = userRepository.findById(userId).orElse(null);
+        if (u == null || !u.isAutoWithdrawTarget()) {
+            return false;
+        }
+        u.markAutoWithdrawn();
+        refreshTokenStore.revokeAll(USER_ROLE, userId);
+        sendAutoWithdrawnNotice(u);
+        return true;
     }
 
     /**

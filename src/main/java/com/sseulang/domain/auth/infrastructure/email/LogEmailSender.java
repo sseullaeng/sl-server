@@ -34,4 +34,9 @@ public class LogEmailSender implements EmailSender {
     public void sendInquiryReplyEmail(String toEmail, String subject, String html) {
         log.info("[inquiry-reply] to={} subject={} (html len={})", toEmail, subject, html == null ? 0 : html.length());
     }
+
+    @Override
+    public void sendAutoWithdrawnEmail(String toEmail, int cumulativeSuspendDays) {
+        log.info("[auto-withdrawn] to={} cumulativeSuspendDays={}", toEmail, cumulativeSuspendDays);
+    }
 }
