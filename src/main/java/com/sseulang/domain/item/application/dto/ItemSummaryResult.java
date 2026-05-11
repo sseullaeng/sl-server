@@ -2,6 +2,7 @@ package com.sseulang.domain.item.application.dto;
 
 import com.sseulang.domain.item.domain.Item;
 import com.sseulang.domain.item.domain.ItemStatus;
+import com.sseulang.domain.item.domain.DepositType;
 import com.sseulang.domain.item.domain.TradeType;
 
 import java.time.LocalDateTime;
@@ -15,6 +16,7 @@ public record ItemSummaryResult(
         long price,
         Long salePrice,
         Long rentalPrice,
+        DepositType depositType,
         TradeType tradeType,
         Set<TradeType> tradeTypes,
         ItemStatus status,
@@ -39,6 +41,7 @@ public record ItemSummaryResult(
                 item.getPrice(),
                 item.getSalePrice(),
                 item.getRentalPrice(),
+                item.getTradeTypes().contains(TradeType.대여) ? item.getDepositType() : null,
                 item.getTradeType(),
                 item.getTradeTypes(),
                 item.getStatus(),

@@ -1,6 +1,7 @@
 package com.sseulang.domain.item.application.dto;
 
 import com.sseulang.domain.item.domain.RentalUnit;
+import com.sseulang.domain.item.domain.DepositType;
 import com.sseulang.domain.item.domain.TradeType;
 
 import java.util.List;
@@ -15,6 +16,7 @@ public record ItemRegisterCommand(
         Long salePrice,
         Long rentalPrice,
         Long deposit,
+        DepositType depositType,
         RentalUnit rentalUnit,
         String region,
         List<String> imageUrls,
@@ -31,7 +33,8 @@ public record ItemRegisterCommand(
                 sellerId, categoryId, title, description,
                 java.util.EnumSet.of(tradeType),
                 salePrice, rentalPrice,
-                deposit, rentalUnit, region, imageUrls, hashtags
+                deposit, tradeType == TradeType.대여 ? DepositType.AMOUNT : null,
+                rentalUnit, region, imageUrls, hashtags
         );
     }
 }

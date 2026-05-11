@@ -2,6 +2,7 @@ package com.sseulang.domain.item.presentation.dto;
 
 import com.sseulang.domain.item.application.dto.ItemDetailResult;
 import com.sseulang.domain.item.domain.ItemStatus;
+import com.sseulang.domain.item.domain.DepositType;
 import com.sseulang.domain.item.domain.RentalUnit;
 import com.sseulang.domain.item.domain.TradeType;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -25,6 +26,7 @@ public record ItemDetailResponse(
         @Schema(example = "20000", description = "대여가 (대여 모드 시, rentalUnit 당)", nullable = true)
         Long rentalPrice,
         @Schema(example = "100000", description = "보증금 (대여 모드 시 필수)") Long deposit,
+        @Schema(example = "AMOUNT", description = "보증금 입력 타입 (대여 모드 시)", nullable = true) DepositType depositType,
         @Schema(description = "대여 단위 — 시간/일/주/월") RentalUnit rentalUnit,
         @Schema(description = "[DEPRECATED] primary 모드 — 신규는 tradeTypes 사용") TradeType tradeType,
         @Schema(description = "거래 모드 set (판매/대여/나눔 복수 가능)", example = "[\"판매\", \"대여\"]")
@@ -43,7 +45,7 @@ public record ItemDetailResponse(
                 r.id(), r.sellerId(), r.categoryId(),
                 r.title(), r.description(),
                 r.price(), r.salePrice(), r.rentalPrice(),
-                r.deposit(), r.rentalUnit(),
+                r.deposit(), r.depositType(), r.rentalUnit(),
                 r.tradeType(), r.tradeTypes(),
                 r.status(), r.region(),
                 r.viewCount(), r.wishlistCount(),

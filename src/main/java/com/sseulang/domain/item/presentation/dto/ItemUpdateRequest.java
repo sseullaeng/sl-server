@@ -1,9 +1,11 @@
 package com.sseulang.domain.item.presentation.dto;
 
 import com.sseulang.domain.item.application.dto.ItemUpdateCommand;
+import com.sseulang.domain.item.domain.DepositType;
 import com.sseulang.domain.item.domain.RentalUnit;
 import com.sseulang.domain.item.domain.TradeType;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
@@ -36,6 +38,9 @@ public record ItemUpdateRequest(
         @Schema(description = "보증금 (대여 거래)", example = "100000", nullable = true)
         @PositiveOrZero Long deposit,
 
+        @Schema(description = "보증금 입력 타입", example = "AMOUNT", allowableValues = {"AMOUNT", "PERCENT"}, nullable = true)
+        DepositType depositType,
+
         @Schema(description = "대여 단위", example = "일", nullable = true)
         RentalUnit rentalUnit,
 
@@ -63,7 +68,7 @@ public record ItemUpdateRequest(
         return new ItemUpdateCommand(
                 categoryId, title, description,
                 resolvedTypes, resolvedSale, resolvedRental,
-                deposit, rentalUnit, region, imageUrls, hashtags
+                deposit, depositType, rentalUnit, region, imageUrls, hashtags
         );
     }
 
@@ -71,6 +76,12 @@ public record ItemUpdateRequest(
     @com.fasterxml.jackson.annotation.JsonIgnore
     public boolean isModeSpecified() {
         return (tradeTypes != null && !tradeTypes.isEmpty()) || tradeType != null;
+    }
+
+    @AssertTrue(message = "대여 거래는 depositType 이 필수입니다")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public boolean isDepositTypeValid() {
+        return !resolveTradeTypes().contains(TradeType.대여) || depositType != null;
     }
 
     private Set<TradeType> resolveTradeTypes() {

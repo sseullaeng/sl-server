@@ -2,6 +2,7 @@ package com.sseulang.domain.item.presentation.dto;
 
 import com.sseulang.domain.item.application.dto.ItemSummaryResult;
 import com.sseulang.domain.item.domain.ItemStatus;
+import com.sseulang.domain.item.domain.DepositType;
 import com.sseulang.domain.item.domain.TradeType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -20,6 +21,8 @@ public record ItemSummaryResponse(
         Long salePrice,
         @Schema(example = "20000", description = "대여가 (대여 모드 시, rentalUnit 당)", nullable = true)
         Long rentalPrice,
+        @Schema(example = "AMOUNT", description = "보증금 입력 타입 (대여 모드만)", nullable = true)
+        DepositType depositType,
         @Schema(description = "[DEPRECATED] primary 모드 — 신규는 tradeTypes 사용")
         TradeType tradeType,
         @Schema(description = "거래 모드 set (판매/대여/나눔 복수 가능)", example = "[\"판매\", \"대여\"]")
@@ -43,6 +46,7 @@ public record ItemSummaryResponse(
                 r.id(), r.sellerId(), r.categoryId(),
                 r.title(), r.price(),
                 r.salePrice(), r.rentalPrice(),
+                r.depositType(),
                 r.tradeType(), r.tradeTypes(),
                 r.status(), r.region(),
                 r.thumbnailUrl(), r.wishlistCount(), r.isWishlisted(),

@@ -11,6 +11,8 @@ import com.sseulang.domain.user.domain.User;
 import com.sseulang.domain.item.application.ItemApplicationService;
 import com.sseulang.domain.item.domain.Item;
 import com.sseulang.domain.item.domain.ItemStatus;
+import com.sseulang.domain.item.domain.DepositType;
+import com.sseulang.domain.item.domain.RentalUnit;
 import com.sseulang.domain.item.domain.TradeType;
 import com.sseulang.domain.point.application.InMemoryFakePointHistoryRepository;
 import com.sseulang.domain.point.application.PointApplicationService;
@@ -108,6 +110,28 @@ class TransactionApplicationServiceTest {
         assertThat(r.status()).isEqualTo(TransactionStatus.채팅중);
         assertThat(r.price()).isEqualTo(50_000L);
         assertThat(r.escrowHoldAmount()).isZero();  // 라운드 11 — hold 는 reserve 시점부터
+    }
+
+    @Test
+    @DisplayName("create dual item 대여 PERCENT deposit_대여가 기준 환산 금액 저장")
+    void create_dual_item_대여_percent_deposit_환산() {
+        Item rental = itemRepo.save(Item.createMulti(
+                SELLER, null, "대여물건", "설명", java.util.EnumSet.of(TradeType.판매, TradeType.대여),
+                120_000L, 99_997L, 30L, DepositType.PERCENT, RentalUnit.일, "서울"
+        ));
+        com.sseulang.domain.chat.domain.ChatRoom room =
+                com.sseulang.domain.chat.domain.ChatRoom.openFor(rental.getId(), BUYER, SELLER, TradeType.대여);
+        Long roomId = chatRoomRepo.save(room).getId();
+
+        Long txId = service.create(new TransactionCreateCommand(
+                rental.getId(), SELLER, roomId,
+                java.time.LocalDateTime.now().plusDays(1),
+                java.time.LocalDateTime.now().plusDays(2)
+        ));
+
+        TransactionResult r = service.getById(txId, BUYER);
+        assertThat(r.price()).isEqualTo(99_997L);
+        assertThat(r.deposit()).isEqualTo(30_000L);
     }
 
     @Test
