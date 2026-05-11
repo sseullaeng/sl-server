@@ -3,12 +3,14 @@ package com.sseulang.domain.item.application.dto;
 import com.sseulang.domain.item.domain.Item;
 import com.sseulang.domain.item.domain.ItemHashtag;
 import com.sseulang.domain.item.domain.ItemStatus;
+import com.sseulang.domain.item.domain.DepositType;
 import com.sseulang.domain.item.domain.RentalUnit;
 import com.sseulang.domain.item.domain.TradeType;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+
 public record ItemDetailResult(
         Long id,
         Long sellerId,
@@ -19,6 +21,7 @@ public record ItemDetailResult(
         Long salePrice,
         Long rentalPrice,
         Long deposit,
+        DepositType depositType,
         RentalUnit rentalUnit,
         TradeType tradeType,
         Set<TradeType> tradeTypes,
@@ -42,6 +45,7 @@ public record ItemDetailResult(
                 item.getSalePrice(),
                 item.getRentalPrice(),
                 item.getDeposit(),
+                item.getTradeTypes().contains(TradeType.대여) ? item.getDepositType() : null,
                 item.getRentalUnit(),
                 item.getTradeType(),
                 item.getTradeTypes(),

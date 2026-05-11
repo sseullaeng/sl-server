@@ -6,6 +6,7 @@ import com.sseulang.domain.category.domain.Category;
 import com.sseulang.domain.item.application.dto.ItemDetailResult;
 import com.sseulang.domain.item.application.dto.ItemRegisterCommand;
 import com.sseulang.domain.item.application.dto.ItemUpdateCommand;
+import com.sseulang.domain.item.domain.DepositType;
 import com.sseulang.domain.item.domain.ItemStatus;
 import com.sseulang.domain.item.domain.RentalUnit;
 import com.sseulang.domain.item.domain.TradeType;
@@ -216,6 +217,20 @@ class ItemApplicationServiceTest {
         ItemDetailResult r = service.getById(id);
         assertThat(r.deposit()).isEqualTo(20_000L);
         assertThat(r.rentalUnit()).isEqualTo(RentalUnit.주);
+    }
+
+    @Test
+    @DisplayName("register PERCENT deposit 범위 밖_거부")
+    void register_percent_deposit_범위_거부() {
+        assertThatThrownBy(() -> service.register(new ItemRegisterCommand(
+                SELLER, categoryId, "t", "d", java.util.EnumSet.of(TradeType.대여),
+                null, 1_000L, 0L, DepositType.PERCENT, RentalUnit.일, null, null, null
+        ))).isInstanceOf(IllegalArgumentException.class);
+
+        assertThatThrownBy(() -> service.register(new ItemRegisterCommand(
+                SELLER, categoryId, "t", "d", java.util.EnumSet.of(TradeType.대여),
+                null, 1_000L, 101L, DepositType.PERCENT, RentalUnit.일, null, null, null
+        ))).isInstanceOf(IllegalArgumentException.class);
     }
 
     private Long registerSimple() {

@@ -1,5 +1,6 @@
 package com.sseulang.domain.item.application.dto;
 
+import com.sseulang.domain.item.domain.DepositType;
 import com.sseulang.domain.item.domain.TradeType;
 
 import java.util.Set;
@@ -10,6 +11,7 @@ public record ItemForTransactionResult(
         Set<TradeType> tradeTypes,
         Long salePrice,
         Long rentalPrice,
+        DepositType depositType,
         Long deposit
 ) {
     public Long priceFor(TradeType mode) {

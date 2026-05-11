@@ -61,7 +61,7 @@ public class ItemApplicationService {
                 cmd.title(), cmd.description(),
                 cmd.tradeTypes(),
                 cmd.salePrice(), cmd.rentalPrice(),
-                cmd.deposit(), cmd.rentalUnit(),
+                cmd.deposit(), cmd.depositType(), cmd.rentalUnit(),
                 cmd.region()
         );
         applyHashtags(item, cmd.hashtags());
@@ -115,7 +115,7 @@ public class ItemApplicationService {
                 cmd.title(), cmd.description(),
                 cmd.tradeTypes(),
                 cmd.salePrice(), cmd.rentalPrice(),
-                cmd.deposit(), cmd.rentalUnit(), cmd.region()
+                cmd.deposit(), cmd.depositType(), cmd.rentalUnit(), cmd.region()
         );
 
         if (cmd.categoryId() != null) {
@@ -238,7 +238,8 @@ public class ItemApplicationService {
                 item.getId(), item.getSellerId(),
                 item.getTradeTypes(),
                 item.getSalePrice(), item.getRentalPrice(),
-                item.getDeposit()
+                item.getTradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여) ? item.getDepositType() : null,
+                item.computeDepositAmount()
         );
     }
 

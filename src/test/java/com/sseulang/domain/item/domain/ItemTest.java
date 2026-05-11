@@ -43,7 +43,33 @@ class ItemTest {
     void create_대여_정상() {
         Item item = Item.create(SELLER, CATEGORY, "t", "d", 5_000L, 50_000L, RentalUnit.일, TradeType.대여, null);
         assertThat(item.getDeposit()).isEqualTo(50_000L);
+        assertThat(item.getDepositType()).isEqualTo(DepositType.AMOUNT);
         assertThat(item.getRentalUnit()).isEqualTo(RentalUnit.일);
+    }
+
+    @Test
+    @DisplayName("computeDepositAmount AMOUNT_그대로")
+    void computeDepositAmount_amount() {
+        Item item = Item.create(SELLER, CATEGORY, "t", "d", 99_997L, 50_000L, DepositType.AMOUNT, RentalUnit.일, TradeType.대여, null);
+        assertThat(item.computeDepositAmount()).isEqualTo(50_000L);
+    }
+
+    @Test
+    @DisplayName("computeDepositAmount PERCENT_1원 단위 올림")
+    void computeDepositAmount_percent_ceil() {
+        Item item = Item.create(SELLER, CATEGORY, "t", "d", 99_997L, 30L, DepositType.PERCENT, RentalUnit.일, TradeType.대여, null);
+        assertThat(item.computeDepositAmount()).isEqualTo(30_000L);
+    }
+
+    @Test
+    @DisplayName("create 대여 PERCENT 범위 밖_거부")
+    void create_대여_percent_범위_거부() {
+        assertThatThrownBy(() ->
+                Item.create(SELLER, CATEGORY, "t", "d", 1_000L, 0L, DepositType.PERCENT, RentalUnit.일, TradeType.대여, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() ->
+                Item.create(SELLER, CATEGORY, "t", "d", 1_000L, 101L, DepositType.PERCENT, RentalUnit.일, TradeType.대여, null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

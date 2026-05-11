@@ -65,6 +65,10 @@ public class Item extends BaseEntity {
     private Long deposit;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "deposit_type", nullable = false, length = 16)
+    private DepositType depositType;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "rental_unit", length = 20)
     private RentalUnit rentalUnit;
 
@@ -112,14 +116,29 @@ public class Item extends BaseEntity {
             TradeType tradeType,
             String region
     ) {
+        return create(sellerId, categoryId, title, description, price, deposit, DepositType.AMOUNT, rentalUnit, tradeType, region);
+    }
+
+    public static Item create(
+            Long sellerId,
+            Long categoryId,
+            String title,
+            String description,
+            long price,
+            Long deposit,
+            DepositType depositType,
+            RentalUnit rentalUnit,
+            TradeType tradeType,
+            String region
+    ) {
         if (tradeType == null) {
             throw new IllegalArgumentException("tradeType 은 필수입니다");
         }
-        validateRentalFields(tradeType, deposit, rentalUnit);
+        validateRentalFields(tradeType, deposit, depositType, rentalUnit);
         Long salePrice = tradeType == TradeType.판매 ? price : null;
         Long rentalPrice = tradeType == TradeType.대여 ? price : null;
         return createMulti(sellerId, categoryId, title, description,
-                EnumSet.of(tradeType), salePrice, rentalPrice, deposit, rentalUnit, region);
+                EnumSet.of(tradeType), salePrice, rentalPrice, deposit, depositType, rentalUnit, region);
     }
 
     public static Item createMulti(
@@ -134,12 +153,29 @@ public class Item extends BaseEntity {
             RentalUnit rentalUnit,
             String region
     ) {
+        return createMulti(sellerId, categoryId, title, description,
+                tradeTypes, salePrice, rentalPrice, deposit, DepositType.AMOUNT, rentalUnit, region);
+    }
+
+    public static Item createMulti(
+            Long sellerId,
+            Long categoryId,
+            String title,
+            String description,
+            Set<TradeType> tradeTypes,
+            Long salePrice,
+            Long rentalPrice,
+            Long deposit,
+            DepositType depositType,
+            RentalUnit rentalUnit,
+            String region
+    ) {
         if (sellerId == null || sellerId <= 0) {
             throw new IllegalArgumentException("sellerId 는 양수여야 합니다");
         }
         validateTitle(title);
         validateDescription(description);
-        validateTradeTypes(tradeTypes, salePrice, rentalPrice, deposit, rentalUnit);
+        validateTradeTypes(tradeTypes, salePrice, rentalPrice, deposit, depositType, rentalUnit);
         validateRegion(region);
 
         Set<TradeType> typeSet = EnumSet.copyOf(tradeTypes);
@@ -156,6 +192,7 @@ public class Item extends BaseEntity {
         item.rentalPrice = typeSet.contains(TradeType.대여) ? rentalPrice : null;
         item.price = derivePrice(primary, item.salePrice, item.rentalPrice);
         item.deposit = typeSet.contains(TradeType.대여) ? deposit : null;
+        item.depositType = typeSet.contains(TradeType.대여) ? depositType : DepositType.AMOUNT;
         item.rentalUnit = typeSet.contains(TradeType.대여) ? rentalUnit : null;
         item.region = region;
         item.status = ItemStatus.판매중;
@@ -302,10 +339,22 @@ public class Item extends BaseEntity {
             RentalUnit rentalUnit,
             String region
     ) {
+        updateInfo(title, description, price, deposit, DepositType.AMOUNT, rentalUnit, region);
+    }
+
+    public void updateInfo(
+            String title,
+            String description,
+            long price,
+            Long deposit,
+            DepositType depositType,
+            RentalUnit rentalUnit,
+            String region
+    ) {
         Long salePrice = tradeType == TradeType.판매 ? price : null;
         Long rentalPrice = tradeType == TradeType.대여 ? price : null;
         updateInfoMulti(title, description, EnumSet.of(tradeType),
-                salePrice, rentalPrice, deposit, rentalUnit, region);
+                salePrice, rentalPrice, deposit, depositType, rentalUnit, region);
     }
 
     public void updateInfoMulti(
@@ -318,12 +367,27 @@ public class Item extends BaseEntity {
             RentalUnit rentalUnit,
             String region
     ) {
+        updateInfoMulti(title, description, tradeTypes, salePrice, rentalPrice, deposit,
+                DepositType.AMOUNT, rentalUnit, region);
+    }
+
+    public void updateInfoMulti(
+            String title,
+            String description,
+            Set<TradeType> tradeTypes,
+            Long salePrice,
+            Long rentalPrice,
+            Long deposit,
+            DepositType depositType,
+            RentalUnit rentalUnit,
+            String region
+    ) {
         if (!status.isEditable()) {
             throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
         }
         validateTitle(title);
         validateDescription(description);
-        validateTradeTypes(tradeTypes, salePrice, rentalPrice, deposit, rentalUnit);
+        validateTradeTypes(tradeTypes, salePrice, rentalPrice, deposit, depositType, rentalUnit);
         validateRegion(region);
 
         Set<TradeType> typeSet = EnumSet.copyOf(tradeTypes);
@@ -337,6 +401,7 @@ public class Item extends BaseEntity {
         this.rentalPrice = typeSet.contains(TradeType.대여) ? rentalPrice : null;
         this.price = derivePrice(primary, this.salePrice, this.rentalPrice);
         this.deposit = typeSet.contains(TradeType.대여) ? deposit : null;
+        this.depositType = typeSet.contains(TradeType.대여) ? depositType : DepositType.AMOUNT;
         this.rentalUnit = typeSet.contains(TradeType.대여) ? rentalUnit : null;
         this.region = region;
     }
@@ -352,6 +417,16 @@ public class Item extends BaseEntity {
 
     public Set<TradeType> getTradeTypes() {
         return Collections.unmodifiableSet(tradeTypes);
+    }
+
+    public Long computeDepositAmount() {
+        if (!tradeTypes.contains(TradeType.대여)) {
+            return null;
+        }
+        if (depositType == DepositType.PERCENT) {
+            return (long) Math.ceil(rentalPrice * deposit / 100.0);
+        }
+        return deposit;
     }
 
     public void assignCategory(Long categoryId) {
@@ -433,10 +508,19 @@ public class Item extends BaseEntity {
         }
     }
 
-    private static void validateRentalFields(TradeType tradeType, Long deposit, RentalUnit rentalUnit) {
+    private static void validateRentalFields(TradeType tradeType, Long deposit, DepositType depositType, RentalUnit rentalUnit) {
         if (tradeType.requiresDeposit()) {
-            if (deposit == null || deposit < 0) {
+            if (deposit == null) {
+                throw new IllegalArgumentException("대여 거래는 deposit 이 필수입니다");
+            }
+            if (depositType == null) {
+                throw new IllegalArgumentException("대여 거래는 depositType 이 필수입니다");
+            }
+            if (depositType == DepositType.AMOUNT && deposit < 0) {
                 throw new IllegalArgumentException("대여 거래는 0 이상의 deposit 이 필수입니다");
+            }
+            if (depositType == DepositType.PERCENT && (deposit < 1 || deposit > 100)) {
+                throw new IllegalArgumentException("PERCENT deposit 은 1 이상 100 이하이어야 합니다");
             }
             if (rentalUnit == null) {
                 throw new IllegalArgumentException("대여 거래는 rentalUnit 이 필수입니다");
@@ -456,6 +540,7 @@ public class Item extends BaseEntity {
             Long salePrice,
             Long rentalPrice,
             Long deposit,
+            DepositType depositType,
             RentalUnit rentalUnit
     ) {
         if (tradeTypes == null || tradeTypes.isEmpty()) {
@@ -473,8 +558,17 @@ public class Item extends BaseEntity {
             if (rentalUnit == null) {
                 throw new IllegalArgumentException("대여 모드는 rentalUnit 이 필수입니다");
             }
-            if (deposit == null || deposit < 0) {
+            if (deposit == null) {
+                throw new IllegalArgumentException("대여 모드는 deposit 이 필수입니다");
+            }
+            if (depositType == null) {
+                throw new IllegalArgumentException("대여 모드는 depositType 이 필수입니다");
+            }
+            if (depositType == DepositType.AMOUNT && deposit < 0) {
                 throw new IllegalArgumentException("대여 모드는 0 이상의 deposit 이 필수입니다");
+            }
+            if (depositType == DepositType.PERCENT && (deposit < 1 || deposit > 100)) {
+                throw new IllegalArgumentException("PERCENT deposit 은 1 이상 100 이하이어야 합니다");
             }
         }
     }
