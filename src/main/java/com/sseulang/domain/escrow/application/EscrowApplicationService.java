@@ -448,6 +448,36 @@ public class EscrowApplicationService {
     
     
     
+    public com.sseulang.domain.escrow.application.dto.EscrowPaymentPreviewResult previewPayShare(Long applicationId, Long viewerId) {
+        EscrowApplication app = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        if (!app.isParticipant(viewerId)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
+        }
+
+        long myShare;
+        boolean alreadyPaid;
+        if (viewerId.equals(app.getInitiatorId())) {
+            myShare = app.getInitiatorShare() == null ? 0L : app.getInitiatorShare();
+            alreadyPaid = app.getInitiatorPaidAt() != null;
+        } else {
+            myShare = app.getReceiverShare() == null ? 0L : app.getReceiverShare();
+            alreadyPaid = app.getReceiverPaidAt() != null;
+        }
+
+        long balance = userApplicationService.getPointSnapshot(viewerId).balance();
+        long deficit = Math.max(0L, myShare - balance);
+        boolean canPay = !alreadyPaid
+                && app.getStatus() == EscrowApplicationStatus.결제대기
+                && !app.isPaymentTimedOut()
+                && myShare > 0
+                && deficit == 0;
+
+        return new com.sseulang.domain.escrow.application.dto.EscrowPaymentPreviewResult(
+                app.getId(), myShare, balance, deficit, canPay, alreadyPaid, app.getPaymentDueAt()
+        );
+    }
+
     @Transactional
     public EscrowApplicationStatus payShare(Long applicationId, Long payerId) {
         userApplicationService.requireVerified(payerId);
