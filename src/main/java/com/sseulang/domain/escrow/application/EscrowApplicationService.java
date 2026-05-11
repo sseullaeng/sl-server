@@ -678,7 +678,10 @@ public class EscrowApplicationService {
         if (!app.isParticipant(requesterId)) {
             throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
         }
-        return EscrowApplicationResult.from(app, parseImageUrls(app.getImageUrls()));
+        Long deliveryId = deliveryRepository.findByEscrowApplicationId(id)
+                .map(d -> d.getId())
+                .orElse(null);
+        return EscrowApplicationResult.from(app, parseImageUrls(app.getImageUrls()), deliveryId);
     }
 
     
@@ -692,7 +695,10 @@ public class EscrowApplicationService {
     public EscrowApplicationResult adminGetById(Long id) {
         EscrowApplication app = applicationRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
-        return EscrowApplicationResult.from(app, parseImageUrls(app.getImageUrls()));
+        Long deliveryId = deliveryRepository.findByEscrowApplicationId(id)
+                .map(d -> d.getId())
+                .orElse(null);
+        return EscrowApplicationResult.from(app, parseImageUrls(app.getImageUrls()), deliveryId);
     }
 
     

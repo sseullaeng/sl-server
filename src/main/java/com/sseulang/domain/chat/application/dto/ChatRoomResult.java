@@ -29,15 +29,15 @@ public record ChatRoomResult(
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         
-        SystemCard systemCard
+        SystemCard card
 ) {
-    
+
 
     public record SystemCard(
             com.sseulang.domain.item.domain.TradeType tradeMode,
             Long itemId,
             String itemTitle,
-            String thumbnailUrl,
+            String itemThumbnailUrl,
             Long price
     ) {
         public static SystemCard from(com.sseulang.domain.chat.domain.ChatRoomCard c) {
@@ -81,7 +81,7 @@ public record ChatRoomResult(
             String itemTitle,
             String itemThumbnailUrl,
             Long itemSellerId,
-            SystemCard systemCard
+            SystemCard card
     ) {
         Long opponentId;
         int myUnread;
@@ -108,7 +108,7 @@ public record ChatRoomResult(
                 c.getLastMessage(), c.getLastMessageAt(),
                 c.isActive(),
                 c.getCreatedAt(), c.getUpdatedAt(),
-                systemCard
+                card
         );
     }
 }

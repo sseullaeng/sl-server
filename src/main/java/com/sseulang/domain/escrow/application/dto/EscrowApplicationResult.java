@@ -49,10 +49,15 @@ public record EscrowApplicationResult(
         LocalDateTime receiptConfirmedAt,
         LocalDateTime settledAt,
         List<String> imageUrls,
+        Long deliveryId,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
     public static EscrowApplicationResult from(EscrowApplication a, List<String> imageUrls) {
+        return from(a, imageUrls, null);
+    }
+
+    public static EscrowApplicationResult from(EscrowApplication a, List<String> imageUrls, Long deliveryId) {
         return new EscrowApplicationResult(
                 a.getId(), a.getLinkId(),
                 a.getInitiatorId(), a.getReceiverId(),
@@ -69,6 +74,7 @@ public record EscrowApplicationResult(
                 a.getStatus(), a.getCancelReason(), a.getCancelledBy(),
                 a.getReceiptConfirmedAt(), a.getSettledAt(),
                 imageUrls,
+                deliveryId,
                 a.getCreatedAt(), a.getUpdatedAt()
         );
     }
