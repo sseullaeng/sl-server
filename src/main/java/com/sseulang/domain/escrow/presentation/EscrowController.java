@@ -96,6 +96,42 @@ public class EscrowController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(result));
     }
 
+    @Operation(summary = "거래대행 내부 draft (판매자가 본인 영역만 입력)",
+            description = "PR-B-4 라운드 12. 판매자가 본인 영역(출발지/물품/가격) 만 입력 → status=정보입력대기. "
+                    + "구매자가 buyer-info PATCH 시 양쪽 filled → 자동으로 결제대기 전환 + fee 산정. "
+                    + "에러: ESCROW_FORM_INVALID, CHAT_ROOM_OPPONENT_LEFT, ESCROW_SELLER_ONLY.")
+    @PostMapping("/applications/internal/draft")
+    public ResponseEntity<ApiResponse<EscrowApplicationResult>> createInternalDraft(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody com.sseulang.domain.escrow.presentation.dto.EscrowApplicationCreateInternalDraftRequest request
+    ) {
+        EscrowApplicationResult result = service.createInternalDraft(request.toCommand(userId));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(result));
+    }
+
+    @Operation(summary = "판매자 영역 수정 (정보입력대기 상태)",
+            description = "PR-B-4. 본인이 sellerId 인 경우만. 정보입력대기 외 상태 호출 시 ESCROW_INVALID_STATE.")
+    @PatchMapping("/applications/{id}/seller-info")
+    public ApiResponse<EscrowApplicationResult> patchSellerInfo(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id,
+            @Valid @RequestBody com.sseulang.domain.escrow.presentation.dto.EscrowSellerInfoPatchRequest request
+    ) {
+        return ApiResponse.ok(service.patchSellerInfo(id, userId, request.toCommand()));
+    }
+
+    @Operation(summary = "구매자 영역 입력 (정보입력대기 상태)",
+            description = "PR-B-4. 본인이 buyerId 인 경우만. 양쪽 입력 완료 시 자동 fee 산정 + 결제대기 전환. "
+                    + "정보입력대기 외 상태 호출 시 ESCROW_INVALID_STATE.")
+    @PatchMapping("/applications/{id}/buyer-info")
+    public ApiResponse<EscrowApplicationResult> patchBuyerInfo(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id,
+            @Valid @RequestBody com.sseulang.domain.escrow.presentation.dto.EscrowBuyerInfoPatchRequest request
+    ) {
+        return ApiResponse.ok(service.patchBuyerInfo(id, userId, request.toCommand()));
+    }
+
     @Operation(summary = "본인 거래대행 신청 목록", description = "최신순. 필터는 후속 (5/11 단순).")
     @GetMapping("/applications/me")
     public ApiResponse<PageResponse<EscrowApplicationResult>> listMine(

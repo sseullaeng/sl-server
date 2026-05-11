@@ -110,13 +110,14 @@ public class EscrowApplication extends BaseEntity {
     @Column(name = "pickup_lng", nullable = false, precision = 10, scale = 7, updatable = false)
     private BigDecimal pickupLng;
 
-    @Column(name = "delivery_address", nullable = false, length = 255, updatable = false)
+    /** 수령지 — 내부 draft 단계엔 NULL, buyer-info PATCH 시 입력. */
+    @Column(name = "delivery_address", length = 255)
     private String deliveryAddress;
 
-    @Column(name = "delivery_lat", nullable = false, precision = 10, scale = 7, updatable = false)
+    @Column(name = "delivery_lat", precision = 10, scale = 7)
     private BigDecimal deliveryLat;
 
-    @Column(name = "delivery_lng", nullable = false, precision = 10, scale = 7, updatable = false)
+    @Column(name = "delivery_lng", precision = 10, scale = 7)
     private BigDecimal deliveryLng;
 
     @Enumerated(EnumType.STRING)
@@ -134,28 +135,29 @@ public class EscrowApplication extends BaseEntity {
     @Column(name = "delivery_notes", length = 500, updatable = false)
     private String deliveryNotes;
 
-    // ===== snapshot — 운영 settings 변경 무관 lock =====
-    @Column(name = "applied_distance_km", nullable = false, precision = 8, scale = 2, updatable = false)
+    // ===== snapshot — 양쪽 입력 완료 후 산정. 정보입력대기 단계엔 NULL. =====
+    @Column(name = "applied_distance_km", precision = 8, scale = 2)
     private BigDecimal appliedDistanceKm;
 
-    @Column(name = "applied_delivery_fee", nullable = false, updatable = false)
-    private long appliedDeliveryFee;
+    @Column(name = "applied_delivery_fee")
+    private Long appliedDeliveryFee;
 
-    @Column(name = "applied_commission_fee", nullable = false, updatable = false)
-    private long appliedCommissionFee;
+    @Column(name = "applied_commission_fee")
+    private Long appliedCommissionFee;
 
-    @Column(name = "applied_total_fee", nullable = false, updatable = false)
-    private long appliedTotalFee;
+    @Column(name = "applied_total_fee")
+    private Long appliedTotalFee;
 
-    @Column(name = "applied_commission_rate", nullable = false, precision = 5, scale = 4, updatable = false)
+    @Column(name = "applied_commission_rate", precision = 5, scale = 4)
     private BigDecimal appliedCommissionRate;
 
     // ===== 결제 추적 =====
-    @Column(name = "initiator_share", nullable = false, updatable = false)
-    private long initiatorShare;
+    /** 신청자(initiator) 결제 분담분. 양쪽 입력 완료 후 산정. */
+    @Column(name = "initiator_share")
+    private Long initiatorShare;
 
-    @Column(name = "receiver_share", nullable = false, updatable = false)
-    private long receiverShare;
+    @Column(name = "receiver_share")
+    private Long receiverShare;
 
     @Column(name = "initiator_paid_at")
     private LocalDateTime initiatorPaidAt;
@@ -319,6 +321,122 @@ public class EscrowApplication extends BaseEntity {
         a.status = EscrowApplicationStatus.결제대기;
         a.imageUrls = imageUrls;
         return a;
+    }
+
+    /**
+     * 내부 draft 흐름 (PR-B-4 라운드 12) — 판매자가 본인 영역만 입력하여 application 생성.
+     *
+     * <p>특징:
+     * <ul>
+     *   <li>{@code status = 정보입력대기}, {@code sellerInfoFilled = true}, {@code buyerInfoFilled = false}</li>
+     *   <li>구매자 영역 (delivery_*, receiver_phone) 은 NULL — 구매자가 buyer-info PATCH 시 입력</li>
+     *   <li>fee snapshot / share 는 NULL — 양쪽 입력 완료 후 transitionToReadyForPayment 시점에 산정</li>
+     *   <li>initiator = seller, receiver = buyer (내부 흐름은 sellerOnly 정책)</li>
+     * </ul>
+     */
+    public static EscrowApplication createInternalDraft(
+            Long chatRoomId,
+            Long initiatorId, Long receiverId,
+            TradeMode tradeMode, FeePayer feePayer,
+            long itemPrice, String itemDescription,
+            String pickupAddress, BigDecimal pickupLat, BigDecimal pickupLng,
+            Weight weight, Volume volume, Fragility fragility, String deliveryNotes,
+            String imageUrls
+    ) {
+        if (chatRoomId == null || initiatorId == null || receiverId == null) {
+            throw new IllegalArgumentException("ids required");
+        }
+        if (initiatorId.equals(receiverId)) {
+            throw new BusinessException(ErrorCode.ESCROW_SELF_NOT_ALLOWED);
+        }
+        EscrowApplication a = new EscrowApplication();
+        a.linkId = null;
+        a.entryType = EntryType.INTERNAL;
+        a.chatRoomId = chatRoomId;
+        a.sellerInfoFilled = true;
+        a.buyerInfoFilled = false;
+        a.initiatorId = initiatorId;
+        a.receiverId = receiverId;
+        a.sellerId = initiatorId;   // 판매자만 시작
+        a.buyerId = receiverId;
+        a.tradeMode = tradeMode;
+        a.feePayer = feePayer;
+        a.itemPrice = itemPrice;
+        a.itemDescription = itemDescription;
+        a.pickupAddress = pickupAddress;
+        a.pickupLat = pickupLat;
+        a.pickupLng = pickupLng;
+        a.weight = weight;
+        a.volume = volume;
+        a.fragility = fragility;
+        a.deliveryNotes = deliveryNotes;
+        a.status = EscrowApplicationStatus.정보입력대기;
+        a.imageUrls = imageUrls;
+        // delivery_*, receiver_phone, applied_*, share 는 NULL — buyer-info PATCH 시점에 채워짐.
+        return a;
+    }
+
+    /**
+     * 판매자 영역 수정 (PR-B-4) — 정보입력대기 상태에서만. updatable 컬럼 대상.
+     * delivery 좌표는 영향 없음 (구매자 영역).
+     */
+    public void patchSellerInfo(
+            String pickupAddress, BigDecimal pickupLat, BigDecimal pickupLng,
+            Weight weight, Volume volume, Fragility fragility,
+            long itemPrice, String itemDescription, String deliveryNotes
+    ) {
+        if (this.status != EscrowApplicationStatus.정보입력대기) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        this.pickupAddress = pickupAddress;
+        this.pickupLat = pickupLat;
+        this.pickupLng = pickupLng;
+        this.weight = weight;
+        this.volume = volume;
+        this.fragility = fragility;
+        this.itemPrice = itemPrice;
+        this.itemDescription = itemDescription;
+        this.deliveryNotes = deliveryNotes;
+        this.sellerInfoFilled = true;
+    }
+
+    /**
+     * 구매자 영역 입력 (PR-B-4) — 정보입력대기 상태에서만.
+     * buyerInfoFilled=true 로 set. 호출자(ApplicationService)가 양쪽 filled 시 transitionToReadyForPayment 호출.
+     */
+    public void patchBuyerInfo(
+            String deliveryAddress, BigDecimal deliveryLat, BigDecimal deliveryLng,
+            String receiverPhone
+    ) {
+        if (this.status != EscrowApplicationStatus.정보입력대기) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        this.deliveryAddress = deliveryAddress;
+        this.deliveryLat = deliveryLat;
+        this.deliveryLng = deliveryLng;
+        this.receiverPhone = receiverPhone;
+        this.buyerInfoFilled = true;
+    }
+
+    /**
+     * 양쪽 입력 완료 — fee 산정 결과 + share 를 set + 결제대기 진입.
+     * ApplicationService 가 EscrowFeeCalculator 로 산정한 snapshot 을 주입.
+     */
+    public void transitionToReadyForPayment(FeeBreakdown snapshot, long initiatorShare, long receiverShare) {
+        if (this.status != EscrowApplicationStatus.정보입력대기) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (!this.sellerInfoFilled || !this.buyerInfoFilled) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        this.appliedDistanceKm = snapshot.distanceKm();
+        this.appliedDeliveryFee = snapshot.deliveryFee();
+        this.appliedCommissionFee = snapshot.commissionFee();
+        this.appliedTotalFee = snapshot.totalFee();
+        this.appliedCommissionRate = snapshot.commissionRate();
+        this.initiatorShare = initiatorShare;
+        this.receiverShare = receiverShare;
+        this.status = EscrowApplicationStatus.결제대기;
     }
 
     /** 수신자 결제 완료 — 결정 #5 H2 (수신자 먼저). 모든 share 충족 시 결제완료 진입. */
