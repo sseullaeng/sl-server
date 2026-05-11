@@ -68,7 +68,7 @@ class TransactionApplicationServiceTest {
         chatRoomRepo = new com.sseulang.domain.chat.application.InMemoryFakeChatRoomRepository();
         com.sseulang.domain.chat.application.ChatRoomApplicationService chatSvc =
                 new com.sseulang.domain.chat.application.ChatRoomApplicationService(
-                        chatRoomRepo, itemSvc, userSvc, null, null);
+                        chatRoomRepo, new com.sseulang.domain.chat.application.InMemoryFakeChatRoomCardRepository(), itemSvc, userSvc, null, null);
         org.springframework.context.ApplicationEventPublisher publisher = publishedEvents::add;
         service = new TransactionApplicationService(
                 txRepo, itemSvc, pointSvc, userSvc, chatSvc, publisher, java.time.Clock.systemDefaultZone());

@@ -34,8 +34,24 @@ public record ChatRoomResult(
         LocalDateTime lastMessageAt,
         boolean active,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        // 라운드 12 PR-C #6 — 채팅방 시스템 카드 (첫 메시지 시점에 lazy 생성, getOne 응답에만 enrich)
+        SystemCard systemCard
 ) {
+    /**
+     * 채팅방 시스템 카드 — 거래방식 + 아이템 정보 (snapshot).
+     */
+    public record SystemCard(
+            com.sseulang.domain.item.domain.TradeType tradeMode,
+            Long itemId,
+            String itemTitle,
+            String thumbnailUrl,
+            Long price
+    ) {
+        public static SystemCard from(com.sseulang.domain.chat.domain.ChatRoomCard c) {
+            return new SystemCard(c.getTradeMode(), c.getItemId(), c.getItemTitle(), c.getThumbnailUrl(), c.getPrice());
+        }
+    }
     /**
      * viewerId 기준 derive. opponent / item join 정보는 호출자가 fetch 후 전달 (없으면 null/빈 문자열 OK).
      * viewerId 가 참여자 아니면 IAE — 서비스가 사전 권한 검증 책임.
@@ -62,6 +78,34 @@ public record ChatRoomResult(
             opponentId = null;
             myUnread = 0;
         }
+        return from(c, viewerId, opponentNickname, opponentProfileImage, itemTitle, itemThumbnailUrl, itemSellerId, null);
+    }
+
+    /**
+     * 라운드 12 PR-C #6 — systemCard 포함 enrich (getOne 응답 전용).
+     */
+    public static ChatRoomResult from(
+            ChatRoom c,
+            Long viewerId,
+            String opponentNickname,
+            String opponentProfileImage,
+            String itemTitle,
+            String itemThumbnailUrl,
+            Long itemSellerId,
+            SystemCard systemCard
+    ) {
+        Long opponentId;
+        int myUnread;
+        if (viewerId != null && viewerId.equals(c.getUser1Id())) {
+            opponentId = c.getUser2Id();
+            myUnread = c.getUser1Unread();
+        } else if (viewerId != null && viewerId.equals(c.getUser2Id())) {
+            opponentId = c.getUser1Id();
+            myUnread = c.getUser2Unread();
+        } else {
+            opponentId = null;
+            myUnread = 0;
+        }
         boolean isSeller = itemSellerId != null && viewerId != null && itemSellerId.equals(viewerId);
         boolean iLeft = c.iLeft(viewerId);
         boolean opponentLeft = c.opponentLeft(viewerId);
@@ -74,7 +118,8 @@ public record ChatRoomResult(
                 iLeft, opponentLeft,
                 c.getLastMessage(), c.getLastMessageAt(),
                 c.isActive(),
-                c.getCreatedAt(), c.getUpdatedAt()
+                c.getCreatedAt(), c.getUpdatedAt(),
+                systemCard
         );
     }
 }

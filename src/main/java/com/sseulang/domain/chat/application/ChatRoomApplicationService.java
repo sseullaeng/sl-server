@@ -28,6 +28,7 @@ public class ChatRoomApplicationService {
     private static final String UNIQUE_ITEM_USERS = "uk_chat_rooms_item_users";
 
     private final ChatRoomRepository chatRoomRepository;
+    private final com.sseulang.domain.chat.domain.ChatRoomCardRepository chatRoomCardRepository;
     private final ItemApplicationService itemApplicationService;
     private final com.sseulang.domain.user.application.UserApplicationService userApplicationService;
     private final UserView userView;
@@ -35,12 +36,14 @@ public class ChatRoomApplicationService {
 
     public ChatRoomApplicationService(
             ChatRoomRepository chatRoomRepository,
+            com.sseulang.domain.chat.domain.ChatRoomCardRepository chatRoomCardRepository,
             ItemApplicationService itemApplicationService,
             com.sseulang.domain.user.application.UserApplicationService userApplicationService,
             UserView userView,
             ItemView itemView
     ) {
         this.chatRoomRepository = chatRoomRepository;
+        this.chatRoomCardRepository = chatRoomCardRepository;
         this.itemApplicationService = itemApplicationService;
         this.userApplicationService = userApplicationService;
         this.userView = userView;
@@ -95,7 +98,49 @@ public class ChatRoomApplicationService {
         if (!room.isParticipant(requesterId)) {
             throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
         }
-        return enrichOne(room, requesterId);
+        ChatRoomResult base = enrichOne(room, requesterId);
+        // 라운드 12 PR-C #6 — systemCard 단건 fetch (없으면 null)
+        ChatRoomResult.SystemCard card = chatRoomCardRepository.findByChatRoomId(id)
+                .map(ChatRoomResult.SystemCard::from)
+                .orElse(null);
+        return new ChatRoomResult(
+                base.id(), base.itemId(),
+                base.user1Id(), base.user2Id(),
+                base.user1Unread(), base.user2Unread(),
+                base.opponentId(), base.opponentNickname(), base.opponentProfileImage(), base.myUnread(),
+                base.itemTitle(), base.itemThumbnailUrl(), base.isSeller(),
+                base.iLeft(), base.opponentLeft(),
+                base.lastMessage(), base.lastMessageAt(),
+                base.active(), base.createdAt(), base.updatedAt(),
+                card
+        );
+    }
+
+    /**
+     * 라운드 12 PR-C #6 — 첫 메시지 발신 시점에 호출. 카드 미존재 시 생성 (멱등).
+     * MessageApplicationService.send 에서 호출.
+     */
+    @Transactional
+    public void ensureSystemCard(Long chatRoomId) {
+        if (chatRoomCardRepository.findByChatRoomId(chatRoomId).isPresent()) {
+            return;
+        }
+        ChatRoom room = chatRoomRepository.findById(chatRoomId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        var itemMap = itemView.findByIds(List.of(room.getItemId()));
+        var item = itemMap.get(room.getItemId());
+        if (item == null) {
+            return;  // 아이템 삭제 등 — 카드 생성 skip (best-effort)
+        }
+        com.sseulang.domain.chat.domain.ChatRoomCard card = com.sseulang.domain.chat.domain.ChatRoomCard.create(
+                chatRoomId, room.getTradeMode(),
+                item.id(), item.title(), item.thumbnailUrl(), item.price()
+        );
+        try {
+            chatRoomCardRepository.save(card);
+        } catch (org.springframework.dao.DuplicateKeyException race) {
+            // 다른 트랜잭션이 먼저 생성 — 무시 (멱등)
+        }
     }
 
     /**

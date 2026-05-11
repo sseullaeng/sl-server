@@ -48,7 +48,7 @@ class MessageApplicationServiceTest {
         InMemoryFakeItemRepository itemRepo = new InMemoryFakeItemRepository();
         CategoryApplicationService catSvc = new CategoryApplicationService(new InMemoryFakeCategoryRepository());
         ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class), new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(), new com.sseulang.domain.item.application.NoOpWishlistView());
-        ChatRoomApplicationService roomSvc = new ChatRoomApplicationService(roomRepo, itemSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class), new com.sseulang.domain.chat.application.NoOpUserView(), new com.sseulang.domain.chat.application.NoOpItemView());
+        ChatRoomApplicationService roomSvc = new ChatRoomApplicationService(roomRepo, new com.sseulang.domain.chat.application.InMemoryFakeChatRoomCardRepository(), itemSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class), new com.sseulang.domain.chat.application.NoOpUserView(), new com.sseulang.domain.chat.application.NoOpItemView());
         NotificationApplicationService notifSvc = new NotificationApplicationService(notifRepo, new com.sseulang.domain.user.application.InMemoryFakeUserRepository());
         // 단위 테스트에선 트랜잭션 컨텍스트 X — AFTER_COMMIT listener 직접 호출하는 fake event publisher.
         ChatRealtimeEventListener listener = new ChatRealtimeEventListener(publisher);
