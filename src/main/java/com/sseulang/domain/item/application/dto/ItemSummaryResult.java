@@ -22,6 +22,7 @@ public record ItemSummaryResult(
         String thumbnailUrl,
         int wishlistCount,
         boolean isWishlisted,
+        int viewCount,
         LocalDateTime createdAt
 ) {
     /** viewer 가 없거나 비로그인 사용자 — isWishlisted = false. */
@@ -42,6 +43,7 @@ public record ItemSummaryResult(
                 item.getThumbnailUrl(),
                 item.getWishlistCount(),
                 isWishlisted,
+                item.getViewCount(),
                 item.getCreatedAt()
         );
     }
