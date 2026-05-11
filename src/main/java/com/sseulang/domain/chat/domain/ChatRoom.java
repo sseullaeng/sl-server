@@ -3,6 +3,8 @@ package com.sseulang.domain.chat.domain;
 import com.sseulang.global.common.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -63,9 +65,18 @@ public class ChatRoom extends BaseEntity {
     private LocalDateTime user2LeftAt;
 
     /**
-     * {@code (itemId, requesterId, opponentId)} 로 채팅방 생성. {@code user1Id < user2Id} 강제 정규화.
+     * 채팅방 거래방식 — 판매 / 대여 / 나눔 (PR-C 라운드 12).
+     * UNIQUE(item_id, user1_id, user2_id, trade_mode) — 같은 두 사용자 + 같은 물품이라도 거래방식 다르면 별도 방.
      */
-    public static ChatRoom openFor(Long itemId, Long requesterId, Long opponentId) {
+    @Enumerated(EnumType.STRING)
+    @Column(name = "trade_mode", nullable = false, length = 10)
+    private com.sseulang.domain.item.domain.TradeType tradeMode;
+
+    /**
+     * 라운드 12 PR-C — tradeMode 인자 추가. {@code user1Id < user2Id} 강제 정규화.
+     */
+    public static ChatRoom openFor(Long itemId, Long requesterId, Long opponentId,
+                                   com.sseulang.domain.item.domain.TradeType tradeMode) {
         if (itemId == null || itemId <= 0) {
             throw new IllegalArgumentException("itemId 는 양수여야 합니다");
         }
@@ -78,6 +89,9 @@ public class ChatRoom extends BaseEntity {
         if (requesterId.equals(opponentId)) {
             throw new IllegalArgumentException("requester 와 opponent 는 같을 수 없습니다");
         }
+        if (tradeMode == null) {
+            throw new IllegalArgumentException("tradeMode 는 필수입니다");
+        }
 
         ChatRoom cr = new ChatRoom();
         cr.itemId = itemId;
@@ -86,7 +100,14 @@ public class ChatRoom extends BaseEntity {
         cr.user1Unread = 0;
         cr.user2Unread = 0;
         cr.active = true;
+        cr.tradeMode = tradeMode;
         return cr;
+    }
+
+    /** @deprecated PR-C 라운드 12 — tradeMode 인자 받는 4-arg openFor 사용. */
+    @Deprecated
+    public static ChatRoom openFor(Long itemId, Long requesterId, Long opponentId) {
+        return openFor(itemId, requesterId, opponentId, com.sseulang.domain.item.domain.TradeType.판매);
     }
 
     public boolean isParticipant(Long userId) {
