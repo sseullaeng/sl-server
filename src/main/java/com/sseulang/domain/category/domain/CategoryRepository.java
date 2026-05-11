@@ -15,4 +15,9 @@ public interface CategoryRepository {
      * 활성 카테고리 전부 조회. parent_id 우선(NULL 먼저), sort_order 순. 트리 조립은 호출자가 in-memory 로.
      */
     List<Category> findAllActiveSorted();
+
+    /**
+     * 활성 카테고리 이름 부분일치 검색 (LIKE %keyword%). sort_order ASC. 라운드 12 PR-D 자동완성용.
+     */
+    List<Category> searchByKeyword(String keyword);
 }

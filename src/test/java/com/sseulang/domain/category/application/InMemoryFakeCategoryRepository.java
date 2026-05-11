@@ -45,4 +45,18 @@ public class InMemoryFakeCategoryRepository implements CategoryRepository {
                 .thenComparing(Category::getId));
         return active;
     }
+
+    @Override
+    public List<Category> searchByKeyword(String keyword) {
+        if (keyword == null || keyword.isBlank()) return List.of();
+        String lower = keyword.toLowerCase();
+        List<Category> result = new ArrayList<>();
+        for (Category c : store.values()) {
+            if (c.isActive() && c.getName() != null && c.getName().toLowerCase().contains(lower)) {
+                result.add(c);
+            }
+        }
+        result.sort(Comparator.comparingInt(Category::getSortOrder).thenComparing(Category::getId));
+        return result;
+    }
 }

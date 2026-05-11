@@ -25,4 +25,9 @@ public class CategoryRepositoryImpl implements CategoryRepository {
     public List<Category> findAllActiveSorted() {
         return jpa.findAllActiveSorted();
     }
+
+    @Override
+    public List<Category> searchByKeyword(String keyword) {
+        return jpa.searchByKeyword(keyword);
+    }
 }
