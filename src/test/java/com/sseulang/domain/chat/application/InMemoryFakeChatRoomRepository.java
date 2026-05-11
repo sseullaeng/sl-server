@@ -24,12 +24,14 @@ public class InMemoryFakeChatRoomRepository implements ChatRoomRepository {
     }
 
     @Override
-    public Optional<ChatRoom> findByItemAndUsers(Long itemId, Long userA, Long userB) {
+    public Optional<ChatRoom> findByItemAndUsers(Long itemId, Long userA, Long userB,
+                                                 com.sseulang.domain.item.domain.TradeType tradeMode) {
         long u1 = Math.min(userA, userB);
         long u2 = Math.max(userA, userB);
         return store.values().stream()
                 .filter(c -> c.getItemId().equals(itemId)
-                        && c.getUser1Id() == u1 && c.getUser2Id() == u2)
+                        && c.getUser1Id() == u1 && c.getUser2Id() == u2
+                        && (tradeMode == null || tradeMode.equals(c.getTradeMode())))
                 .findFirst();
     }
 

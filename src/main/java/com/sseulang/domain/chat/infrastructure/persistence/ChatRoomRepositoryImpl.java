@@ -23,10 +23,11 @@ public class ChatRoomRepositoryImpl implements ChatRoomRepository {
     }
 
     @Override
-    public Optional<ChatRoom> findByItemAndUsers(Long itemId, Long userA, Long userB) {
+    public Optional<ChatRoom> findByItemAndUsers(Long itemId, Long userA, Long userB,
+                                                 com.sseulang.domain.item.domain.TradeType tradeMode) {
         long u1 = Math.min(userA, userB);
         long u2 = Math.max(userA, userB);
-        return jpa.findByItemAndUsersNormalized(itemId, u1, u2);
+        return jpa.findByItemAndUsersNormalized(itemId, u1, u2, tradeMode);
     }
 
     @Override

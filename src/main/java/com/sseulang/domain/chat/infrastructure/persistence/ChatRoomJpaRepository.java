@@ -18,11 +18,13 @@ interface ChatRoomJpaRepository extends JpaRepository<ChatRoom, Long> {
         WHERE c.itemId = :itemId
           AND c.user1Id = :u1
           AND c.user2Id = :u2
+          AND c.tradeMode = :tradeMode
     """)
     Optional<ChatRoom> findByItemAndUsersNormalized(
             @Param("itemId") Long itemId,
             @Param("u1") Long u1,
-            @Param("u2") Long u2
+            @Param("u2") Long u2,
+            @Param("tradeMode") com.sseulang.domain.item.domain.TradeType tradeMode
     );
 
     /**

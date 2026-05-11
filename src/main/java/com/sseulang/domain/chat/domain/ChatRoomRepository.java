@@ -10,9 +10,11 @@ public interface ChatRoomRepository {
     Optional<ChatRoom> findById(Long id);
 
     /**
-     * 정규화된 (user1, user2) 쌍과 itemId 로 기존 방 조회. 인자는 정규화 전이어도 메서드가 정렬해 lookup.
+     * 정규화된 (user1, user2) 쌍 + itemId + tradeMode 로 기존 방 조회.
+     * 라운드 12 PR-C — 같은 사용자/아이템 쌍이라도 거래방식 다르면 별도 방이므로 tradeMode 도 매칭 키.
      */
-    Optional<ChatRoom> findByItemAndUsers(Long itemId, Long userA, Long userB);
+    Optional<ChatRoom> findByItemAndUsers(Long itemId, Long userA, Long userB,
+                                          com.sseulang.domain.item.domain.TradeType tradeMode);
 
     /** 내가 참여자인 채팅방 목록 — last_message_at desc (null 은 후순위). */
     Page<ChatRoom> findMine(Long userId, Pageable pageable);

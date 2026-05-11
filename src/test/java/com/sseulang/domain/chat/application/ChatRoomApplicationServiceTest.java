@@ -46,7 +46,7 @@ class ChatRoomApplicationServiceTest {
     @Test
     @DisplayName("openFor 정상_방 생성 + 정규화 user1<user2")
     void openFor_정상() {
-        ChatRoomResult r = service.openFor(BUYER, itemId);
+        ChatRoomResult r = service.openFor(BUYER, itemId, null);
 
         assertThat(r.itemId()).isEqualTo(itemId);
         assertThat(r.user1Id()).isEqualTo(SELLER);  // 100 < 200 → SELLER 가 user1
@@ -57,8 +57,8 @@ class ChatRoomApplicationServiceTest {
     @Test
     @DisplayName("openFor 멱등_같은 (요청자, item) 두 번 호출_같은 방")
     void openFor_멱등() {
-        ChatRoomResult first = service.openFor(BUYER, itemId);
-        ChatRoomResult second = service.openFor(BUYER, itemId);
+        ChatRoomResult first = service.openFor(BUYER, itemId, null);
+        ChatRoomResult second = service.openFor(BUYER, itemId, null);
 
         assertThat(first.id()).isEqualTo(second.id());
     }
@@ -66,7 +66,7 @@ class ChatRoomApplicationServiceTest {
     @Test
     @DisplayName("openFor 본인 item_CHAT_FORBIDDEN")
     void openFor_self_거부() {
-        assertThatThrownBy(() -> service.openFor(SELLER, itemId))
+        assertThatThrownBy(() -> service.openFor(SELLER, itemId, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.CHAT_FORBIDDEN);
@@ -79,7 +79,7 @@ class ChatRoomApplicationServiceTest {
         item.markAsDeleted();
         itemRepo.save(item);
 
-        assertThatThrownBy(() -> service.openFor(BUYER, itemId))
+        assertThatThrownBy(() -> service.openFor(BUYER, itemId, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.ITEM_NOT_FOUND);
@@ -92,7 +92,7 @@ class ChatRoomApplicationServiceTest {
         item.markAsHidden();
         itemRepo.save(item);
 
-        assertThatThrownBy(() -> service.openFor(BUYER, itemId))
+        assertThatThrownBy(() -> service.openFor(BUYER, itemId, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
@@ -105,15 +105,15 @@ class ChatRoomApplicationServiceTest {
         item.markAsReserved();
         itemRepo.save(item);
 
-        // 예약 상태에선 새 채팅 가능 (이미 예약된 buyer 외에도 다른 시점에 채팅 가능 가정)
-        ChatRoomResult r = service.openFor(BUYER, itemId);
+        // 라운드 12 PR-C — tradeMode 명시 (null 시 findActiveForTransaction 가드가 예약 차단).
+        ChatRoomResult r = service.openFor(BUYER, itemId, com.sseulang.domain.item.domain.TradeType.판매);
         assertThat(r).isNotNull();
     }
 
     @Test
     @DisplayName("getOne 참여자 정상 / 외부인 거부")
     void getOne_권한() {
-        Long roomId = service.openFor(BUYER, itemId).id();
+        Long roomId = service.openFor(BUYER, itemId, null).id();
 
         assertThat(service.getOne(roomId, SELLER).id()).isEqualTo(roomId);
         assertThat(service.getOne(roomId, BUYER).id()).isEqualTo(roomId);
@@ -137,13 +137,13 @@ class ChatRoomApplicationServiceTest {
     @DisplayName("listMine 내가 참여한 방만")
     void listMine() {
         // BUYER 가 SELLER 의 item 으로 방 생성
-        Long room1 = service.openFor(BUYER, itemId).id();
+        Long room1 = service.openFor(BUYER, itemId, null).id();
 
         // OTHER 가 SELLER 의 다른 item 으로 방 생성 — BUYER 와 무관
         Item another = itemRepo.save(Item.create(
                 SELLER, null, "다른물건", "d", 1L, null, null, TradeType.판매, null
         ));
-        Long room2 = service.openFor(OTHER, another.getId()).id();
+        Long room2 = service.openFor(OTHER, another.getId(), null).id();
 
         Page<ChatRoomResult> mine = service.listMine(BUYER, PageRequest.of(0, 10));
 
@@ -155,7 +155,7 @@ class ChatRoomApplicationServiceTest {
     @Test
     @DisplayName("leave 정상_본인 listMine 에서 제외 + 상대방 opponentLeft=true")
     void leave_정상() {
-        Long roomId = service.openFor(BUYER, itemId).id();
+        Long roomId = service.openFor(BUYER, itemId, null).id();
 
         service.leave(roomId, BUYER);
 
@@ -176,7 +176,7 @@ class ChatRoomApplicationServiceTest {
     @Test
     @DisplayName("leave 비참여자_CHAT_FORBIDDEN")
     void leave_비참여자() {
-        Long roomId = service.openFor(BUYER, itemId).id();
+        Long roomId = service.openFor(BUYER, itemId, null).id();
 
         assertThatThrownBy(() -> service.leave(roomId, OTHER))
                 .isInstanceOf(BusinessException.class)
@@ -196,7 +196,7 @@ class ChatRoomApplicationServiceTest {
     @Test
     @DisplayName("leave idempotent — 두 번 호출해도 OK")
     void leave_idempotent() {
-        Long roomId = service.openFor(BUYER, itemId).id();
+        Long roomId = service.openFor(BUYER, itemId, null).id();
         service.leave(roomId, BUYER);
         // 두 번째 호출은 예외 X
         service.leave(roomId, BUYER);
@@ -205,7 +205,7 @@ class ChatRoomApplicationServiceTest {
     @Test
     @DisplayName("requireSendable 본인 left → CHAT_FORBIDDEN")
     void requireSendable_본인left() {
-        Long roomId = service.openFor(BUYER, itemId).id();
+        Long roomId = service.openFor(BUYER, itemId, null).id();
         service.leave(roomId, BUYER);
 
         assertThatThrownBy(() -> service.requireSendable(roomId, BUYER))
@@ -217,7 +217,7 @@ class ChatRoomApplicationServiceTest {
     @Test
     @DisplayName("requireSendable 상대방 left → CHAT_ROOM_OPPONENT_LEFT")
     void requireSendable_상대left() {
-        Long roomId = service.openFor(BUYER, itemId).id();
+        Long roomId = service.openFor(BUYER, itemId, null).id();
         service.leave(roomId, BUYER);
 
         assertThatThrownBy(() -> service.requireSendable(roomId, SELLER))
@@ -229,7 +229,7 @@ class ChatRoomApplicationServiceTest {
     @Test
     @DisplayName("requireSendable 정상 — 양쪽 모두 안 나간 상태")
     void requireSendable_정상() {
-        Long roomId = service.openFor(BUYER, itemId).id();
+        Long roomId = service.openFor(BUYER, itemId, null).id();
         // throws X
         service.requireSendable(roomId, BUYER);
         service.requireSendable(roomId, SELLER);
