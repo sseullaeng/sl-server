@@ -63,4 +63,18 @@ public class InMemoryFakeUserReportRepository implements UserReportRepository {
                 .filter(r -> r.getStatus() == ReportStatus.접수 || r.getStatus() == ReportStatus.처리중)
                 .count();
     }
+
+    @Override
+    public long countResolved() {
+        return store.values().stream()
+                .filter(r -> r.getStatus() == ReportStatus.처리완료 || r.getStatus() == ReportStatus.반려)
+                .count();
+    }
+
+    @Override
+    public long countCreatedSince(java.time.LocalDateTime since) {
+        return store.values().stream()
+                .filter(r -> r.getCreatedAt() != null && !r.getCreatedAt().isBefore(since))
+                .count();
+    }
 }

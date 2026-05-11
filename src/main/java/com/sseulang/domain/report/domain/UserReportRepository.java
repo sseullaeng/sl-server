@@ -22,4 +22,10 @@ public interface UserReportRepository {
 
     /** 차트 dashboard summary — 처리 대기 신고 수 (status IN (접수, 처리중)). */
     long countPending();
+
+    /** 차트 dashboard — 처리 완료 신고 수 (status IN (처리완료, 반려)). */
+    long countResolved();
+
+    /** 차트 dashboard — 특정 시점 이후 생성된 신고 건수 (전체 status). */
+    long countCreatedSince(java.time.LocalDateTime since);
 }

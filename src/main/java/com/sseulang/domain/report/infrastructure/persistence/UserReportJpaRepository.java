@@ -33,4 +33,12 @@ interface UserReportJpaRepository extends JpaRepository<UserReport, Long> {
     /** 차트 dashboard summary — 처리 대기 (접수 또는 처리중) 신고 수. */
     @Query("SELECT COUNT(r) FROM UserReport r WHERE r.status IN (com.sseulang.domain.report.domain.ReportStatus.접수, com.sseulang.domain.report.domain.ReportStatus.처리중)")
     long countPending();
+
+    /** 차트 dashboard — 처리 완료 (처리완료 또는 반려) 신고 수. */
+    @Query("SELECT COUNT(r) FROM UserReport r WHERE r.status IN (com.sseulang.domain.report.domain.ReportStatus.처리완료, com.sseulang.domain.report.domain.ReportStatus.반려)")
+    long countResolved();
+
+    /** 차트 dashboard — 특정 시점 이후 생성된 신고 건수 (전체 status). */
+    @Query("SELECT COUNT(r) FROM UserReport r WHERE r.createdAt >= :since")
+    long countCreatedSince(@org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
 }

@@ -18,7 +18,8 @@ public record AdminDashboardChartsResult(
         Summary summary,
         List<DailyCount> signupTrend,
         List<TradeTypeCount> tradeByType,
-        List<StatusGroupCount> tradeByStatus
+        List<StatusGroupCount> tradeByStatus,
+        ReportsSummary reportsSummary
 ) {
     public record Summary(
             UsersSummary users,
@@ -26,6 +27,15 @@ public record AdminDashboardChartsResult(
             MonthTradesSummary monthTrades,
             long pendingReports
     ) { }
+
+    /**
+     * 관리자 대시보드 신고 위젯 (PR-F #9 라운드 12).
+     *
+     * @param pending        처리 대기 (접수 + 처리중)
+     * @param resolved       처리 완료 (처리완료 + 반려)
+     * @param totalLast7Days 최근 7일 (생성 기준, 전체 status)
+     */
+    public record ReportsSummary(long pending, long resolved, long totalLast7Days) { }
 
     public record UsersSummary(long total, long monthDelta) { }
 
