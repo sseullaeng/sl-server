@@ -56,6 +56,25 @@ public class EscrowApplication extends BaseEntity {
     @Column(name = "chat_room_id", updatable = false)
     private Long chatRoomId;
 
+    /**
+     * 판매자 영역 (출발지/물품) 입력 완료 — PR-B-4 라운드 12. 외부 흐름은 항상 TRUE.
+     */
+    @Column(name = "seller_info_filled", nullable = false)
+    private boolean sellerInfoFilled;
+
+    /**
+     * 구매자 영역 (수령지/연락처) 입력 완료. 외부 흐름은 항상 TRUE.
+     * 양쪽 모두 TRUE 가 되면 fee 산정 + status 가 정보입력대기 → 결제대기 로 전환.
+     */
+    @Column(name = "buyer_info_filled", nullable = false)
+    private boolean buyerInfoFilled;
+
+    /**
+     * 수령자 연락처 (구매자 영역) — 내부 흐름의 buyer-info PATCH 시 입력.
+     */
+    @Column(name = "receiver_phone", length = 20)
+    private String receiverPhone;
+
     @Column(name = "initiator_id", nullable = false, updatable = false)
     private Long initiatorId;
 
@@ -196,6 +215,9 @@ public class EscrowApplication extends BaseEntity {
         EscrowApplication a = new EscrowApplication();
         a.linkId = linkId;
         a.entryType = EntryType.EXTERNAL;
+        // 외부 link 흐름은 receiver 가 form 제출 시 양쪽 정보 모두 입력 → 양쪽 filled.
+        a.sellerInfoFilled = true;
+        a.buyerInfoFilled = true;
         a.initiatorId = initiatorId;
         a.receiverId = receiverId;
         a.buyerId = buyerId;
@@ -265,6 +287,10 @@ public class EscrowApplication extends BaseEntity {
         a.linkId = null;
         a.entryType = EntryType.INTERNAL;
         a.chatRoomId = chatRoomId;
+        // PR-B-3 단순 흐름 — 현재 createInternal 은 양쪽 정보 한 번에 입력. PR-B-4 의 draft 흐름은
+        // 별도 createInternalDraft + patchSellerInfo / patchBuyerInfo 로 분리 (후속 commit).
+        a.sellerInfoFilled = true;
+        a.buyerInfoFilled = true;
         a.initiatorId = initiatorId;
         a.receiverId = receiverId;
         a.buyerId = buyerId;
