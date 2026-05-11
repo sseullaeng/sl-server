@@ -387,4 +387,92 @@ class EscrowApplicationServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ESCROW_FORBIDDEN);
     }
+
+    // ------------------------------- previewPayShare (PR-E) -------------------------------
+
+    @Test
+    @DisplayName("previewPayShare_잔액_충분_canPay=true_deficit=0")
+    void previewPayShare_canPay() {
+        cacheExpectedFees();
+        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+                11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
+        ));
+        EscrowApplicationResult app = service.createApplication(validForm(
+                20L, link.linkToken(), 1_800_000L,
+                expectedDeliveryFee, expectedCommissionFee, expectedTotalFee
+        ));
+        long receiverShare = app.receiverShare();
+        when(userService.getPointSnapshot(20L))
+                .thenReturn(new com.sseulang.domain.user.domain.UserRepository.PointSnapshot(receiverShare + 1000, 0));
+
+        var preview = service.previewPayShare(app.id(), 20L);
+
+        assertThat(preview.myShare()).isEqualTo(receiverShare);
+        assertThat(preview.myBalance()).isEqualTo(receiverShare + 1000);
+        assertThat(preview.deficit()).isZero();
+        assertThat(preview.canPay()).isTrue();
+        assertThat(preview.alreadyPaid()).isFalse();
+    }
+
+    @Test
+    @DisplayName("previewPayShare_잔액_부족_deficit_정확_canPay=false")
+    void previewPayShare_deficit() {
+        cacheExpectedFees();
+        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+                11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
+        ));
+        EscrowApplicationResult app = service.createApplication(validForm(
+                20L, link.linkToken(), 1_800_000L,
+                expectedDeliveryFee, expectedCommissionFee, expectedTotalFee
+        ));
+        long initiatorShare = app.initiatorShare();
+        when(userService.getPointSnapshot(11L))
+                .thenReturn(new com.sseulang.domain.user.domain.UserRepository.PointSnapshot(initiatorShare - 500, 0));
+
+        var preview = service.previewPayShare(app.id(), 11L);
+
+        assertThat(preview.myShare()).isEqualTo(initiatorShare);
+        assertThat(preview.deficit()).isEqualTo(500L);
+        assertThat(preview.canPay()).isFalse();
+    }
+
+    @Test
+    @DisplayName("previewPayShare_제3자_FORBIDDEN")
+    void previewPayShare_third_party_rejected() {
+        cacheExpectedFees();
+        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+                11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
+        ));
+        EscrowApplicationResult app = service.createApplication(validForm(
+                20L, link.linkToken(), 1_800_000L,
+                expectedDeliveryFee, expectedCommissionFee, expectedTotalFee
+        ));
+        assertThatThrownBy(() -> service.previewPayShare(app.id(), 99L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("previewPayShare_이미_본인_share_결제_완료_alreadyPaid=true_canPay=false")
+    void previewPayShare_already_paid() {
+        cacheExpectedFees();
+        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+                11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
+        ));
+        EscrowApplicationResult app = service.createApplication(validForm(
+                20L, link.linkToken(), 1_800_000L,
+                expectedDeliveryFee, expectedCommissionFee, expectedTotalFee
+        ));
+        service.recordPaymentConfirmed(app.id(), 20L);
+
+        long receiverShare = app.receiverShare();
+        when(userService.getPointSnapshot(20L))
+                .thenReturn(new com.sseulang.domain.user.domain.UserRepository.PointSnapshot(receiverShare * 10, 0));
+
+        var preview = service.previewPayShare(app.id(), 20L);
+
+        assertThat(preview.alreadyPaid()).isTrue();
+        assertThat(preview.canPay()).isFalse();
+    }
 }

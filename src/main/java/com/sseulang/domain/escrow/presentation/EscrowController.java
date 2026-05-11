@@ -133,6 +133,18 @@ public class EscrowController {
         return ApiResponse.ok(service.patchBuyerInfo(id, userId, request.toCommand()));
     }
 
+    @Operation(summary = "본인 share 결제 미리보기 (PR-E)",
+            description = "본인 분담 + 현재 포인트 잔액 + 부족분 + 즉시 결제 가능 여부. 부족 시 프론트가 충전 UI 트리거. 참여자만 접근.")
+    @GetMapping("/applications/{id}/payment-preview")
+    public ApiResponse<com.sseulang.domain.escrow.presentation.dto.EscrowPaymentPreviewResponse> previewPayment(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        return ApiResponse.ok(com.sseulang.domain.escrow.presentation.dto.EscrowPaymentPreviewResponse.from(
+                service.previewPayShare(id, userId)
+        ));
+    }
+
     @Operation(summary = "본인 share 포인트 결제 (PR-B-5)",
             description = "결제대기 상태에서 본인 share 만큼 포인트 잔액 차감. 양쪽 결제 완료 시 자동 결제완료 + 라이더 매칭. "
                     + "에러: 400 INSUFFICIENT_POINT (잔액 부족), 400 ESCROW_INVALID_STATE (상태/시점/이미 결제됨), 403 ESCROW_FORBIDDEN (참여자 아님).")
