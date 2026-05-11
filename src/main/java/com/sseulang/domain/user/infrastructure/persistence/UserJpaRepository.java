@@ -249,4 +249,16 @@ interface UserJpaRepository extends JpaRepository<User, Long> {
              ORDER BY u.id ASC
             """)
     java.util.List<Long> findIdsByKeywordLike(@Param("kw") String kw, org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * 라운드 12 PR-F #8 — 누적 정지 일수 ≥ threshold 이면서 아직 살아있는 사용자 id.
+     * 자동 탈퇴 배치 처리용. id ASC.
+     */
+    @Query("""
+            SELECT u.id FROM User u
+             WHERE u.cumulativeSuspendDays >= :threshold
+               AND u.deleted = false
+             ORDER BY u.id ASC
+            """)
+    java.util.List<Long> findAutoWithdrawTargetIds(@Param("threshold") int threshold, org.springframework.data.domain.Pageable pageable);
 }

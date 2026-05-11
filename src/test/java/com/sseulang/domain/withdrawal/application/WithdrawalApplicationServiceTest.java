@@ -40,7 +40,7 @@ class WithdrawalApplicationServiceTest {
         withdrawalRepo = new InMemoryFakeWithdrawalRepository();
         userRepo = new InMemoryFakeUserRepository();
         historyRepo = new InMemoryFakePointHistoryRepository();
-        UserApplicationService userSvc = new UserApplicationService(userRepo, new com.sseulang.domain.transaction.application.InMemoryFakeTransactionRepository(), new com.sseulang.domain.report.application.InMemoryFakeUserReportRepository(), new com.sseulang.domain.auth.application.NoOpRefreshTokenStore(), java.time.Clock.systemDefaultZone());
+        UserApplicationService userSvc = new UserApplicationService(userRepo, new com.sseulang.domain.transaction.application.InMemoryFakeTransactionRepository(), new com.sseulang.domain.report.application.InMemoryFakeUserReportRepository(), new com.sseulang.domain.auth.application.NoOpRefreshTokenStore(), new com.sseulang.domain.auth.application.NoOpEmailSender(), java.time.Clock.systemDefaultZone());
         PointApplicationService pointSvc = new PointApplicationService(userSvc, historyRepo);
         // self 는 REQUIRES_NEW proxy 용 — 단위 테스트엔 Spring 컨텍스트 없으니 자기 자신을 주입.
         // 단위 테스트의 InMemoryFake 는 deadlock/duplicate 던지지 않으므로 catch 경로 미진입.

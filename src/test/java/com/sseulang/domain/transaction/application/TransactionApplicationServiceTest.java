@@ -59,6 +59,7 @@ class TransactionApplicationServiceTest {
                 new com.sseulang.domain.transaction.application.InMemoryFakeTransactionRepository(),
                 new com.sseulang.domain.report.application.InMemoryFakeUserReportRepository(),
                 new com.sseulang.domain.auth.application.NoOpRefreshTokenStore(),
+                new com.sseulang.domain.auth.application.NoOpEmailSender(),
                 java.time.Clock.systemDefaultZone());
         itemSvc = new ItemApplicationService(
                 itemRepo, catSvc, userSvc,

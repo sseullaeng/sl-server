@@ -138,4 +138,10 @@ public interface UserRepository {
      * keyword null/blank → 빈 리스트.
      */
     java.util.List<Long> findIdsByKeywordLike(String keyword, int limit);
+
+    /**
+     * 라운드 12 PR-F #8 — 누적 정지 일수가 {@code threshold} 이상이면서 아직 soft delete 되지 않은
+     * 사용자 id 청크. id ASC. 배치 자동 탈퇴 처리용.
+     */
+    java.util.List<Long> findAutoWithdrawTargetIds(int threshold, int limit);
 }

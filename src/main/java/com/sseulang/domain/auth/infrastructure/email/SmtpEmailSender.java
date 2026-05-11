@@ -26,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 public class SmtpEmailSender implements EmailSender {
 
     private static final String SUBJECT = "[쓸랭] 이메일 인증을 완료해 주세요";
+    private static final String AUTO_WITHDRAWN_SUBJECT = "[쓸랭] 활동 정지 누적 200일 도달 — 계정 자동 탈퇴 안내";
 
     private final JavaMailSender mailSender;
     private final String fromAddress;
@@ -49,6 +50,11 @@ public class SmtpEmailSender implements EmailSender {
         sendHtml(toEmail, subject, html);
     }
 
+    @Override
+    public void sendAutoWithdrawnEmail(String toEmail, int cumulativeSuspendDays) {
+        sendHtml(toEmail, AUTO_WITHDRAWN_SUBJECT, buildAutoWithdrawnHtml(cumulativeSuspendDays));
+    }
+
     private void sendHtml(String toEmail, String subject, String html) {
         MimeMessage message = mailSender.createMimeMessage();
         try {
@@ -66,6 +72,20 @@ public class SmtpEmailSender implements EmailSender {
             // 운영 모니터링 대상 — 5/6 이후 outbox 도입 시 비동기 retry 로 강화.
             throw new RuntimeException("이메일 발송 실패: " + e.getMessage(), e);
         }
+    }
+
+    private static String buildAutoWithdrawnHtml(int cumulativeSuspendDays) {
+        return """
+                <!doctype html>
+                <html>
+                  <body style="font-family:sans-serif;line-height:1.6;color:#333">
+                    <h2>쓸랭 계정 자동 탈퇴 안내</h2>
+                    <p>회원님의 계정이 활동 정지 누적 <b>%d일</b> 도달로 자동 탈퇴 처리되었습니다.</p>
+                    <p>운영 정책상 누적 정지 200일 이상은 자동 탈퇴 대상입니다 (이용약관 제○조).</p>
+                    <p>문의는 고객센터(support@sseulang.store) 로 보내 주세요.</p>
+                  </body>
+                </html>
+                """.formatted(cumulativeSuspendDays);
     }
 
     private static String buildHtml(String verificationUrl) {

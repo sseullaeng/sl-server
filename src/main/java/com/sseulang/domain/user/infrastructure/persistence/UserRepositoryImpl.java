@@ -157,4 +157,10 @@ public class UserRepositoryImpl implements UserRepository {
         }
         return jpa.findIdsByKeywordLike(keyword.strip(), org.springframework.data.domain.PageRequest.of(0, limit));
     }
+
+    @Override
+    public java.util.List<Long> findAutoWithdrawTargetIds(int threshold, int limit) {
+        if (limit <= 0) return java.util.Collections.emptyList();
+        return jpa.findAutoWithdrawTargetIds(threshold, org.springframework.data.domain.PageRequest.of(0, limit));
+    }
 }
