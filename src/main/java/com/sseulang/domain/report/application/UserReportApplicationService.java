@@ -81,6 +81,16 @@ public class UserReportApplicationService {
         return repository.countPending();
     }
 
+    /** 차트 dashboard — 처리 완료 (처리완료 + 반려) 신고 수. */
+    public long countResolved() {
+        return repository.countResolved();
+    }
+
+    /** 차트 dashboard — 특정 시점 이후 생성된 신고 건수 (전체 status). */
+    public long countCreatedSince(java.time.LocalDateTime since) {
+        return repository.countCreatedSince(since);
+    }
+
     private UserReport findOrThrow(Long reportId) {
         return repository.findById(reportId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REPORT_NOT_FOUND));

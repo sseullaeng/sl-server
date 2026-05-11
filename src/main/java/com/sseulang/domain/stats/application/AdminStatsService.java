@@ -103,8 +103,18 @@ public class AdminStatsService {
                 buildSummary(today),
                 buildSignupTrend(start, end, fromTs, toExclusive),
                 buildTradeByType(fromTs, toExclusive),
-                buildTradeByStatus(fromTs, toExclusive)
+                buildTradeByStatus(fromTs, toExclusive),
+                buildReportsSummary(today)
         );
+    }
+
+    /** PR-F #9 라운드 12 — 신고 위젯 (pending / resolved / 최근 7일). */
+    private AdminDashboardChartsResult.ReportsSummary buildReportsSummary(LocalDate today) {
+        long pending = userReportService.countPending();
+        long resolved = userReportService.countResolved();
+        LocalDateTime sevenDaysAgo = today.minusDays(6).atStartOfDay();
+        long last7Days = userReportService.countCreatedSince(sevenDaysAgo);
+        return new AdminDashboardChartsResult.ReportsSummary(pending, resolved, last7Days);
     }
 
     private AdminDashboardChartsResult.Summary buildSummary(LocalDate today) {

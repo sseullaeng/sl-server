@@ -6,21 +6,34 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDate;
 import java.util.List;
 
-@Schema(description = "관리자 차트 dashboard — 카드 4종 + 차트 3종 (signupTrend / tradeByType / tradeByStatus).")
+@Schema(description = "관리자 차트 dashboard — 카드 4종 + 차트 3종 + 신고 위젯.")
 public record AdminDashboardChartsResponse(
         Summary summary,
         List<DailyCount> signupTrend,
         List<TradeTypeCount> tradeByType,
-        List<StatusGroupCount> tradeByStatus
+        List<StatusGroupCount> tradeByStatus,
+        ReportsSummary reportsSummary
 ) {
     public static AdminDashboardChartsResponse from(AdminDashboardChartsResult r) {
         return new AdminDashboardChartsResponse(
                 Summary.from(r.summary()),
                 r.signupTrend().stream().map(s -> new DailyCount(s.date(), s.count())).toList(),
                 r.tradeByType().stream().map(t -> new TradeTypeCount(t.type(), t.count())).toList(),
-                r.tradeByStatus().stream().map(s -> new StatusGroupCount(s.status(), s.count())).toList()
+                r.tradeByStatus().stream().map(s -> new StatusGroupCount(s.status(), s.count())).toList(),
+                new ReportsSummary(
+                        r.reportsSummary().pending(),
+                        r.reportsSummary().resolved(),
+                        r.reportsSummary().totalLast7Days()
+                )
         );
     }
+
+    @Schema(description = "PR-F #9 라운드 12 — 관리자 대시보드 신고 위젯.")
+    public record ReportsSummary(
+            @Schema(example = "5", description = "처리 대기 (접수 + 처리중)") long pending,
+            @Schema(example = "23", description = "처리 완료 (처리완료 + 반려)") long resolved,
+            @Schema(example = "8", description = "최근 7일 신고 수 (생성 기준, 전체 status)") long totalLast7Days
+    ) { }
 
     @Schema(description = "요약 카드 4종 + 비교값.")
     public record Summary(

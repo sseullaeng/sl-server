@@ -49,4 +49,14 @@ public class UserReportRepositoryImpl implements UserReportRepository {
     public long countPending() {
         return jpa.countPending();
     }
+
+    @Override
+    public long countResolved() {
+        return jpa.countResolved();
+    }
+
+    @Override
+    public long countCreatedSince(java.time.LocalDateTime since) {
+        return jpa.countCreatedSince(since);
+    }
 }
