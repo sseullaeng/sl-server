@@ -25,6 +25,8 @@ public record ItemSummaryResponse(
         @Schema(example = "false",
                 description = "본인 찜 여부 — 비로그인은 항상 false")
         boolean isWishlisted,
+        @Schema(example = "127", description = "조회 수 (라운드 12 PR-D)")
+        int viewCount,
         LocalDateTime createdAt
 ) {
     public static ItemSummaryResponse from(ItemSummaryResult r) {
@@ -33,6 +35,7 @@ public record ItemSummaryResponse(
                 r.title(), r.price(),
                 r.tradeType(), r.status(), r.region(),
                 r.thumbnailUrl(), r.wishlistCount(), r.isWishlisted(),
+                r.viewCount(),
                 r.createdAt()
         );
     }
