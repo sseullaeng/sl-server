@@ -61,6 +61,13 @@ public class Notification {
     @Field("broadcastId")
     private String broadcastId;
 
+    /**
+     * 알림 대분류 — PR-F #5 라운드 12. 프론트가 SYSTEM/REPORT/INQUIRY/USER 4가지 카테고리로 분류 노출.
+     * 기존 row 는 default USER (자동 적용).
+     */
+    @Field("category")
+    private NotificationCategory category;
+
     @CreatedDate
     @Field("createdAt")
     private Instant createdAt;
@@ -73,10 +80,10 @@ public class Notification {
             String linkType,
             Long linkId
     ) {
-        return create(userId, type, title, content, linkType, linkId, null);
+        return create(userId, type, title, content, linkType, linkId, null, NotificationCategory.USER);
     }
 
-    /** Round 12 broadcast 전용 — broadcastId 동반 INSERT. */
+    /** Round 12 broadcast 전용 — broadcastId 동반 INSERT (category=SYSTEM). */
     public static Notification create(
             Long userId,
             NotificationType type,
@@ -85,6 +92,21 @@ public class Notification {
             String linkType,
             Long linkId,
             String broadcastId
+    ) {
+        // broadcast 는 admin 공지 — SYSTEM 카테고리.
+        return create(userId, type, title, content, linkType, linkId, broadcastId, NotificationCategory.SYSTEM);
+    }
+
+    /** Round 12 PR-F #5 — 카테고리 명시 INSERT. */
+    public static Notification create(
+            Long userId,
+            NotificationType type,
+            String title,
+            String content,
+            String linkType,
+            Long linkId,
+            String broadcastId,
+            NotificationCategory category
     ) {
         if (userId == null || userId <= 0) {
             throw new IllegalArgumentException("userId 는 양수여야 합니다");
@@ -110,6 +132,7 @@ public class Notification {
         n.linkId = linkId;
         n.read = false;
         n.broadcastId = broadcastId;
+        n.category = category != null ? category : NotificationCategory.USER;
         return n;
     }
 
