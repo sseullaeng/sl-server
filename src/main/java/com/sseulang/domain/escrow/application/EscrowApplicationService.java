@@ -195,6 +195,106 @@ public class EscrowApplicationService {
     }
 
     // =============================================================
+    // Use case 0c — 내부 draft (PR-B-4 라운드 12). 판매자가 본인 영역만 입력 → 정보입력대기.
+    // 구매자는 patchBuyerInfo 로 본인 영역 추가 입력 → 양쪽 filled 시 결제대기 전환.
+    // =============================================================
+    @Transactional
+    public EscrowApplicationResult createInternalDraft(
+            com.sseulang.domain.escrow.application.dto.EscrowApplicationCreateInternalDraftCommand cmd
+    ) {
+        userApplicationService.requireVerified(cmd.requesterId());
+
+        com.sseulang.domain.chat.application.ChatRoomApplicationService.ChatRoomMeta meta =
+                chatRoomApplicationService.findMetaForParticipant(cmd.chatRoomId(), cmd.requesterId());
+        if (!meta.itemId().equals(cmd.itemId())) {
+            throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+        }
+        if (meta.iLeft() || meta.opponentLeft()) {
+            throw new BusinessException(ErrorCode.CHAT_ROOM_OPPONENT_LEFT);
+        }
+
+        // 판매자만
+        var itemInfo = itemApplicationService.findActiveForTransaction(cmd.itemId());
+        if (!itemInfo.sellerId().equals(cmd.requesterId())) {
+            throw new BusinessException(ErrorCode.ESCROW_SELLER_ONLY);
+        }
+
+        Long buyerId = chatRoomApplicationService.findOpponent(cmd.chatRoomId(), cmd.requesterId());
+
+        EscrowApplication app = EscrowApplication.createInternalDraft(
+                cmd.chatRoomId(),
+                cmd.requesterId(), buyerId,
+                cmd.tradeMode(), cmd.feePayer(),
+                cmd.itemPrice(), cmd.itemDescription(),
+                cmd.pickupAddress(), cmd.pickupLat(), cmd.pickupLng(),
+                cmd.weight(), cmd.volume(), cmd.fragility(), cmd.deliveryNotes(),
+                serializeImageUrls(cmd.imageUrls())
+        );
+        EscrowApplication saved = applicationRepository.save(app);
+        return EscrowApplicationResult.from(saved, parseImageUrls(saved.getImageUrls()));
+    }
+
+    // =============================================================
+    // Use case 0d — 판매자 영역 수정 (PR-B-4).
+    // =============================================================
+    @Transactional
+    public EscrowApplicationResult patchSellerInfo(
+            Long applicationId,
+            Long requesterId,
+            com.sseulang.domain.escrow.application.dto.EscrowSellerInfoPatchCommand cmd
+    ) {
+        EscrowApplication app = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        if (!app.getSellerId().equals(requesterId)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
+        }
+        app.patchSellerInfo(
+                cmd.pickupAddress(), cmd.pickupLat(), cmd.pickupLng(),
+                cmd.weight(), cmd.volume(), cmd.fragility(),
+                cmd.itemPrice(), cmd.itemDescription(), cmd.deliveryNotes()
+        );
+        return EscrowApplicationResult.from(app, parseImageUrls(app.getImageUrls()));
+    }
+
+    // =============================================================
+    // Use case 0e — 구매자 영역 입력 (PR-B-4). 양쪽 filled 시 결제대기 전환.
+    // =============================================================
+    @Transactional
+    public EscrowApplicationResult patchBuyerInfo(
+            Long applicationId,
+            Long requesterId,
+            com.sseulang.domain.escrow.application.dto.EscrowBuyerInfoPatchCommand cmd
+    ) {
+        userApplicationService.requireVerified(requesterId);
+        EscrowApplication app = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        if (!app.getBuyerId().equals(requesterId)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
+        }
+        app.patchBuyerInfo(cmd.deliveryAddress(), cmd.deliveryLat(), cmd.deliveryLng(), cmd.receiverPhone());
+
+        // 양쪽 filled — fee 산정 + 결제대기 전환
+        if (app.isSellerInfoFilled() && app.isBuyerInfoFilled()) {
+            EscrowFeeSettings settings = feeSettingsRepository.findSingleton();
+            BigDecimal distance = EscrowFeeCalculator.distanceKm(
+                    app.getPickupLat().doubleValue(), app.getPickupLng().doubleValue(),
+                    app.getDeliveryLat().doubleValue(), app.getDeliveryLng().doubleValue()
+            );
+            FeeBreakdown calculated = EscrowFeeCalculator.calculate(
+                    settings, app.getTradeMode(), app.getItemPrice(), distance,
+                    app.getWeight(), app.getVolume(), app.getFragility()
+            );
+            long buyerOwed = computeBuyerOwed(app.getTradeMode(), app.getItemPrice(), calculated, app.getFeePayer());
+            long sellerOwed = computeSellerOwed(calculated, app.getFeePayer());
+            long initiatorShare = sellerOwed;  // initiator = seller (내부 흐름)
+            long receiverShare = buyerOwed;    // receiver = buyer
+            app.transitionToReadyForPayment(calculated, initiatorShare, receiverShare);
+        }
+
+        return EscrowApplicationResult.from(app, parseImageUrls(app.getImageUrls()));
+    }
+
+    // =============================================================
     // Use case 1 — 신청자가 link 생성
     // =============================================================
     @Transactional
