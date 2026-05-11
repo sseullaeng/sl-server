@@ -53,14 +53,19 @@ public class ChatRoomApplicationService {
      * 미인증 사용자의 채팅 스팸 방지 — verified 가드 (게이트 1 round 2).
      */
     @Transactional
-    public ChatRoomResult openFor(Long requesterId, Long itemId) {
+    public ChatRoomResult openFor(Long requesterId, Long itemId,
+                                  com.sseulang.domain.item.domain.TradeType tradeMode) {
         userApplicationService.requireVerified(requesterId);
         Long sellerId = itemApplicationService.findSellerOfActiveItem(itemId);
         if (sellerId.equals(requesterId)) {
             throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
         }
-        ChatRoom room = chatRoomRepository.findByItemAndUsers(itemId, requesterId, sellerId)
-                .orElseGet(() -> createWithRaceGuard(itemId, requesterId, sellerId));
+        // tradeMode null 이면 item 의 tradeType 그대로 (라운드 12 — 같은 item 다중 mode 는 PR-D 이후 실용)
+        com.sseulang.domain.item.domain.TradeType mode = tradeMode != null
+                ? tradeMode
+                : itemApplicationService.findActiveForTransaction(itemId).tradeType();
+        ChatRoom room = chatRoomRepository.findByItemAndUsers(itemId, requesterId, sellerId, mode)
+                .orElseGet(() -> createWithRaceGuard(itemId, requesterId, sellerId, mode));
         return enrichOne(room, requesterId);
     }
 
@@ -229,13 +234,14 @@ public class ChatRoomApplicationService {
         );
     }
 
-    private ChatRoom createWithRaceGuard(Long itemId, Long requesterId, Long sellerId) {
-        ChatRoom newRoom = ChatRoom.openFor(itemId, requesterId, sellerId);
+    private ChatRoom createWithRaceGuard(Long itemId, Long requesterId, Long sellerId,
+                                         com.sseulang.domain.item.domain.TradeType tradeMode) {
+        ChatRoom newRoom = ChatRoom.openFor(itemId, requesterId, sellerId, tradeMode);
         try {
             return chatRoomRepository.save(newRoom);
         } catch (DataIntegrityViolationException violation) {
             if (isUniqueConflict(violation)) {
-                return chatRoomRepository.findByItemAndUsers(itemId, requesterId, sellerId)
+                return chatRoomRepository.findByItemAndUsers(itemId, requesterId, sellerId, tradeMode)
                         .orElseThrow(() -> violation);
             }
             throw violation;

@@ -43,7 +43,7 @@ public class ChatRoomController {
             @Valid @RequestBody ChatRoomCreateRequest request
     ) {
         return ApiResponse.ok(ChatRoomResponse.from(
-                chatRoomService.openFor(requesterId, request.itemId())));
+                chatRoomService.openFor(requesterId, request.itemId(), request.tradeMode())));
     }
 
     @Operation(summary = "내 채팅방 목록",

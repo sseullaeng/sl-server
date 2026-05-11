@@ -74,7 +74,7 @@ class StompAuthChannelInterceptorTest {
         interceptor = new StompAuthChannelInterceptor(roomSvc, deliverySvc, jwtProvider, blacklist);
 
         Item item = itemRepo.save(Item.create(SELLER, null, "물건", "d", 1L, null, null, TradeType.판매, null));
-        roomId = roomSvc.openFor(BUYER, item.getId()).id();
+        roomId = roomSvc.openFor(BUYER, item.getId(), null).id();
     }
 
     @Test
