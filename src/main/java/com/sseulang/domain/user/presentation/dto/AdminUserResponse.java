@@ -9,7 +9,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/** 관리자용 회원 응답. v8b: tradeCount/reportCount/dormant/status/suspended* 추가. */
 @Schema(description = "관리자 — 회원 단건 (민감 정보 제외).")
 public record AdminUserResponse(
         @Schema(example = "100") Long id,
@@ -43,10 +42,8 @@ public record AdminUserResponse(
         );
     }
 
-    /**
-     * @deprecated 호환용 — 도메인 enrich 정보 없이 entity 만으로 변환. 새 코드는 {@link AdminUserResult} 경유 권장.
-     * Codex 리뷰 + 테스트 갱신 끝나면 제거 예정.
-     */
+    
+
     @Deprecated
     public static AdminUserResponse from(User u) {
         return new AdminUserResponse(

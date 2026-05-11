@@ -18,8 +18,8 @@ public class WebhookEventRepositoryImpl implements WebhookEventRepository {
 
     @Override
     public WebhookEvent save(WebhookEvent event) {
-        // saveAndFlush — UNIQUE 충돌이 트랜잭션 commit 시점이 아니라 즉시 발생하도록 강제.
-        // (게이트 1 round 1 — Critical 4: lazy flush 로 try/catch 안 잡히는 회귀 차단)
+        
+        
         return jpa.saveAndFlush(event);
     }
 

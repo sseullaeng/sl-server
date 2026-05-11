@@ -57,21 +57,8 @@ public class PaymentController {
         ));
     }
 
-    /**
-     * 토스 webhook — 토스 공식 spec (PAYMENT_STATUS_CHANGED) 처리.
-     *
-     * <p>Toss 발송 헤더:
-     * <ul>
-     *   <li>{@code tosspayments-webhook-transmission-id} — 멱등 키 (재전송 시 동일)</li>
-     *   <li>{@code tosspayments-webhook-transmission-time} — 발송 시각 (감사용)</li>
-     * </ul>
-     *
-     * <p>결제 이벤트에는 HMAC 시그니처가 없으므로 위변조 방지는 토스 lookup API 재조회로 처리
-     * (게이트 1 round 1). 정상/멱등(중복 transmission-id) 시 200 → 재시도 중단. payload 형식 오류
-     * 또는 transmission-id 누락 시 400 → 토스 재시도.</p>
-     *
-     * <p>SecurityConfig 의 CSRF / auth 면제 이미 적용 (Day 7).</p>
-     */
+    
+
     @Operation(summary = "토스 결제 webhook (외부)",
             description = "토스에서 호출. 인증/CSRF 면제. transmission-id 로 멱등성 보장. "
                     + "위변조 방지는 토스 lookup API 재조회로 검증. 프론트는 호출하지 않음.")

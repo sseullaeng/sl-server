@@ -7,7 +7,6 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
-/** Spring Data JPA — {@link CategoryRepositoryImpl} 가 wrapping. 외부에서 직접 import 금지. */
 interface CategoryJpaRepository extends JpaRepository<Category, Long> {
 
     @Query("""

@@ -17,10 +17,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * 사용자/물품 신고 Aggregate. {@code user_reports} 테이블 — CHECK reported_id XOR item_id (둘 중 하나는 NOT NULL).
- * 관리자 처리 흐름(상태 전이)은 Day 9 admin 도메인.
- */
 @Entity
 @Table(name = "user_reports")
 @Getter
@@ -101,10 +97,8 @@ public class UserReport extends BaseEntity {
         return r;
     }
 
-    /**
-     * 관리자 처리 시작. 접수 → 처리중. processedAt 은 처리 시작 시점에 기록 (terminal 일 때
-     * 다시 갱신 가능).
-     */
+    
+
     public void markInProgress(Long adminId, String memo, LocalDateTime now) {
         validateAdminAndNow(adminId, now);
         if (status != ReportStatus.접수) {
@@ -116,7 +110,7 @@ public class UserReport extends BaseEntity {
         this.processedAt = now;
     }
 
-    /** 처리 완료 — 처리중 단계에서만 가능. */
+    
     public void complete(Long adminId, String memo, LocalDateTime now) {
         validateAdminAndNow(adminId, now);
         if (status != ReportStatus.처리중) {
@@ -128,7 +122,7 @@ public class UserReport extends BaseEntity {
         this.processedAt = now;
     }
 
-    /** 반려 — 접수 또는 처리중에서만 가능 (terminal 상태 전이는 거부). */
+    
     public void reject(Long adminId, String memo, LocalDateTime now) {
         validateAdminAndNow(adminId, now);
         if (status.isTerminal()) {

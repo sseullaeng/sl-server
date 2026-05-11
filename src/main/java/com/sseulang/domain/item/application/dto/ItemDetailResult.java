@@ -8,7 +8,7 @@ import com.sseulang.domain.item.domain.TradeType;
 
 import java.time.LocalDateTime;
 import java.util.List;
-
+import java.util.Set;
 public record ItemDetailResult(
         Long id,
         Long sellerId,
@@ -16,9 +16,12 @@ public record ItemDetailResult(
         String title,
         String description,
         long price,
+        Long salePrice,
+        Long rentalPrice,
         Long deposit,
         RentalUnit rentalUnit,
         TradeType tradeType,
+        Set<TradeType> tradeTypes,
         ItemStatus status,
         String region,
         int viewCount,
@@ -36,9 +39,12 @@ public record ItemDetailResult(
                 item.getTitle(),
                 item.getDescription(),
                 item.getPrice(),
+                item.getSalePrice(),
+                item.getRentalPrice(),
                 item.getDeposit(),
                 item.getRentalUnit(),
                 item.getTradeType(),
+                item.getTradeTypes(),
                 item.getStatus(),
                 item.getRegion(),
                 item.getViewCount(),

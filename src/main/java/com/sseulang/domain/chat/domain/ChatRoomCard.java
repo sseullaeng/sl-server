@@ -12,12 +12,6 @@ import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.Instant;
 
-/**
- * 채팅방 시스템 카드 (PR-C #6 라운드 12). 첫 메시지 send 시점에 lazy 생성 후 채팅방에서 영구 노출.
- *
- * <p>MongoDB {@code chat_room_cards} 컬렉션 — chatRoomId 당 1건 (UNIQUE).
- * 내용: 거래방식 + 아이템 title + thumbnail + 가격 (snapshot — 거래 시점 그대로 보존).</p>
- */
 @Document(collection = "chat_room_cards")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

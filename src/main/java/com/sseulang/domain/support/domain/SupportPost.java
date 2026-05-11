@@ -19,13 +19,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * SupportPost Aggregate Root — FAQ / QNA 공개 게시글. V12 {@code support_posts} 매핑.
- *
- * <p>관리자만 작성/수정/삭제. 사용자는 비로그인 포함 누구나 조회. 상태 개념 없음 — 작성 즉시 노출.</p>
- *
- * <p>FAQ 와 QNA 가 컬럼이 동일해 단일 테이블 + {@code post_type} 컬럼으로 구분.</p>
- */
 @Entity
 @Table(name = "support_posts")
 @Getter

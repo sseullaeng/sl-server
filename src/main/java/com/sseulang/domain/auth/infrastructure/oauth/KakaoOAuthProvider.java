@@ -17,18 +17,6 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
-/**
- * 카카오 Authorization Code → access_token 교환 + 사용자 정보 조회.
- *
- * <ol>
- *   <li>{@code POST https://kauth.kakao.com/oauth/token} — code/client_id/client_secret/redirect_uri</li>
- *   <li>{@code GET https://kapi.kakao.com/v2/user/me} with Bearer access_token</li>
- * </ol>
- *
- * <p>Client Secret 옵션이 켜져 있어도 안전 — 서버에서 secret 동봉. 프론트는 code 만 알면 됨.</p>
- *
- * <p>모든 실패(토큰 무효 / 네트워크 / 응답 파싱 / 동의 항목 누락)는 {@code AUTH_OAUTH_FAILED} 로 통일.</p>
- */
 @Component
 public class KakaoOAuthProvider implements OAuthProvider {
 
@@ -86,7 +74,7 @@ public class KakaoOAuthProvider implements OAuthProvider {
                     .retrieve()
                     .body(TokenResponse.class);
         } catch (RestClientException e) {
-            // 잘못된 code/redirectUri 도 카카오가 4xx 로 떨굼 — 인프라 + 비즈니스 분리 어려워 통합 처리.
+            
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }
         if (res == null || res.accessToken() == null || res.accessToken().isBlank()) {
@@ -120,7 +108,7 @@ public class KakaoOAuthProvider implements OAuthProvider {
         if (email == null || nickname == null) {
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }
-        // is_email_valid + is_email_verified 둘 다 true 만 허용.
+        
         if (!Boolean.TRUE.equals(account.isEmailValid()) || !Boolean.TRUE.equals(account.isEmailVerified())) {
             throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED);
         }

@@ -15,9 +15,9 @@ public interface BannerRepository {
 
     void deleteById(Long id);
 
-    /** 사용자 — 활성 + 윈도우 안 배너, sort_order ASC 정렬. */
+    
     List<Banner> findVisibleSorted(LocalDateTime now);
 
-    /** 관리자 — 전체 페이징. created_at DESC. */
+    
     Page<Banner> findAllForAdmin(Pageable pageable);
 }

@@ -14,15 +14,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * PointHistory Aggregate Root. V1 스키마 {@code point_histories} 매핑.
- *
- * <p>가이드 §4.8 — 모든 잔액 변동 흐름 (충전 / 결제 / 판매정산 / 출금 / 환불) 에서 적재.
- * amount 는 {@code +} (증가) / {@code -} (감소) 부호 포함. balance_after 는 변동 직후 잔액 스냅샷.</p>
- *
- * <p>Setter 없음. 정적 팩토리 {@link #record} 만 사용. created_at 은 DB DEFAULT CURRENT_TIMESTAMP 가
- * 채우지만 Aggregate 생성 시 명시 설정해 테스트/감사 일관.</p>
- */
 @Entity
 @Table(name = "point_histories")
 @Getter
@@ -40,7 +31,7 @@ public class PointHistory {
     @Column(name = "point_type", nullable = false)
     private PointHistoryType pointType;
 
-    /** + 증가 / - 감소 부호 포함 */
+    
     @Column(name = "amount", nullable = false)
     private long amount;
 
@@ -60,10 +51,8 @@ public class PointHistory {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    /**
-     * 잔액 증가 history. caller 는 양수 amount 만 전달, 저장 amount 도 + 부호로 보존.
-     * 허용 type: 충전 / 판매정산 / 환불 (buyer 환불 적립).
-     */
+    
+
     public static PointHistory recordCredit(
             Long userId,
             PointHistoryType type,
@@ -79,10 +68,8 @@ public class PointHistory {
         return build(userId, type, amount, balanceAfter, referenceType, referenceId, description, now);
     }
 
-    /**
-     * 잔액 감소 history. caller 는 양수 amount 만 전달, 저장 amount 는 - 부호로 보존.
-     * 허용 type: 결제 / 출금 / 환불 (seller 환불 차감).
-     */
+    
+
     public static PointHistory recordDebit(
             Long userId,
             PointHistoryType type,

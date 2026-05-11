@@ -5,10 +5,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-/**
- * LOCAL 가입 요청. 비밀번호는 BCrypt 72-byte limit + 보안 정책으로 8~72자.
- * 길이/형식 추가 검증은 LocalAuthService 가 도메인 룰로 한 번 더 가드.
- */
 @Schema(description = "이메일 + 비밀번호 + 닉네임으로 LOCAL 가입")
 public record LocalSignupRequest(
         @Schema(description = "이메일 (최대 100자, RFC 5322 형식)", example = "alice@sseulang.test", maxLength = 100)

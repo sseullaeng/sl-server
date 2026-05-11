@@ -16,11 +16,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 마이페이지용 본인 등록 물품 목록. {@link ItemController} 의 공개 검색과 분리 — 본인만 접근.
- *
- * <p>{@code status} 쿼리로 탭 분리 가능: 판매중 / 예약 / 거래완료 / 비공개. 미지정 시 삭제만 자동 제외.</p>
- */
 @Tag(name = "Item", description = "마이페이지 본인 물품 목록")
 @RestController
 @RequestMapping("/api/v1/users/me/items")

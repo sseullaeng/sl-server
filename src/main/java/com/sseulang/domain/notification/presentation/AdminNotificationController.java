@@ -15,11 +15,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 관리자 공지 broadcast — 활성 사용자 전원에게 시스템 알림 INSERT.
- *
- * <p>SecurityConfig admin chain 으로 ROLE_ADMIN 강제. targetRole 은 현재 ALL 만 — ADMIN/USER 분기는 후속.</p>
- */
 @Tag(name = "AdminNotification", description = "관리자 — 알림 broadcast")
 @RestController
 @RequestMapping("/api/v1/admin/notifications")

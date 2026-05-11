@@ -15,9 +15,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * FAQ / QNA 게시글 — 누구나 (비로그인 포함) 조회. SecurityConfig 가 GET 만 permitAll.
- */
 @Tag(name = "SupportPost", description = "고객지원 FAQ / QNA — 공개 조회")
 @RestController
 @RequestMapping("/api/v1/support/posts")

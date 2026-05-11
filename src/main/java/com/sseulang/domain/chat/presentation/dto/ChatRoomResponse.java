@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 public record ChatRoomResponse(
         @Schema(example = "8") Long id,
         @Schema(example = "42") Long itemId,
-        // viewer 기준 derived 필드 — 프론트는 이것만 보면 됨
+        
         @Schema(example = "200", description = "viewer 의 상대방 사용자 id") Long opponentId,
         @Schema(example = "쓸랭이", description = "상대방 닉네임") String opponentNickname,
         @Schema(description = "상대방 프로필 이미지 URL (없으면 null)") String opponentProfileImage,
@@ -19,11 +19,11 @@ public record ChatRoomResponse(
         @Schema(example = "true", description = "viewer 가 이 채팅방의 아이템 판매자인지") boolean isSeller,
         @Schema(example = "false", description = "본인이 채팅방을 나갔는지 (soft hide). true 면 본인 목록에서 제외됨") boolean iLeft,
         @Schema(example = "false", description = "상대방이 채팅방을 나갔는지. true 면 메시지 send 차단 + 시스템 메시지 노출") boolean opponentLeft,
-        // 메타
+        
         @Schema(example = "안녕하세요...", description = "최근 메시지 미리보기") String lastMessage,
         LocalDateTime lastMessageAt,
         @Schema(description = "false 면 차단/예약 등으로 비활성") boolean active,
-        // raw — 호환용 (향후 제거 예정)
+        
         @Schema(description = "정규화 raw — user1Id < user2Id. 호환용 유지, 신규 코드는 opponentId 사용 권장") Long user1Id,
         @Schema(description = "정규화 raw — 호환용 유지") Long user2Id,
         @Schema(description = "raw — user1 미읽음. 호환용 유지, 신규 코드는 myUnread 사용 권장") int user1Unread,

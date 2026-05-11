@@ -22,7 +22,7 @@ public record ReviewResult(
         );
     }
 
-    /** 본인 한줄평만 노출 — 가이드 §4.7 "한줄평은 본인만". */
+    
     public ReviewResult masked(Long requesterId) {
         if (reviewerId.equals(requesterId)) {
             return this;

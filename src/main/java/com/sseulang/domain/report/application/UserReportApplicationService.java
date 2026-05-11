@@ -31,24 +31,22 @@ public class UserReportApplicationService {
         this.clock = clock;
     }
 
-    /**
-     * 사용자 신고. 자기 신고 거부는 도메인 invariant 에서.
-     * 미인증 사용자의 무차별 신고 스팸 방지 — verified 가드 (게이트 1 round 2).
-     */
+    
+
     @Transactional
     public Long reportUser(Long reporterId, Long reportedUserId, String reason, String detail) {
         userService.requireVerified(reporterId);
         return repository.save(UserReport.reportUser(reporterId, reportedUserId, reason, detail)).getId();
     }
 
-    /** 물품 신고. Item 존재 여부는 FK 가 잡음 (RESTRICT/CASCADE) — 별도 검증 생략. */
+    
     @Transactional
     public Long reportItem(Long reporterId, Long itemId, String reason, String detail) {
         userService.requireVerified(reporterId);
         return repository.save(UserReport.reportItem(reporterId, itemId, reason, detail)).getId();
     }
 
-    // ───────── 관리자 처리 흐름 ─────────
+    
 
     @Transactional
     public void adminMarkInProgress(Long reportId, Long adminId, String memo) {
@@ -76,17 +74,17 @@ public class UserReportApplicationService {
         return findOrThrow(reportId);
     }
 
-    /** 차트 dashboard summary — 처리 대기 (접수 + 처리중) 신고 수. */
+    
     public long countPending() {
         return repository.countPending();
     }
 
-    /** 차트 dashboard — 처리 완료 (처리완료 + 반려) 신고 수. */
+    
     public long countResolved() {
         return repository.countResolved();
     }
 
-    /** 차트 dashboard — 특정 시점 이후 생성된 신고 건수 (전체 status). */
+    
     public long countCreatedSince(java.time.LocalDateTime since) {
         return repository.countCreatedSince(since);
     }

@@ -17,16 +17,6 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
-/**
- * 구글 Authorization Code → access_token 교환 + 사용자 정보 조회.
- *
- * <ol>
- *   <li>{@code POST https://oauth2.googleapis.com/token} — code/client_id/client_secret/redirect_uri</li>
- *   <li>{@code GET https://www.googleapis.com/oauth2/v3/userinfo} with Bearer access_token</li>
- * </ol>
- *
- * <p>{@code email_verified=false} 이면 보안상 인증 실패 처리.</p>
- */
 @Component
 public class GoogleOAuthProvider implements OAuthProvider {
 

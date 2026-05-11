@@ -15,17 +15,14 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-/** Spring Data JPA — {@link TransactionRepositoryImpl} 가 wrapping. 외부에서 직접 import 금지. */
 interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM Transaction t WHERE t.id = :id")
     Optional<Transaction> findByIdForUpdate(@Param("id") Long id);
 
-    /**
-     * 라운드 12 (#3.2) — 한 채팅방 = 1 active transaction 가드.
-     * active = status NOT IN (거래완료, 취소). chat_room_id 미지정 (legacy) 거래는 매칭 X.
-     */
+    
+
     @Query("""
             SELECT (COUNT(t) > 0) FROM Transaction t
              WHERE t.chatRoomId = :chatRoomId
@@ -36,10 +33,8 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
             """)
     boolean existsActiveByChatRoomIdJpql(@Param("chatRoomId") Long chatRoomId);
 
-    /**
-     * status 별 거래 건수 집계. 단일 쿼리 — N+1 없음. 결과는 status 가 한 번이라도 등장한 행만 옴
-     * (0 건인 status 는 application 단에서 0 으로 채움). status 컬럼 인덱스 권장.
-     */
+    
+
     @Query("""
             SELECT new com.sseulang.domain.transaction.domain.TransactionStatusCount(t.status, COUNT(t))
               FROM Transaction t
@@ -47,7 +42,7 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
             """)
     List<TransactionStatusCount> countGroupByStatusJpql();
 
-    /** 차트 dashboard — 기간 [from, to) tradeType 별 카운트. created_at 기준. */
+    
     @Query("""
             SELECT new com.sseulang.domain.transaction.domain.TransactionRepository$TradeTypeCount(t.tradeType, COUNT(t))
               FROM Transaction t
@@ -57,7 +52,7 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
     List<com.sseulang.domain.transaction.domain.TransactionRepository.TradeTypeCount> countByTradeTypeBetweenJpql(
             @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
-    /** 차트 dashboard — 기간 [from, to) status 별 카운트. created_at 기준. */
+    
     @Query("""
             SELECT new com.sseulang.domain.transaction.domain.TransactionStatusCount(t.status, COUNT(t))
               FROM Transaction t
@@ -67,14 +62,8 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
     List<TransactionStatusCount> countByStatusBetweenJpql(
             @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
-    /**
-     * Admin 거래 검색 (round 9 + round 10). created_at [start, end] + tradeType / status / keywordId / matchedUserIds.
-     * 모두 nullable. 최신순.
-     *
-     * <p>keywordId: t.id 또는 t.itemId 정확 매칭 (숫자 keyword).</p>
-     * <p>matchedUserIds: t.sellerId 또는 t.buyerId 가 IN (cross-aggregate user LIKE 매치 결과).</p>
-     * <p>두 파라미터는 호출자가 mutually exclusive 로 채움 — 동시에 쓰면 OR 로 합쳐짐.</p>
-     */
+    
+
     @Query("""
             SELECT t FROM Transaction t
              WHERE (:start IS NULL OR t.createdAt >= :start)
@@ -99,7 +88,7 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
             Pageable pageable
     );
 
-    /** Admin 회원 카드용 — sellerId 로 참여한 거래 (sellerId, count). */
+    
     @Query("""
             SELECT t.sellerId AS userId, COUNT(t) AS cnt FROM Transaction t
              WHERE t.sellerId IN :ids
@@ -107,7 +96,7 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
             """)
     List<UserCountRow> countAsSellerRaw(@Param("ids") java.util.Collection<Long> ids);
 
-    /** Admin 회원 카드용 — buyerId 로 참여한 거래 (buyerId, count). */
+    
     @Query("""
             SELECT t.buyerId AS userId, COUNT(t) AS cnt FROM Transaction t
              WHERE t.buyerId IN :ids
@@ -120,10 +109,8 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
         Long getCnt();
     }
 
-    /**
-     * 월별 거래완료 집계 — completed_at YEAR/MONTH GROUP BY. native MySQL.
-     * Result projection: (year, month, count, amount). YearMonth 변환은 호출자.
-     */
+    
+
     @Query(value = """
             SELECT YEAR(completed_at) AS y, MONTH(completed_at) AS m,
                    COUNT(*) AS cnt, COALESCE(SUM(price), 0) AS amt
@@ -146,10 +133,8 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
         Long getAmt();
     }
 
-    /**
-     * Review 작성 대기 거래 — completedAt 하한 + 본인 참여 + 본인이 reviewer 인 review 가 아직 없는 것.
-     * Review 와 NOT EXISTS 로 cross-aggregate read (write 가 아니라 도메인 invariant 영향 X).
-     */
+    
+
     @Query(value = """
             SELECT t FROM Transaction t
              WHERE t.status = com.sseulang.domain.transaction.domain.TransactionStatus.거래완료
@@ -177,8 +162,8 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
                                                  @Param("since") LocalDateTime since,
                                                  Pageable pageable);
 
-    // ───────── 내 거래 목록 (마이페이지) ─────────
-    // role 4 분기 × status null/!=null 2 분기 = 6 메서드. role/status 모두 null 이 가장 흔한 케이스.
+    
+    
 
     @Query("""
             SELECT t FROM Transaction t

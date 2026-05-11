@@ -14,15 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Duration;
 
-/**
- * Auth 세션 lifecycle.
- *
- * <ul>
- *   <li>{@code rotate}: oldRT 를 atomic 하게 consume → 통과 시 새 AT/RT 발급. 재사용 탐지 시 전체 폐기.</li>
- *   <li>{@code logout}: AT jti 를 블랙리스트에 등록 + RT 폐기. 만료/변조 토큰은 조용히 무시.</li>
- *   <li>{@code revoke}: RT 단일 폐기 — 내부용 호환 (logout 이 권장).</li>
- * </ul>
- */
 @Service
 @Transactional
 public class RefreshTokenRotationService {
@@ -53,26 +44,26 @@ public class RefreshTokenRotationService {
     }
 
     public TokenPair rotate(String oldRefreshToken) {
-        JwtClaims claims = jwtProvider.parse(oldRefreshToken);  // AUTH_TOKEN_EXPIRED / INVALID
+        JwtClaims claims = jwtProvider.parse(oldRefreshToken);  
         Long userId = claims.userId();
         String role = claims.role();
         String oldJti = claims.jti();
         Long claimTv = claims.tokenVersion();
         if (role == null || role.isBlank() || claimTv == null) {
-            // RT 에 role / tv 누락 — 토큰 변조 또는 구버전 토큰. 보수적으로 INVALID 응답.
+            
             throw new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_INVALID);
         }
 
-        // atomic Lua: (1) claimTv == currentTv 검증, (2) jti DEL.
-        // false = (a) 버전 mismatch (revokeAll 이후) 또는 (b) 이미 사용된 jti → 탈취 의심.
+        
+        
         if (!refreshTokenStore.consume(role, userId, oldJti, claimTv)) {
             refreshTokenStore.revokeAll(role, userId);
             throw new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_INVALID);
         }
 
-        // SUSPENDED/blocked/deleted 사용자의 RT 재사용 차단 — Codex round 9 hotfix.
-        // ROLE_USER 만 검사 (admin 은 admins 테이블 + 정지 메커니즘 없음). user 미존재는 무시 —
-        // RT consume 통과한 시점이라 race 외엔 정상 미존재 케이스 없음. accessible=false 일 때만 차단.
+        
+        
+        
         if (USER_ROLE.equals(role)) {
             var userOpt = userRepository.findById(userId);
             if (userOpt.isPresent() && !userOpt.get().isAccessibleAt(java.time.LocalDateTime.now(clock))) {
@@ -103,11 +94,11 @@ public class RefreshTokenRotationService {
             JwtClaims claims = jwtProvider.parse(refreshToken);
             String role = claims.role();
             if (role == null || role.isBlank()) {
-                return;  // role 누락 토큰은 어차피 rotate 거부됨
+                return;  
             }
             refreshTokenStore.revoke(role, claims.userId(), claims.jti());
         } catch (BusinessException ignored) {
-            // 만료/변조 토큰은 어차피 사용 불가 — 조용히 흘려보냄
+            
         }
     }
 
@@ -122,7 +113,7 @@ public class RefreshTokenRotationService {
                 accessTokenBlacklist.blacklist(claims.jti(), Duration.ofSeconds(remainingSeconds));
             }
         } catch (BusinessException ignored) {
-            // 만료/변조 AT 는 어차피 필터에서 거부됨
+            
         }
     }
 }

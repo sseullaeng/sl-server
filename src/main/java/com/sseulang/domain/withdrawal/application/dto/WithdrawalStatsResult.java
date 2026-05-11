@@ -5,9 +5,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.Map;
 
-/**
- * 출금 통계 — total + status 별 카운트 + 완료된 출금 누적 금액.
- */
 @Schema(description = "관리자 dashboard — 출금 통계.")
 public record WithdrawalStatsResult(
         @Schema(example = "87", description = "전체 출금 신청 수") long total,

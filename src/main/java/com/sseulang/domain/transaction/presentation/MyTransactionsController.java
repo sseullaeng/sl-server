@@ -17,12 +17,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 마이페이지 본인 거래 목록 — {@link TransactionController} 의 단건 조회와 별개로 페이징 list 제공.
- *
- * <p>role 쿼리 (buyer/seller) 로 탭 분리, status 쿼리 (한글 enum) 로 상태별 필터.
- * 둘 다 미지정 시 전체 (취소 포함).</p>
- */
 @Tag(name = "Transaction", description = "마이페이지 본인 거래 목록")
 @RestController
 @RequestMapping("/api/v1/users/me/transactions")

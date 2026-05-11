@@ -9,12 +9,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-/**
- * Delivery 배송완료 → Escrow Mode A 자동 정산 트리거 (게이트 1 round 1 — Warning).
- *
- * <p>{@code AFTER_COMMIT} phase — Delivery markDelivered 트랜잭션 commit 후 별도 트랜잭션
- * (REQUIRES_NEW) 으로 escrow settle. escrow_application_id NULL = 일반 배달이라 무시.</p>
- */
 @Component
 public class DeliveryDeliveredEventListener {
 
@@ -30,12 +24,12 @@ public class DeliveryDeliveredEventListener {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onDeliveryDelivered(DeliveryDeliveredEvent event) {
         if (event.escrowApplicationId() == null) {
-            return;  // 일반 배달 — escrow 정산 무관
+            return;  
         }
         try {
             escrowService.settleAfterDelivery(event.escrowApplicationId());
         } catch (RuntimeException e) {
-            // 정산 실패 시 escrow 는 진행중 상태 유지. 운영자 수동 복구.
+            
             log.error("[escrow-settle] Mode A 자동 정산 실패 — escrowApplicationId={} reason={}",
                     event.escrowApplicationId(), e.getMessage(), e);
         }

@@ -20,17 +20,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Inquiry Aggregate Root — 1:1 비공개 문의. V12 {@code inquiries} 매핑.
- *
- * <p>사용자가 작성, 관리자가 답변. 작성자만 본인 것 조회 가능 (관리자는 전체 조회).</p>
- *
- * <p><b>상태 전이</b>: {@link InquiryStatus} 참조. 본 엔티티는 전이의 유효성만 검증 — 권한은
- * ApplicationService.</p>
- *
- * <p><b>이미지</b>: 최대 5장, presigned 업로드 후 URL 만 받아 보관. JSON 컬럼.
- * 작성·수정 시 통째로 갱신 — 부분 조작 메서드 없음.</p>
- */
 @Entity
 @Table(name = "inquiries")
 @Getter
@@ -101,14 +90,14 @@ public class Inquiry extends BaseEntity {
         i.userId = userId;
         i.category = category;
         i.title = title.trim();
-        i.content = content;            // 본문 줄바꿈/공백 보존
+        i.content = content;            
         i.email = email.trim();
         i.status = InquiryStatus.PENDING;
         i.imageUrls = sanitized;
         return i;
     }
 
-    /** 관리자 답변 작성/수정. status 동시 갱신 (보통 PROCESSING 또는 DONE). */
+    
     public void writeAdminReply(String adminReply, InquiryStatus newStatus, LocalDateTime now) {
         if (adminReply == null || adminReply.isBlank()) {
             throw new IllegalArgumentException("adminReply 는 필수입니다");
@@ -117,7 +106,7 @@ public class Inquiry extends BaseEntity {
             throw new IllegalArgumentException("status 는 필수입니다");
         }
         if (newStatus == InquiryStatus.PENDING) {
-            // 답변을 쓰는 시점에 PENDING 으로 되돌리는 건 의미 없음 — 차단.
+            
             throw new IllegalArgumentException("답변 작성 시 PENDING 으로 되돌릴 수 없습니다");
         }
         if (now == null) {
@@ -128,37 +117,32 @@ public class Inquiry extends BaseEntity {
         this.repliedAt = now;
     }
 
-    /**
-     * 답변 없이 status 만 변경 — 보통 PENDING → PROCESSING.
-     *
-     * <p>전이 룰 (단방향): {@code PENDING → PROCESSING → DONE}. 역방향 (PROCESSING/DONE → PENDING)
-     * 은 거부 — 상태머신 정합 (Codex round 9 hotfix).</p>
-     * <p>DONE 으로 가려면 admin_reply 가 있어야 함.</p>
-     */
+    
+
     public void changeStatus(InquiryStatus newStatus) {
         if (newStatus == null) {
             throw new IllegalArgumentException("status 는 필수입니다");
         }
-        // 역방향 전이 거부 — 정상적인 상태머신은 단방향.
+        
         if (newStatus == InquiryStatus.PENDING && this.status != InquiryStatus.PENDING) {
             throw new IllegalArgumentException("PENDING 으로 되돌릴 수 없습니다");
         }
         if (newStatus == InquiryStatus.PROCESSING && this.status == InquiryStatus.DONE) {
             throw new IllegalArgumentException("DONE 에서 PROCESSING 으로 되돌릴 수 없습니다");
         }
-        // DONE 으로 가려면 admin_reply 가 있어야 함.
+        
         if (newStatus == InquiryStatus.DONE && (adminReply == null || adminReply.isBlank())) {
             throw new IllegalArgumentException("답변 없이 DONE 으로 변경할 수 없습니다");
         }
         this.status = newStatus;
     }
 
-    /** 작성자 본인 검증 — ApplicationService 가 호출. */
+    
     public boolean isOwnedBy(Long candidateUserId) {
         return candidateUserId != null && candidateUserId.equals(userId);
     }
 
-    /** PENDING 상태에서만 본인 삭제 가능 — 관리자 답변 시작 후엔 못 지움 (감사 추적). */
+    
     public boolean isDeletableByOwner() {
         return status == InquiryStatus.PENDING;
     }
@@ -184,7 +168,7 @@ public class Inquiry extends BaseEntity {
         if (trimmed.length() > EMAIL_MAX_LENGTH) {
             throw new IllegalArgumentException("email 은 " + EMAIL_MAX_LENGTH + "자 이하여야 합니다");
         }
-        // 형식 검증은 DTO @Email 레이어에서 — 여기선 길이만.
+        
     }
 
     private static List<String> sanitizeImages(List<String> imageUrls) {

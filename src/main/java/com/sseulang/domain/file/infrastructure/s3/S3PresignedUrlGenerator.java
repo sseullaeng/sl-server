@@ -47,13 +47,8 @@ public class S3PresignedUrlGenerator implements PresignedUrlGenerator {
         return new PresignedUrlResult(presigned.url().toString(), key);
     }
 
-    /**
-     * sourceUrl 안에서 fromPrefix 가 toPrefix 로 치환되는 키를 찾아 S3 copy + 원본 delete.
-     *
-     * <p>실패는 RuntimeException 으로 전파 — 호출 트랜잭션이 롤백되어 DB 상태가 임시 url 에 머문다
-     * (사용자는 재시도하면 된다). copy 만 성공하고 delete 가 실패한 경우는 src 가 garbage 로 남고
-     * dst 는 정상 작동 — lifecycle 정책으로 정리.</p>
-     */
+    
+
     @Override
     public String promote(String sourceUrl, String fromPrefix, String toPrefix) {
         if (sourceUrl == null || fromPrefix == null || toPrefix == null) {
@@ -61,7 +56,7 @@ public class S3PresignedUrlGenerator implements PresignedUrlGenerator {
         }
         int idx = sourceUrl.indexOf(fromPrefix);
         if (idx < 0) {
-            return sourceUrl;  // 이미 승격됐거나 다른 prefix — no-op
+            return sourceUrl;  
         }
         String fromKey = sourceUrl.substring(idx);
         String toKey = toPrefix + fromKey.substring(fromPrefix.length());
@@ -79,17 +74,15 @@ public class S3PresignedUrlGenerator implements PresignedUrlGenerator {
             s3Client.deleteObject(DeleteObjectRequest.builder()
                     .bucket(bucket).key(fromKey).build());
         } catch (S3Exception e) {
-            // delete 실패는 best-effort — copy 는 이미 성공했으므로 dst 사용 가능. 로깅만.
+            
             log.warn("[s3] promote delete 실패 — src={} 잔여, lifecycle 정리 의존", fromKey, e);
         }
 
         return sourceUrl.substring(0, idx) + toPrefix + fromKey.substring(fromPrefix.length());
     }
 
-    /**
-     * 단건 삭제 — best-effort. URL 안의 {@code items/} prefix 부터를 key 로 추출.
-     * S3Exception 은 삼키고 WARN 로깅만 (사용자 흐름은 이미 DB 반영 완료).
-     */
+    
+
     @Override
     public void delete(String sourceUrl) {
         if (sourceUrl == null || sourceUrl.isBlank()) {
@@ -104,12 +97,12 @@ public class S3PresignedUrlGenerator implements PresignedUrlGenerator {
             s3Client.deleteObject(DeleteObjectRequest.builder()
                     .bucket(bucket).key(key).build());
         } catch (S3Exception e) {
-            // best-effort — DB 반영은 이미 끝났음. lifecycle 정책 의존.
+            
             log.warn("[s3] delete 실패 — key={} 잔여, lifecycle 정리 의존", key, e);
         }
     }
 
-    /** URL 에서 {@code items/} 이후를 key 로 사용. 매칭 안 되면 null. */
+    
     private static String extractKey(String url) {
         int idx = url.indexOf("items/");
         if (idx < 0) return null;

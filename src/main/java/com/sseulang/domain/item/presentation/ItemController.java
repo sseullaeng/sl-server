@@ -81,7 +81,7 @@ public class ItemController {
                 q, categoryId, tradeType, minPrice, maxPrice, tag, sellerId,
                 com.sseulang.domain.item.application.dto.ItemSort.parse(sort));
 
-        // 비로그인 — viewerId null → isWishlisted 항상 false. 로그인 시 단일 SELECT 로 enrich.
+        
         Page<ItemSummaryResponse> result = itemService.search(criteria, pageable, viewerId)
                 .map(ItemSummaryResponse::from);
         return ApiResponse.ok(PageResponse.from(result));

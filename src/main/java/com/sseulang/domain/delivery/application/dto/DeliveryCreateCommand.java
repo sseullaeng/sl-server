@@ -2,10 +2,6 @@ package com.sseulang.domain.delivery.application.dto;
 
 import java.time.LocalDateTime;
 
-/**
- * 배달 요청 등록 Command. 문자열 필드는 compact constructor 에서 정규화 (trim/길이 검증).
- * Aggregate 의 create 와 검증 책임 분리: 여기는 표현 검증, Aggregate 는 비즈니스 룰.
- */
 public record DeliveryCreateCommand(
         Long requesterId,
         String pickupAddress,

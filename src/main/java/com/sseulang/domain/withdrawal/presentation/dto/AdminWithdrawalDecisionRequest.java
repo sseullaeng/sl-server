@@ -4,9 +4,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-/**
- * 관리자 출금 처리 요청 — action: APPROVE / REJECT / COMPLETE.
- */
 @Schema(description = "관리자 출금 처리. APPROVE(신청→승인) / REJECT(신청→거부, 잔액 환불) / COMPLETE(승인→완료, 외부 이체).")
 public record AdminWithdrawalDecisionRequest(
         @Schema(description = "처리 액션", example = "APPROVE", allowableValues = {"APPROVE", "REJECT", "COMPLETE"})

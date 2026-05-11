@@ -14,17 +14,15 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 
-/** Spring Data JPA — {@link WithdrawalRepositoryImpl} 가 wrapping. 외부 직접 import 금지. */
 interface WithdrawalJpaRepository extends JpaRepository<Withdrawal, Long> {
 
-    /** 가이드 §5.3 — 비관적 락 (SELECT FOR UPDATE) 으로 동시 승인/거부/취소 직렬화. */
+    
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT w FROM Withdrawal w WHERE w.id = :id")
     Optional<Withdrawal> findByIdForUpdate(@Param("id") Long id);
 
-    /**
-     * 본인 소유 + 락 동시 획득. 타인 id 로 시도 시 빈 결과 → 락 미획득 (cancel 의 lock-DoS 방지).
-     */
+    
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT w FROM Withdrawal w WHERE w.id = :id AND w.userId = :userId")
     Optional<Withdrawal> findByIdAndUserIdForUpdate(@Param("id") Long id, @Param("userId") Long userId);
@@ -37,9 +35,8 @@ interface WithdrawalJpaRepository extends JpaRepository<Withdrawal, Long> {
 
     Page<Withdrawal> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
-    /**
-     * status 별 출금 건수 집계. 단일 쿼리. withdrawals.status 인덱스 사용 (V1 idx_withdrawals_status).
-     */
+    
+
     @Query("""
             SELECT new com.sseulang.domain.withdrawal.domain.WithdrawalStatusCount(w.status, COUNT(w))
               FROM Withdrawal w

@@ -35,9 +35,9 @@ public class EscrowController {
         this.service = service;
     }
 
-    // =========================================================
-    // Link
-    // =========================================================
+    
+    
+    
     @Operation(summary = "거래대행 link 생성 (신청자)",
             description = "이메일 인증 필수. UUID v4 token + 24h 만료 (env override 가능).")
     @PostMapping("/links")
@@ -56,9 +56,9 @@ public class EscrowController {
         return ApiResponse.ok(service.getByToken(linkToken));
     }
 
-    // =========================================================
-    // Application
-    // =========================================================
+    
+    
+    
     @Operation(summary = "거래대행 수수료 미리보기 (실시간)",
             description = "폼 작성 중 좌표·물품·feePayer 보내면 거리·deliveryFee·commissionFee + buyer/seller 부담분 응답. application 생성 X.")
     @PostMapping("/applications/preview")

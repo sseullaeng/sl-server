@@ -15,18 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.LocalDateTime;
 
-/**
- * 공지 흐름.
- *
- * <ul>
- *   <li>관리자: CRUD + pin/publish 토글.</li>
- *   <li>사용자: 노출 윈도우 ({@code Notice.isVisibleAt}) 조건 만족하는 공지만 조회.
- *       단건 조회 시 view_count 증가.</li>
- * </ul>
- *
- * <p>관리자 권한 검증은 SecurityConfig admin chain ({@code hasRole("ADMIN")}) 에 위임 — 본
- * 서비스에서는 admin id 만 받아 작성자 정보로 기록.</p>
- */
 @Service
 @Transactional(readOnly = true)
 public class NoticeApplicationService {
@@ -75,7 +63,7 @@ public class NoticeApplicationService {
         noticeRepository.deleteById(noticeId);
     }
 
-    /** 사용자 단건 조회 + 조회수 증가. 미공개·윈도우 외 공지는 NOT_FOUND 로 동일 응답 (존재 leak 차단). */
+    
     @Transactional
     public NoticeResult viewById(Long noticeId) {
         Notice n = findOrThrow(noticeId);

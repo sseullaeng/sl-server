@@ -24,9 +24,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 관리자 공지 CRUD + 상태 토글. SecurityConfig admin chain 으로 ROLE_ADMIN 강제.
- */
 @Tag(name = "AdminNotice", description = "관리자 — 공지 작성/관리")
 @RestController
 @RequestMapping("/api/v1/admin/notices")

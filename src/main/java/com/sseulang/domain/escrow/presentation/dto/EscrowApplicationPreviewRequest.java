@@ -12,11 +12,6 @@ import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 
-/**
- * 거래대행 수수료 미리보기 요청 — 폼 작성 중 실시간 호출.
- *
- * <p>actually persisting 아무것도 안 함 — feePayer 별 buyer/seller 부담분만 응답.</p>
- */
 @Schema(description = "거래대행 수수료 미리보기 (실시간) — 좌표·물품 정보·feePayer 받아 buyer/seller 부담분 응답.")
 public record EscrowApplicationPreviewRequest(
         @Schema(example = "INTERNAL", allowableValues = {"INTERNAL", "EXTERNAL"})

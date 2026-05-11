@@ -14,12 +14,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * 외부 PG webhook 멱등 저장 Aggregate. {@code webhook_events} 매핑.
- *
- * <p>UNIQUE(source, eventId) 가 race 의 마지막 가드 — 동일 이벤트가 두 번 전달돼도 두 번째는
- * INSERT 에서 DataIntegrityViolation. ApplicationService 가 이를 잡아 "이미 처리됨" 으로 응답.</p>
- */
 @Entity
 @Table(name = "webhook_events")
 @Getter

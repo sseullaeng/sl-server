@@ -28,16 +28,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-/**
- * 관리자 dashboard 통계 — 4개 도메인 ApplicationService 를 호출하여 단순 조립.
- *
- * <p>본 서비스는 자체 상태/도메인 없음 — read-only orchestration. CLAUDE.md §3.3 준수:
- * 다른 도메인 Repository 직접 호출 금지, 각 도메인 ApplicationService 만 의존.</p>
- *
- * <p>각 도메인 stats 호출은 단일 집계 쿼리 (GROUP BY / SUM / COUNT) 라 N+1 없음. 전체 dashboard
- * 한 번 호출 시 SQL 11개 (User 4 [all/blocked/deleted/active] + Transaction 1 + Payment 2 +
- * Withdrawal 2 + Delivery 2). prod 트래픽 스케일 커지면 schedule 캐싱 검토.</p>
- */
 @Service
 @Transactional(readOnly = true)
 public class AdminStatsService {
@@ -77,17 +67,14 @@ public class AdminStatsService {
         return new AdminDashboardResult(users, transactions, payments, withdrawals, deliveries);
     }
 
-    /** 월별 거래완료 집계 — recharts 차트용. month ASC, 빈 월은 0 채움. */
+    
     public java.util.List<com.sseulang.domain.transaction.domain.TransactionMonthlyStat> tradesMonthly(
             java.time.YearMonth from, java.time.YearMonth to) {
         return transactionService.adminMonthlyTrades(from, to);
     }
 
-    /**
-     * 차트 dashboard — summary 카드 + signupTrend + tradeByType + tradeByStatus 한 번에.
-     * 기간 [startDate 00:00, endDate 23:59:59.999) — endDate 도 inclusive day.
-     * default (양쪽 null): 최근 14일 (today-13 ~ today).
-     */
+    
+
     public AdminDashboardChartsResult dashboardCharts(LocalDate startDate, LocalDate endDate) {
         LocalDate today = LocalDate.now(clock);
         LocalDate end = (endDate != null) ? endDate : today;
@@ -108,7 +95,7 @@ public class AdminStatsService {
         );
     }
 
-    /** PR-F #9 라운드 12 — 신고 위젯 (pending / resolved / 최근 7일). */
+    
     private AdminDashboardChartsResult.ReportsSummary buildReportsSummary(LocalDate today) {
         long pending = userReportService.countPending();
         long resolved = userReportService.countResolved();
@@ -118,19 +105,19 @@ public class AdminStatsService {
     }
 
     private AdminDashboardChartsResult.Summary buildSummary(LocalDate today) {
-        // users
+        
         long totalUsers = userService.adminGetStats().total();
         LocalDateTime monthStart = today.withDayOfMonth(1).atStartOfDay();
         LocalDateTime tomorrow = today.plusDays(1).atStartOfDay();
         long monthDelta = userService.countSignupsBetween(monthStart, tomorrow);
 
-        // today signups
+        
         LocalDateTime todayStart = today.atStartOfDay();
         long todayCount = userService.countSignupsBetween(todayStart, tomorrow);
         long yesterdayCount = userService.countSignupsBetween(today.minusDays(1).atStartOfDay(), todayStart);
         long yesterdayDelta = todayCount - yesterdayCount;
 
-        // month trades — TransactionMonthlyStat 활용 (status=거래완료, completed_at 기준)
+        
         YearMonth thisMonth = YearMonth.from(today);
         YearMonth prevMonth = thisMonth.minusMonths(1);
         var monthly = transactionService.adminMonthlyTrades(prevMonth, thisMonth);
@@ -140,7 +127,7 @@ public class AdminStatsService {
                 ? null
                 : (thisMonthTrades - prevMonthTrades) / (double) prevMonthTrades;
 
-        // pending reports
+        
         long pendingReports = userReportService.countPending();
 
         return new AdminDashboardChartsResult.Summary(
@@ -166,7 +153,7 @@ public class AdminStatsService {
     private List<AdminDashboardChartsResult.TradeTypeCount> buildTradeByType(
             LocalDateTime fromTs, LocalDateTime toExclusive) {
         var raw = transactionService.countByTradeTypeBetween(fromTs, toExclusive);
-        // 한국어 enum 이름 그대로 (판매/대여/나눔). 빈 type 은 0 채움 — TradeType 모든 값 포함.
+        
         Map<com.sseulang.domain.item.domain.TradeType, Long> rawMap = new EnumMap<>(com.sseulang.domain.item.domain.TradeType.class);
         for (var r : raw) rawMap.put(r.tradeType(), r.count());
         List<AdminDashboardChartsResult.TradeTypeCount> result = new ArrayList<>();

@@ -10,7 +10,6 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
-/** Spring Data JPA — {@link PointHistoryRepositoryImpl} 가 wrapping. 외부 직접 import 금지. */
 interface PointHistoryJpaRepository extends JpaRepository<PointHistory, Long> {
 
     List<PointHistory> findByUserIdOrderByCreatedAtDesc(Long userId);

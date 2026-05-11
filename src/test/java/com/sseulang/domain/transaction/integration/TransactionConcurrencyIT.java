@@ -152,7 +152,7 @@ class TransactionConcurrencyIT {
                     .setParameter(2, buyer2Id)
                     .executeUpdate();
 
-            itemId = itemService.register(new ItemRegisterCommand(
+            itemId = itemService.register(ItemRegisterCommand.legacy(
                     sellerId, null, "물건", "설명", 50_000L, null, null, TradeType.판매,
                     "서울", null, null
             ));
@@ -226,7 +226,7 @@ class TransactionConcurrencyIT {
     @DisplayName("라운드 11 — 같은 buyer 두 거래 동시 reserve_잔액 한건만 충당_정확히 1건만 성공")
     void buyer_hold_race() throws Exception {
         // 별도 두 Item + 두 거래 (buyer 동일, 잔액 50000 한 건만 가능). 라운드 12 — 거래는 채팅방 안에서만 (판매자만).
-        Long item2Id = txTemplate.execute(status -> itemService.register(new ItemRegisterCommand(
+        Long item2Id = txTemplate.execute(status -> itemService.register(ItemRegisterCommand.legacy(
                 sellerId, null, "물건2", "설명", 50_000L, null, null, TradeType.판매, "서울", null, null
         )));
         // setUp 의 tx1Id (item1+buyer1, chatRoom1) 그대로 사용 — buyer1 의 첫 번째 거래.

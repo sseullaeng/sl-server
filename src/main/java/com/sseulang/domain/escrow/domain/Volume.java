@@ -3,7 +3,6 @@ package com.sseulang.domain.escrow.domain;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-/** 부피 enum. multiplier 코드 상수 (운영 변경은 follow-up). */
 public enum Volume {
     S("s", 1.0),
     M("m", 1.2),

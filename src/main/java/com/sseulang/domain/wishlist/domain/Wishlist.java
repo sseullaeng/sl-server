@@ -15,10 +15,6 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
-/**
- * Wishlist Aggregate Root. {@code wishlists} 테이블 — UNIQUE(user_id, item_id).
- * BaseEntity 미사용 (updated_at 컬럼 없음).
- */
 @Entity
 @Table(name = "wishlists")
 @EntityListeners(AuditingEntityListener.class)

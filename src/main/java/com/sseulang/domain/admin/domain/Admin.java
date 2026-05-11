@@ -11,12 +11,6 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/**
- * Admin Aggregate Root. V1 스키마 {@code admins} 매핑.
- *
- * <p>일반 사용자 ({@code users}) 와 별도 테이블로 관리. 관리자 인증 흐름은
- * {@code AdminLoginService} 가 username + BCrypt password 검증 + JWT 발급 (subject=admin.id, role=ADMIN).</p>
- */
 @Entity
 @Table(name = "admins")
 @Getter

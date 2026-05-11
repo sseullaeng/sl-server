@@ -13,11 +13,6 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/**
- * Item 자식 엔티티. 외부 직접 생성/조작 금지 — Aggregate Root({@link Item}) 의 메서드를 통해서만.
- *
- * <p>{@code item_hashtags} 테이블은 {@code created_at}/{@code updated_at} 모두 없으므로 BaseEntity 상속 X.</p>
- */
 @Entity
 @Table(name = "item_hashtags")
 @Getter
@@ -37,7 +32,7 @@ public class ItemHashtag {
     @Column(name = "tag", nullable = false, length = TAG_MAX_LENGTH)
     private String tag;
 
-    /** Aggregate Root 만 호출 — package-private. */
+    
     ItemHashtag(Item item, String tag) {
         if (tag == null || tag.isBlank()) {
             throw new IllegalArgumentException("tag 는 비어있을 수 없습니다");

@@ -15,10 +15,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 본인 찜 목록 조회 — {@link WishlistController} 의 add/remove 와 분리. path prefix 가 다름
- * ({@code /api/v1/users/me/wishlist}).
- */
 @Tag(name = "Wishlist", description = "물품 찜 추가/해제 + 본인 목록")
 @RestController
 @RequestMapping("/api/v1/users/me/wishlist")

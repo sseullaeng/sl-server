@@ -43,7 +43,7 @@ class ItemApplicationServiceTest {
     @Test
     @DisplayName("register 정상_id 발급되고 이미지+해시태그 add + 이미지 url promote (follow-up #12)")
     void register_정상() {
-        Long id = service.register(new ItemRegisterCommand(
+        Long id = service.register(ItemRegisterCommand.legacy(
                 SELLER, categoryId, "title", "desc", 10_000L, null, null, TradeType.판매,
                 "서울",
                 List.of("https://cdn.test/items/" + SELLER + "/img1.jpg", "https://cdn.test/items/" + SELLER + "/img2.jpg"),
@@ -64,7 +64,7 @@ class ItemApplicationServiceTest {
     @Test
     @DisplayName("register 없는 카테고리_CATEGORY_NOT_FOUND")
     void register_없는_카테고리_거부() {
-        assertThatThrownBy(() -> service.register(new ItemRegisterCommand(
+        assertThatThrownBy(() -> service.register(ItemRegisterCommand.legacy(
                 SELLER, 9999L, "t", "d", 1L, null, null, TradeType.판매, null, null, null
         )))
                 .isInstanceOf(BusinessException.class)
@@ -75,7 +75,7 @@ class ItemApplicationServiceTest {
     @Test
     @DisplayName("register null 카테고리_허용")
     void register_null_카테고리_허용() {
-        Long id = service.register(new ItemRegisterCommand(
+        Long id = service.register(ItemRegisterCommand.legacy(
                 SELLER, null, "t", "d", 1L, null, null, TradeType.판매, null, null, null
         ));
         assertThat(service.getById(id).categoryId()).isNull();
@@ -106,7 +106,7 @@ class ItemApplicationServiceTest {
     void update_본인() {
         Long id = registerSimple();
 
-        service.update(id, SELLER, new ItemUpdateCommand(
+        service.update(id, SELLER, ItemUpdateCommand.legacy(
                 null, "new title", "new desc", 50_000L, null, null, "부산", null, null
         ));
 
@@ -121,7 +121,7 @@ class ItemApplicationServiceTest {
     void update_타인_거부() {
         Long id = registerSimple();
 
-        assertThatThrownBy(() -> service.update(id, OTHER, new ItemUpdateCommand(
+        assertThatThrownBy(() -> service.update(id, OTHER, ItemUpdateCommand.legacy(
                 null, "x", "y", 1L, null, null, null, null, null
         )))
                 .isInstanceOf(BusinessException.class)
@@ -132,12 +132,12 @@ class ItemApplicationServiceTest {
     @Test
     @DisplayName("update imageUrls non-null_전체 교체 + 임시 prefix 자동 promote (follow-up #12)")
     void update_이미지_전체교체() {
-        Long id = service.register(new ItemRegisterCommand(
+        Long id = service.register(ItemRegisterCommand.legacy(
                 SELLER, categoryId, "t", "d", 1L, null, null, TradeType.판매, null,
                 List.of("https://cdn.test/items/" + SELLER + "/old1.jpg", "https://cdn.test/items/" + SELLER + "/old2.jpg"), null
         ));
 
-        service.update(id, SELLER, new ItemUpdateCommand(
+        service.update(id, SELLER, ItemUpdateCommand.legacy(
                 null, "t", "d", 1L, null, null, null, List.of("https://cdn.test/items/" + SELLER + "/new1.jpg"), null
         ));
 
@@ -150,12 +150,12 @@ class ItemApplicationServiceTest {
     @Test
     @DisplayName("update hashtags non-null_전체 교체")
     void update_해시태그_전체교체() {
-        Long id = service.register(new ItemRegisterCommand(
+        Long id = service.register(ItemRegisterCommand.legacy(
                 SELLER, categoryId, "t", "d", 1L, null, null, TradeType.판매, null,
                 null, List.of("old1", "old2")
         ));
 
-        service.update(id, SELLER, new ItemUpdateCommand(
+        service.update(id, SELLER, ItemUpdateCommand.legacy(
                 null, "t", "d", 1L, null, null, null, null, List.of("new1")
         ));
 
@@ -166,12 +166,12 @@ class ItemApplicationServiceTest {
     @Test
     @DisplayName("update hashtags null_변경 없음")
     void update_해시태그_null_유지() {
-        Long id = service.register(new ItemRegisterCommand(
+        Long id = service.register(ItemRegisterCommand.legacy(
                 SELLER, categoryId, "t", "d", 1L, null, null, TradeType.판매, null,
                 null, List.of("keep1", "keep2")
         ));
 
-        service.update(id, SELLER, new ItemUpdateCommand(
+        service.update(id, SELLER, ItemUpdateCommand.legacy(
                 null, "t", "d", 1L, null, null, null, null, null
         ));
 
@@ -204,12 +204,12 @@ class ItemApplicationServiceTest {
     @Test
     @DisplayName("update 대여_정상_deposit/rentalUnit 박힘")
     void update_대여() {
-        Long id = service.register(new ItemRegisterCommand(
+        Long id = service.register(ItemRegisterCommand.legacy(
                 SELLER, categoryId, "t", "d", 1L, 10_000L, RentalUnit.일, TradeType.대여, null,
                 null, null
         ));
 
-        service.update(id, SELLER, new ItemUpdateCommand(
+        service.update(id, SELLER, ItemUpdateCommand.legacy(
                 null, "t", "d", 1L, 20_000L, RentalUnit.주, null, null, null
         ));
 
@@ -219,7 +219,7 @@ class ItemApplicationServiceTest {
     }
 
     private Long registerSimple() {
-        return service.register(new ItemRegisterCommand(
+        return service.register(ItemRegisterCommand.legacy(
                 SELLER, categoryId, "t", "d", 1_000L, null, null, TradeType.판매, null, null, null
         ));
     }

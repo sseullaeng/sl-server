@@ -31,12 +31,12 @@ public record EscrowApplicationCreateRequest(
         @NotNull Volume volume,
         @NotNull Fragility fragility,
         @Size(max = 500) String deliveryNotes,
-        // 프론트 calcFees 결과 — 백엔드 ±10원 검증
+        
         @PositiveOrZero long deliveryFee,
         @PositiveOrZero long commissionFee,
         @PositiveOrZero long totalFee,
         @NotNull BigDecimal distanceKm,
-        // S3 업로드된 이미지 key/url
+        
         List<@Size(max = 500) String> imageUrls
 ) {
     public EscrowApplicationCreateCommand toCommand(Long receiverId) {

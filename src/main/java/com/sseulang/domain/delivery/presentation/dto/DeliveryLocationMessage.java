@@ -4,11 +4,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
-/**
- * 배달 실시간 위치 메시지 (STOMP SEND / 응답 broadcast / REST 응답 공용).
- *
- * <p>한국 좌표 범위(33~39N / 124~132E) 밖이면 백엔드에서 400 거절. accuracy/recordedAt 은 옵션.</p>
- */
 @Schema(description = "배달 실시간 위치 — 한국 위경도 범위 강제. accuracy/recordedAt 옵션.")
 public record DeliveryLocationMessage(
         @Schema(example = "37.4979", description = "WGS84 위도 (33.0~39.0)")

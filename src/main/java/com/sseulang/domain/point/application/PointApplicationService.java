@@ -13,17 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
-/**
- * 가이드 §4.8 — 포인트 잔액 변동 + history 적재 단일 진입점. 모든 잔액 변동 (충전 / 결제 / 판매정산 /
- * 출금 / 환불) 은 본 서비스를 거쳐 user.point_balance UPDATE 와 point_histories INSERT 가 한
- * 트랜잭션으로 묶인다 — 잔액 갱신 직후 history 누락 dangling 방지.
- *
- * <p>거래 정산 (구매자 차감 → 판매자 적립) 은 {@link #transfer} 로 처리. deadlock 방지를 위해
- * 두 user 의 잔액 변동 순서를 <b>userId 오름차순</b> 으로 강제한다 (가이드 §5.3).</p>
- *
- * <p>다른 도메인은 본 서비스만 의존 — UserRepository / PointHistoryRepository 직접 호출 금지
- * (CLAUDE.md §3.3).</p>
- */
 @Service
 @Transactional(readOnly = true)
 public class PointApplicationService {
@@ -39,10 +28,8 @@ public class PointApplicationService {
         this.pointHistoryRepository = pointHistoryRepository;
     }
 
-    /**
-     * 잔액 적립 + history 적재. 충전 / 환불 (적립 방향) 호출.
-     * affected!=1 인 경우 (미존재 userId) 는 UserApplicationService 내부에서 USER_NOT_FOUND 던짐 → 롤백.
-     */
+    
+
     @Transactional
     public void credit(
             Long userId,
@@ -59,10 +46,8 @@ public class PointApplicationService {
         ));
     }
 
-    /**
-     * 잔액 차감 + history 적재. 결제 / 출금 (차감 방향) 호출.
-     * 잔액 부족 시 UserApplicationService 내부에서 INSUFFICIENT_POINT 던짐 → 롤백 (history 미적재).
-     */
+    
+
     @Transactional
     public void deduct(
             Long userId,
@@ -79,11 +64,8 @@ public class PointApplicationService {
         ));
     }
 
-    /**
-     * 거래 정산 — buyer 차감 → seller 적립을 한 트랜잭션으로 묶음.
-     * 가이드 §5.3 deadlock 방지: 두 user 의 잔액 변동 순서를 userId 오름차순으로 강제 (id 작은 user 먼저 락 획득).
-     * <p>buyer 잔액 부족 시 INSUFFICIENT_POINT — seller 의 선행 적립도 같은 트랜잭션 안이라 함께 롤백.</p>
-     */
+    
+
     @Transactional
     public void transfer(
             Long buyerId,
@@ -102,7 +84,7 @@ public class PointApplicationService {
         if (amount <= 0) {
             throw new IllegalArgumentException("amount 는 양수여야 합니다");
         }
-        // userId 오름차순으로 잔액 변동 — deadlock 방지 (역방향 거래가 동시에 일어나도 락 순서 일관)
+        
         if (buyerId < sellerId) {
             deduct(buyerId, amount, PointHistoryType.결제, referenceType, referenceId, description);
             credit(sellerId, amount, PointHistoryType.판매정산, referenceType, referenceId, description);
@@ -112,13 +94,8 @@ public class PointApplicationService {
         }
     }
 
-    /**
-     * 배달 정산 — 요청자 차감 → 라이더 적립. 거래 정산({@link #transfer})과 동일하게 id-asc 순서로 락
-     * 획득 (deadlock 방지). type 은 {@link PointHistoryType#배달결제}/{@link PointHistoryType#배달정산},
-     * referenceType 은 {@link PointReferenceType#DELIVERY} 고정.
-     *
-     * <p>요청자 잔액 부족 시 INSUFFICIENT_POINT — 라이더의 선행 적립도 같은 트랜잭션 안이라 함께 롤백.</p>
-     */
+    
+
     @Transactional
     public void transferForDelivery(
             Long requesterId,
@@ -136,7 +113,7 @@ public class PointApplicationService {
         if (amount <= 0) {
             throw new IllegalArgumentException("amount 는 양수여야 합니다");
         }
-        // 정산 추적 키. point service 진입점에서 막아 history dangling 회귀 차단 (게이트 1 Suggestion).
+        
         if (deliveryId == null || deliveryId <= 0) {
             throw new IllegalArgumentException("deliveryId 는 양수여야 합니다");
         }
@@ -149,12 +126,8 @@ public class PointApplicationService {
         }
     }
 
-    /**
-     * 거래 환불 — 거래완료 상태였던 거래가 취소되는 케이스. 양쪽 잔액 원복 + 환불 history 두 건 적재.
-     * id-asc 락 순서 유지 — buyer 적립 / seller 차감.
-     * <p>seller 가 이미 사용/출금 등으로 잔액이 amount 미만이면 INSUFFICIENT_POINT — 운영 이슈로 escalation
-     * (자동 환불 불가, Day 9 보정 절차 / 관리자 수동 처리).</p>
-     */
+    
+
     @Transactional
     public void refund(
             Long buyerId,
@@ -202,24 +175,17 @@ public class PointApplicationService {
         return userApplicationService.getPointBalance(userId);
     }
 
-    /**
-     * 본인 포인트 히스토리 페이징 — 마이페이지 노출용. type 명시 시 정확 일치, null 이면 전체.
-     * createdAt DESC + id DESC 안정 정렬.
-     */
+    
+
     public Page<PointHistoryResult> findMyHistory(Long userId, PointHistoryType type, Pageable pageable) {
         return pointHistoryRepository.findByUserIdAndType(userId, type, pageable)
                 .map(PointHistoryResult::from);
     }
 
-    // ───────── 라운드 11 — 거래 escrow hold 흐름 (가이드 §5.1) ─────────
+    
 
-    /**
-     * 거래 예약 시 buyer hold — point_balance 차감 + point_hold 적립을 단일 atomic UPDATE.
-     * 거래보관 history 1건 적재 (balance_after = 차감 후 잔액).
-     *
-     * <p>잔액 부족 시 UserApplicationService 가 INSUFFICIENT_POINT throw → 트랜잭션 롤백
-     * (history 미적재).</p>
-     */
+    
+
     @Transactional
     public void escrowHold(Long buyerId, long amount, Long transactionId, String description) {
         if (buyerId == null || buyerId <= 0) {
@@ -239,16 +205,8 @@ public class PointApplicationService {
         ));
     }
 
-    /**
-     * 거래완료 (인수확인) 시 정산 — buyer hold 해제 + seller balance 적립을 한 트랜잭션.
-     *
-     * <p>가이드 §5.3 deadlock 방지: 두 user 의 잔액 변동 순서를 userId 오름차순으로 강제.
-     * buyer 의 hold 해제는 잔액 변화 X 라 history 미적재 (Aggregate 정책 — V16/PointHistoryType 주석 동기).
-     * seller 는 판매정산 history 1건 적재.</p>
-     *
-     * <p>buyer hold 부족 시 UserApplicationService 가 TRANSACTION_HOLD_FAILED throw — 운영 이상,
-     * seller 선행 적립도 롤백.</p>
-     */
+    
+
     @Transactional
     public void escrowRelease(
             Long buyerId,
@@ -278,12 +236,8 @@ public class PointApplicationService {
         }
     }
 
-    /**
-     * 거래 취소 시 buyer 환불 — point_hold 차감 + point_balance 적립을 단일 atomic UPDATE.
-     * 거래환불 history 1건 적재 (balance_after = 적립 후 잔액). seller 잔액 변동 X (정산 전이라).
-     *
-     * <p>buyer hold 부족 시 UserApplicationService 가 TRANSACTION_HOLD_FAILED throw → 운영 이상.</p>
-     */
+    
+
     @Transactional
     public void escrowRefund(Long buyerId, long amount, Long transactionId, String description) {
         if (buyerId == null || buyerId <= 0) {

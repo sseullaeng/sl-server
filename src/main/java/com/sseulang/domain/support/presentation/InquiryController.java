@@ -22,11 +22,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 1:1 문의 (사용자). 본인 작성 + 본인 조회만. ROLE_USER 강제.
- *
- * <p>관리자용은 {@link AdminInquiryController}.</p>
- */
 @Tag(name = "Inquiry", description = "1:1 문의 — 본인 작성/조회/삭제")
 @RestController
 @RequestMapping("/api/v1/support/inquiries")

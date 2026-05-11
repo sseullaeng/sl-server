@@ -12,12 +12,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Wishlist 진입점은 Item 자원 하위로 둔다 (가이드 §6.1):
- * {@code POST /api/v1/items/{id}/wishlist}, {@code DELETE /api/v1/items/{id}/wishlist}.
- *
- * <p>응답에 fresh {@code wishlisted + wishlistCount} 동봉 — 프론트가 detail 재조회 없이 즉시 UI 갱신.</p>
- */
 @Tag(name = "Wishlist", description = "물품 찜 추가/해제")
 @RestController
 @RequestMapping("/api/v1/items/{itemId}/wishlist")

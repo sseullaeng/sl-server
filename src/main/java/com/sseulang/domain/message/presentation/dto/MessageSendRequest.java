@@ -6,7 +6,6 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-/** content 또는 imageUrls 둘 중 하나는 필수. ApplicationService 가 도메인 invariant 로 검증. */
 @Schema(description = "채팅 메시지 전송 — content 또는 imageUrls 중 최소 1개 필수.")
 public record MessageSendRequest(
         @Schema(description = "텍스트 메시지", example = "안녕하세요, 거래 가능한가요?", maxLength = 2000, nullable = true)

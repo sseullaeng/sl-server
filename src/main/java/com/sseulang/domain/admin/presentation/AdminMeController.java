@@ -10,10 +10,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 관리자 본인 정보 조회 — admin chain ROLE_ADMIN 강제 ({@code /api/v1/admin/**}).
- * 일반 사용자의 {@code GET /api/v1/users/me} 는 ROLE_USER 만 허용 (ADMIN 차단) 이라 admin 별도 endpoint.
- */
 @Tag(name = "AdminMe", description = "관리자 — 본인 정보")
 @RestController
 @RequestMapping("/api/v1/admin/me")

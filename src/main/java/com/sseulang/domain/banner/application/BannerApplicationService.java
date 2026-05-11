@@ -15,9 +15,6 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * 배너 흐름 — 관리자 CRUD + activate/deactivate, 사용자는 활성 + 윈도우 안 배너만 sort_order 순으로.
- */
 @Service
 @Transactional(readOnly = true)
 public class BannerApplicationService {

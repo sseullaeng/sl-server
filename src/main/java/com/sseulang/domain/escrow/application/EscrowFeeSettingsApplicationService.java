@@ -8,12 +8,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
-/**
- * 거래대행 수수료 정책 운영 (admin). 결정 #9 + #12.
- *
- * <p>변경 흐름: PATCH 호출 → DB UPDATE → 진행 중 application 은 snapshot 으로 영향 X.
- * 변경 시 진행 중 N건 표시 (12-a HH2) 위해 countInProgress 동시 반환.</p>
- */
 @Service
 @Transactional(readOnly = true)
 public class EscrowFeeSettingsApplicationService {
@@ -52,7 +46,7 @@ public class EscrowFeeSettingsApplicationService {
         return repository.save(settings);
     }
 
-    /** admin 변경 시 표시용 — 진행 중 application N건. */
+    
     public long countInProgress() {
         return applicationRepository.countInProgress();
     }

@@ -6,12 +6,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
 
-/**
- * 본인 사용자 정보 응답 — 로그인/가입/oauth/refresh 응답 + GET /api/v1/users/me 의 표준 본문.
- *
- * <p>비밀번호 / social_id / address 등 민감 정보는 제외. 프론트가 헤더 사용자 영역, store 초기화에
- * 필요한 최소 필드만.</p>
- */
 @Schema(description = "본인 사용자 정보 (헤더/스토어 초기화용).")
 public record MeResponse(
         @Schema(example = "42") Long id,
@@ -30,9 +24,8 @@ public record MeResponse(
                 allowableValues = {"USER", "ADMIN"})
         String role
 ) {
-    /**
-     * @param role 현재 세션의 role ("USER" / "ADMIN"). 호출자가 Authentication 또는 JwtClaims 에서 추출해 전달.
-     */
+    
+
     public static MeResponse from(User u, String role) {
         return new MeResponse(
                 u.getId(),

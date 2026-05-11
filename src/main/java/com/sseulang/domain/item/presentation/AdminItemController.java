@@ -10,11 +10,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Admin 의 물품 관리. 라운드 12 PR-F #6 — admin 이 본인 아닌 물품도 soft delete 가능.
- *
- * <p>admin chain (ROLE_ADMIN 강제) — user chain 의 {@link ItemController#delete} 와 분리.</p>
- */
 @Tag(name = "AdminItem", description = "관리자 — 물품 관리")
 @RestController
 @RequestMapping("/api/v1/admin/items")

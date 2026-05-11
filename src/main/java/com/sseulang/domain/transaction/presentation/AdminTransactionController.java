@@ -17,13 +17,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
 
-/**
- * 관리자 거래 검색·관리. SecurityConfig admin chain 으로 ROLE_ADMIN 강제.
- *
- * <p>round 9 — AdminTransactionListPanel 의 mock 제거용. created_at 기준 [start, end] 범위 +
- * tradeType / status / keyword 필터. keyword 는 itemId/transactionId 숫자 매칭 (email/nickname
- * LIKE 는 follow-up). 최신순.</p>
- */
 @Tag(name = "AdminTransaction", description = "관리자 — 거래 검색/관리")
 @RestController
 @RequestMapping("/api/v1/admin/transactions")

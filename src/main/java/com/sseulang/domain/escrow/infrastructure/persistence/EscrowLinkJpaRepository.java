@@ -17,11 +17,8 @@ public interface EscrowLinkJpaRepository extends JpaRepository<EscrowLink, Long>
 
     Page<EscrowLink> findByInitiatorId(Long initiatorId, Pageable pageable);
 
-    /**
-     * 첫 폼 제출자 = 수신자 확정 atomic UPDATE.
-     * race-safe: receiver_id IS NULL && status = '대기' && expires_at > NOW() && initiator_id != receiverId.
-     * 본인 차단 + race lose 둘 다 영향 0 — 호출자가 분기 처리 (ApplicationService).
-     */
+    
+
     @Modifying(clearAutomatically = true)
     @Query("""
             UPDATE EscrowLink l

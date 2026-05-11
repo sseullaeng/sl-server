@@ -58,15 +58,8 @@ public class TransactionController {
         return ApiResponse.ok(TransactionResponse.from(transactionService.getById(id, requesterId)));
     }
 
-    /**
-     * 거래 상태 전이. action 별 분기 (라운드 11):
-     * <ul>
-     *   <li>{@code 예약}: seller. Item 비관적 락 + buyer escrow hold (잔액 부족 시 INSUFFICIENT_POINT).</li>
-     *   <li>{@code 인계확인}: seller. 예약 → 인계완료. 잔액 변동 X. 멱등.</li>
-     *   <li>{@code 인수확인}: buyer. 인계완료 → 거래완료 자동 전이 + 정산 (buyer hold 해제 + seller credit). 멱등.</li>
-     *   <li>{@code 취소}: 양쪽 참여자. 채팅중/예약 단계만 (인계완료 이후 차단 — R2 분쟁). 예약 단계 취소 시 Item 복원 + escrowRefund.</li>
-     * </ul>
-     */
+    
+
     @Operation(summary = "거래 상태 전이 (예약 / 인계확인 / 인수확인 / 취소)",
             description = "action 분기 — 예약: seller(잔액 부족 시 INSUFFICIENT_POINT), 인계확인: seller, "
                     + "인수확인: buyer(자동 거래완료 + 정산), 취소: 양쪽(채팅중/예약 단계만). "

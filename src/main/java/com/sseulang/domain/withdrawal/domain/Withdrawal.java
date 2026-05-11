@@ -17,15 +17,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * Withdrawal Aggregate Root. V1 스키마 {@code withdrawals} 매핑.
- *
- * <p>가이드 §4.8 출금: 사용자 신청 → 관리자 승인 → 외부 계좌 이체 (시뮬). 잔액 정합성은
- * ApplicationService 가 PointApplicationService 와 한 트랜잭션으로 묶어 처리. 본 Aggregate 는
- * 상태 머신만 책임.</p>
- *
- * <p>Setter 없음. 상태 변경은 명시 비즈니스 메서드만.</p>
- */
 @Entity
 @Table(name = "withdrawals")
 @Getter
@@ -39,11 +30,8 @@ public class Withdrawal extends BaseEntity {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    /**
-     * 멱등성 키 — 클라이언트가 신청 단위마다 발급. 동일 (user_id, idempotency_key) 재요청 시
-     * ApplicationService 가 기존 row 를 그대로 반환 (DB UNIQUE 가 race 의 마지막 가드).
-     * nullable — V4 마이그레이션 이전 데이터(없음) 호환 여지지만 실제로는 항상 채워서 들어옴.
-     */
+    
+
     @Column(name = "idempotency_key", length = 64)
     private String idempotencyKey;
 
@@ -100,8 +88,8 @@ public class Withdrawal extends BaseEntity {
 
         Withdrawal w = new Withdrawal();
         w.userId = userId;
-        // 모든 문자열 필드는 Command compact constructor 에서 이미 trim/검증됨 — 여기서 다시 trim 하면
-        // 조회/저장 값 불일치로 멱등성 dedup 이 거짓 거부될 수 있어 그대로 저장 (게이트 2 round 2).
+        
+        
         w.idempotencyKey = idempotencyKey;
         w.amount = amount;
         w.bankName = bankName;
@@ -112,9 +100,8 @@ public class Withdrawal extends BaseEntity {
         return w;
     }
 
-    /**
-     * 사용자가 직접 취소. 신청 상태만 허용. 호출자가 잔액 원복 적용.
-     */
+    
+
     public void cancel(LocalDateTime now) {
         if (!status.canUserCancel()) {
             throw new BusinessException(ErrorCode.WITHDRAWAL_NOT_CANCELABLE);
@@ -123,9 +110,8 @@ public class Withdrawal extends BaseEntity {
         this.processedAt = now;
     }
 
-    /**
-     * 관리자 승인 — 신청 → 승인. 외부 이체는 후속 {@link #markAsCompleted} 가 처리.
-     */
+    
+
     public void approve(Long adminId, String memo, LocalDateTime now) {
         if (adminId == null || adminId <= 0) {
             throw new IllegalArgumentException("adminId 는 양수여야 합니다");
@@ -139,9 +125,8 @@ public class Withdrawal extends BaseEntity {
         this.processedAt = now;
     }
 
-    /**
-     * 관리자 거부 — 신청 → 거부. 호출자가 잔액 원복 적용.
-     */
+    
+
     public void reject(Long adminId, String memo, LocalDateTime now) {
         if (adminId == null || adminId <= 0) {
             throw new IllegalArgumentException("adminId 는 양수여야 합니다");
@@ -155,9 +140,8 @@ public class Withdrawal extends BaseEntity {
         this.processedAt = now;
     }
 
-    /**
-     * 관리자 외부 이체 완료 처리 — 승인 → 완료. 외부 이체 mock 후 호출.
-     */
+    
+
     public void markAsCompleted(LocalDateTime now) {
         if (!status.canComplete()) {
             throw new BusinessException(ErrorCode.WITHDRAWAL_INVALID_STATE);

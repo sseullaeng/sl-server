@@ -20,9 +20,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 관리자 — 1:1 문의 전체 조회 / 답변 / 상태 변경 / 삭제. SecurityConfig admin chain 으로 ROLE_ADMIN 강제.
- */
 @Tag(name = "AdminInquiry", description = "관리자 — 1:1 문의 답변/관리")
 @RestController
 @RequestMapping("/api/v1/admin/inquiries")

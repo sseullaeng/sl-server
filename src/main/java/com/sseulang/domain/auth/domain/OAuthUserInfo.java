@@ -3,9 +3,6 @@ package com.sseulang.domain.auth.domain;
 import com.sseulang.domain.user.domain.Email;
 import com.sseulang.domain.user.domain.SocialProvider;
 
-/**
- * Provider API 가 돌려준 사용자 정보의 도메인 표현. profileImage 는 nullable.
- */
 public record OAuthUserInfo(
         SocialProvider provider,
         String providerId,

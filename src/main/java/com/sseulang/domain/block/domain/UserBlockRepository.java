@@ -9,7 +9,7 @@ public interface UserBlockRepository {
 
     UserBlock save(UserBlock block);
 
-    /** 멱등 삭제. 영향 행 수 반환. */
+    
     int deleteByBlockerIdAndBlockedId(Long blockerId, Long blockedId);
 
     Page<UserBlock> findByBlockerId(Long blockerId, Pageable pageable);

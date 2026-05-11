@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** 사용자 활성 배너 목록 — sort_order 정렬. */
 @Tag(name = "Banner", description = "배너 조회 (공개)")
 @RestController
 @RequestMapping("/api/v1/banners")
