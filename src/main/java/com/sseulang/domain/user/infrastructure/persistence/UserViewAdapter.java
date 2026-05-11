@@ -8,10 +8,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * {@link UserView} 어댑터. chat 도메인이 채팅방 응답에 상대방 닉네임/프로필을 자동 채울 때 사용.
- * 단일 SELECT IN — N+1 회피.
- */
 @Component
 public class UserViewAdapter implements UserView {
 

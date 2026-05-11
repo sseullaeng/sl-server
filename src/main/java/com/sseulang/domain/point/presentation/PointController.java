@@ -18,10 +18,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 본인 포인트 관련 endpoint. 라운드 11: 잔액 페이지 3분할 표시용 balance endpoint 추가
- * (사용 가능 / 거래 보관 / 합산). 헤더/카드 용도는 GET /users/me 의 pointBalance + pointHold 활용.
- */
 @Tag(name = "Point", description = "본인 포인트 잔액 / 히스토리")
 @RestController
 @RequestMapping("/api/v1/users/me/point")

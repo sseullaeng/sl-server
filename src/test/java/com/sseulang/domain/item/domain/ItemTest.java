@@ -322,4 +322,113 @@ class ItemTest {
     private static Item saleItem() {
         return Item.create(SELLER, CATEGORY, "t", "d", 10_000L, null, null, TradeType.판매, "서울");
     }
+
+    // ───────── V25 라운드 12 PR-D 잔여 — 판매/대여 이중 등록 ─────────
+
+    @Test
+    @DisplayName("createMulti 판매+대여_정상_salePrice/rentalPrice/deposit 모두 박힘")
+    void createMulti_판매대여_정상() {
+        Item item = Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.of(TradeType.판매, TradeType.대여),
+                100_000L, 5_000L, 30_000L, RentalUnit.일, "서울"
+        );
+
+        assertThat(item.getTradeTypes()).containsExactlyInAnyOrder(TradeType.판매, TradeType.대여);
+        assertThat(item.getTradeType()).isEqualTo(TradeType.판매);  // primary
+        assertThat(item.getSalePrice()).isEqualTo(100_000L);
+        assertThat(item.getRentalPrice()).isEqualTo(5_000L);
+        assertThat(item.getDeposit()).isEqualTo(30_000L);
+        assertThat(item.getRentalUnit()).isEqualTo(RentalUnit.일);
+        // legacy price = primary 모드 가격
+        assertThat(item.getPrice()).isEqualTo(100_000L);
+    }
+
+    @Test
+    @DisplayName("createMulti 대여 단독_salePrice null")
+    void createMulti_대여만() {
+        Item item = Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 30_000L, RentalUnit.일, null
+        );
+        assertThat(item.getSalePrice()).isNull();
+        assertThat(item.getRentalPrice()).isEqualTo(5_000L);
+        assertThat(item.getTradeType()).isEqualTo(TradeType.대여);
+    }
+
+    @Test
+    @DisplayName("createMulti 판매 모드인데 salePrice null_거부")
+    void createMulti_판매_salePrice_없으면_거부() {
+        assertThatThrownBy(() -> Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.of(TradeType.판매),
+                null, null, null, null, null
+        )).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("createMulti 대여 모드인데 rentalUnit 누락_거부")
+    void createMulti_대여_rentalUnit_없으면_거부() {
+        assertThatThrownBy(() -> Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 30_000L, null, null
+        )).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("createMulti 대여 모드인데 deposit 누락_거부")
+    void createMulti_대여_deposit_없으면_거부() {
+        assertThatThrownBy(() -> Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, null, RentalUnit.일, null
+        )).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("createMulti tradeTypes 비어있으면_거부")
+    void createMulti_빈tradeTypes_거부() {
+        assertThatThrownBy(() -> Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.noneOf(TradeType.class),
+                100L, null, null, null, null
+        )).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("priceFor 판매+대여 모드_모드별 정확한 가격 반환")
+    void priceFor_정확() {
+        Item item = Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.of(TradeType.판매, TradeType.대여),
+                100_000L, 5_000L, 30_000L, RentalUnit.일, null
+        );
+        assertThat(item.priceFor(TradeType.판매)).isEqualTo(100_000L);
+        assertThat(item.priceFor(TradeType.대여)).isEqualTo(5_000L);
+        assertThat(item.priceFor(TradeType.나눔)).isZero();
+        assertThat(item.priceFor(null)).isNull();
+    }
+
+    @Test
+    @DisplayName("updateInfoMulti 판매→판매+대여 변경_가격 모두 박힘")
+    void updateInfoMulti_변경() {
+        Item item = Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.of(TradeType.판매), 50_000L, null, null, null, null
+        );
+
+        item.updateInfoMulti(
+                "new", "new desc",
+                java.util.EnumSet.of(TradeType.판매, TradeType.대여),
+                60_000L, 3_000L, 10_000L, RentalUnit.시간, null
+        );
+
+        assertThat(item.getSalePrice()).isEqualTo(60_000L);
+        assertThat(item.getRentalPrice()).isEqualTo(3_000L);
+        assertThat(item.getDeposit()).isEqualTo(10_000L);
+        assertThat(item.getRentalUnit()).isEqualTo(RentalUnit.시간);
+        assertThat(item.getTradeTypes()).containsExactlyInAnyOrder(TradeType.판매, TradeType.대여);
+    }
 }

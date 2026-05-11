@@ -63,7 +63,7 @@ public class UserController {
         ));
     }
 
-    /** Spring Security Authentication 의 GrantedAuthority 에서 ROLE_ prefix 제거한 role 문자열. */
+    
     private static String roleFrom(Authentication auth) {
         if (auth == null) return "USER";
         return auth.getAuthorities().stream()

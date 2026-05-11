@@ -7,11 +7,6 @@ import com.sseulang.domain.user.domain.UserStatus;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * Admin 회원 카드용 enriched Result. tradeCount/reportCount 는 다른 도메인에서 batch fetch 후 채움.
- *
- * <p>{@code dormant}/{@code status} 는 User Aggregate 의 derive 결과 — DB 컬럼 X.</p>
- */
 public record AdminUserResult(
         Long id,
         String email,

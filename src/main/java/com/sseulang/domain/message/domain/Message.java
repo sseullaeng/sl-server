@@ -13,12 +13,6 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Message Aggregate Root — MongoDB {@code messages} 컬렉션 (가이드 §4.10).
- *
- * <p>채팅방의 텍스트/이미지 메시지. 본문은 {@code content} 또는 {@code imageUrls} 둘 중 하나는 필수.
- * 페이징은 커서 기반 — id 의 자연 정렬 (ObjectId 시간순) 활용.</p>
- */
 @Document(collection = "messages")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -91,7 +85,7 @@ public class Message {
         return imageUrls != null && !imageUrls.isEmpty();
     }
 
-    /** 채팅방 last_message 갱신용 미리보기 — 텍스트면 그대로, 이미지면 placeholder. */
+    
     public String preview() {
         if (isImageMessage()) {
             return imageUrls.size() > 1 ? "[사진 " + imageUrls.size() + "장]" : "[사진]";

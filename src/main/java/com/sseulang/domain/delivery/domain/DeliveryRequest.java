@@ -17,15 +17,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * Delivery Aggregate Root. V8 스키마 {@code deliveries} 매핑.
- *
- * <p>가이드 §1 4축 중 "배달대행" 도메인. 요청자가 등록 → 라이더 수락 → 픽업 → 배송 → 정산.
- * 정산 시 요청자 포인트 차감 + 라이더 적립을 ApplicationService 가 한 트랜잭션으로 처리.
- * 본 Aggregate 는 단일 요청의 상태 머신만 책임. 수락 race 는 conditional UPDATE 가 가드.</p>
- *
- * <p>Setter 없음. 상태 변경은 명시 비즈니스 메서드만.</p>
- */
 @Entity
 @Table(name = "deliveries")
 @Getter
@@ -90,11 +81,11 @@ public class DeliveryRequest extends BaseEntity {
     @Column(name = "cancel_reason", length = MAX_CANCEL_REASON)
     private String cancelReason;
 
-    /** 거래대행 (Escrow) 결제완료 → 자동 생성된 delivery 의 application 참조. NULL = 일반 배달대행. */
+    
     @Column(name = "escrow_application_id")
     private Long escrowApplicationId;
 
-    /** Escrow 결제완료 시 EscrowConfirmedEvent listener 가 호출. 일반 create 와 동일 + escrow_application_id 표시. */
+    
     public static DeliveryRequest createFromEscrow(
             Long requesterId,
             Long escrowApplicationId,
@@ -152,12 +143,8 @@ public class DeliveryRequest extends BaseEntity {
         return d;
     }
 
-    /**
-     * 라이더가 수락 — 모집중 → 수락. 본인이 등록한 요청은 수락 거부.
-     *
-     * <p>주의: race 가드는 ApplicationService 의 conditional UPDATE 가 1차 — 본 메서드는 정상 흐름에서만
-     * 호출되며 본인 거래만 추가로 차단한다.</p>
-     */
+    
+
     public void acceptBy(Long riderId, LocalDateTime now) {
         if (riderId == null || riderId <= 0) {
             throw new IllegalArgumentException("riderId 는 양수여야 합니다");
@@ -173,7 +160,7 @@ public class DeliveryRequest extends BaseEntity {
         this.acceptedAt = now;
     }
 
-    /** 라이더 픽업 — 수락 → 배송중. 라이더 본인만 호출 가능 (호출자 검증). */
+    
     public void markPickedUp(LocalDateTime now) {
         if (!status.canPickup()) {
             throw new BusinessException(ErrorCode.DELIVERY_INVALID_STATE);
@@ -182,7 +169,7 @@ public class DeliveryRequest extends BaseEntity {
         this.pickedUpAt = now;
     }
 
-    /** 라이더 배송 완료 — 배송중 → 배송완료. */
+    
     public void markDelivered(LocalDateTime now) {
         if (!status.canDeliver()) {
             throw new BusinessException(ErrorCode.DELIVERY_INVALID_STATE);
@@ -191,10 +178,8 @@ public class DeliveryRequest extends BaseEntity {
         this.deliveredAt = now;
     }
 
-    /**
-     * 요청자 정산 확인 — 배송완료 → 정산완료. 포인트 이동(차감/적립)은 ApplicationService 가
-     * 같은 트랜잭션 안에서 별도 호출.
-     */
+    
+
     public void markSettled(LocalDateTime now) {
         if (!status.canSettle()) {
             throw new BusinessException(ErrorCode.DELIVERY_INVALID_STATE);
@@ -203,7 +188,7 @@ public class DeliveryRequest extends BaseEntity {
         this.completedAt = now;
     }
 
-    /** 요청자 취소 — 모집중만. */
+    
     public void cancelByRequester(LocalDateTime now, String reason) {
         if (!status.canRequesterCancel()) {
             throw new BusinessException(ErrorCode.DELIVERY_INVALID_STATE);

@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class NotificationApplicationService {
 
-    /** Admin broadcast 청크 크기 — 활성 사용자 id 청크 페이징 + 배치 INSERT 단위. */
+    
     private static final int BROADCAST_CHUNK_SIZE = 500;
 
     private final NotificationRepository notificationRepository;
@@ -29,9 +29,8 @@ public class NotificationApplicationService {
         this.userRepository = userRepository;
     }
 
-    /**
-     * 시스템 → 사용자 알림 발송. 다른 도메인이 호출 (예: 메시지 발신 시 상대방, 거래 상태 변경 시 등).
-     */
+    
+
     public Notification notify(
             Long userId,
             NotificationType type,
@@ -49,11 +48,8 @@ public class NotificationApplicationService {
         return notificationRepository.findByUserId(userId, pageable).map(NotificationResult::from);
     }
 
-    /**
-     * 알림 읽음 처리. 본인 알림이 아니면 (또는 미존재면) <b>조용히 무시</b> — 다른 사용자 알림 id 가
-     * 우연히 알려진 케이스에서도 실패 응답으로 정보 노출하지 않음. doc/FRONTEND_INTEGRATION.md §10.10 정합.
-     * 본인 본인 알림이 이미 read 면 추가 SAVE 안 함 (멱등).
-     */
+    
+
     public void markAsRead(String notificationId, Long requesterId) {
         Notification n = notificationRepository.findById(notificationId).orElse(null);
         if (n == null || !n.isOwnedBy(requesterId)) {
@@ -65,26 +61,13 @@ public class NotificationApplicationService {
         }
     }
 
-    /** 본인 unread 알림 모두 read 처리 (atomic UPDATE multi). 처리 건수 반환 — 0 도 정상. */
+    
     public long markAllAsRead(Long userId) {
         return notificationRepository.markAllAsReadByUserId(userId);
     }
 
-    /**
-     * Admin broadcast — 활성 사용자(blocked/deleted 제외) 전원에게 동일 알림 발송.
-     *
-     * <p>round 12 멱등성 + bulk:
-     * <ul>
-     *   <li>idempotencyKey null 이면 서버 UUID 자동 생성 → 응답으로 반환</li>
-     *   <li>idempotencyKey 제공 시 그대로 broadcastId — 같은 키 재호출 시 중복 INSERT 차단</li>
-     *   <li>chunk 당 BulkOperations UNORDERED INSERT — Mongo round-trip 1번 (이전엔 chunk 사이즈만큼)</li>
-     *   <li>중간 실패 시 같은 broadcastId 로 재호출 → (broadcastId, userId) UNIQUE 가 dup skip</li>
-     * </ul>
-     *
-     * <p>type {@link NotificationType#공지} 고정. linkType / linkId null.</p>
-     *
-     * @return BroadcastResult — broadcastId + 실제 INSERT 된 건수
-     */
+    
+
     public BroadcastResult broadcast(String title, String content, String idempotencyKey) {
         if (title == null || title.isBlank()) {
             throw new IllegalArgumentException("title 은 필수입니다");
@@ -111,6 +94,6 @@ public class NotificationApplicationService {
         return new BroadcastResult(broadcastId, total);
     }
 
-    /** Round 12 broadcast 결과 — broadcastId 응답으로 반환해 재호출 멱등키로 사용. */
+    
     public record BroadcastResult(String broadcastId, long sent) { }
 }

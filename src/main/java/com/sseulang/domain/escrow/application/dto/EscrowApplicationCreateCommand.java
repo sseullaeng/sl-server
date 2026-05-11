@@ -8,9 +8,9 @@ import java.math.BigDecimal;
 import java.util.List;
 
 public record EscrowApplicationCreateCommand(
-        Long receiverId,                // 폼 제출자 = 수신자 후보
+        Long receiverId,                
         String linkToken,
-        long itemPrice,                 // INTERNAL > 0, EXTERNAL = 0
+        long itemPrice,                 
         String itemDescription,
         String pickupAddress,
         BigDecimal pickupLat,
@@ -22,7 +22,7 @@ public record EscrowApplicationCreateCommand(
         Volume volume,
         Fragility fragility,
         String deliveryNotes,
-        // 프론트가 보낸 fee 값 (백엔드 ±10원 검증)
+        
         long submittedDeliveryFee,
         long submittedCommissionFee,
         long submittedTotalFee,

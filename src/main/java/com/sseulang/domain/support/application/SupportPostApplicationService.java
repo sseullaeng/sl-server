@@ -13,14 +13,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * FAQ / QNA 게시판 흐름.
- *
- * <ul>
- *   <li>관리자: CRUD 전부.</li>
- *   <li>사용자: 누구나 (비로그인 포함) 조회. 작성·수정·삭제 권한 X — SecurityConfig 가 admin chain 분리.</li>
- * </ul>
- */
 @Service
 @Transactional(readOnly = true)
 public class SupportPostApplicationService {

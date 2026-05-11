@@ -8,10 +8,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * {@link ItemView} 어댑터. chat 도메인이 채팅방 응답에 아이템 제목/썸네일을 자동 채울 때 사용.
- * 단일 SELECT IN — N+1 회피.
- */
 @Component
 public class ItemViewAdapter implements ItemView {
 

@@ -10,16 +10,6 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.Optional;
 
-/**
- * {@link DeliveryLocationCache} Redis 어댑터. JSON 직렬화 + TTL 30분.
- *
- * <p>키 패턴: {@code delivery:loc:{deliveryId}}. {@code save} 호출마다 TTL 갱신
- * (라이더가 publish 멈추면 30분 후 자동 정리).</p>
- *
- * <p>Redis 미가용 / 직렬화 실패 시 RuntimeException — 호출자(ApplicationService) 가
- * trans 안에서 호출하지만 broadcast 실패는 critical 아니라 호출자 측에서 catch 해 무시 가능.
- * 본 어댑터는 단순 에러 그대로 던짐.</p>
- */
 @Component
 class RedisDeliveryLocationCache implements DeliveryLocationCache {
 
@@ -53,7 +43,7 @@ class RedisDeliveryLocationCache implements DeliveryLocationCache {
         try {
             return Optional.of(objectMapper.readValue(json, DeliveryLocation.class));
         } catch (JsonProcessingException e) {
-            // 손상된 JSON — 삭제 + 빈 응답
+            
             redis.delete(key(deliveryId));
             return Optional.empty();
         }

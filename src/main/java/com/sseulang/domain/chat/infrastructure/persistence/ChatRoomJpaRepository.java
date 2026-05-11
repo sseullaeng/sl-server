@@ -27,10 +27,8 @@ interface ChatRoomJpaRepository extends JpaRepository<ChatRoom, Long> {
             @Param("tradeMode") com.sseulang.domain.item.domain.TradeType tradeMode
     );
 
-    /**
-     * 본인 visibility 기준 채팅방 목록. user1 이면 user1LeftAt IS NULL, user2 면 user2LeftAt IS NULL.
-     * 본인이 left 한 방은 목록에서 제외 (soft hide). 상대방이 left 한 방은 그대로 노출.
-     */
+    
+
     @Query("""
         SELECT c FROM ChatRoom c
         WHERE (c.user1Id = :userId AND c.user1LeftAt IS NULL)
@@ -42,10 +40,8 @@ interface ChatRoomJpaRepository extends JpaRepository<ChatRoom, Long> {
     """)
     Page<ChatRoom> findMine(@Param("userId") Long userId, Pageable pageable);
 
-    /**
-     * 단일 atomic UPDATE — last_message / last_message_at / 상대방 unread 갱신.
-     * 발신자 본인 unread 는 0 으로 (자기가 보낸 메시지는 안 읽음 카운트 X).
-     */
+    
+
     @Modifying
     @Query("""
         UPDATE ChatRoom c
@@ -62,7 +58,7 @@ interface ChatRoomJpaRepository extends JpaRepository<ChatRoom, Long> {
             @Param("sentAt") LocalDateTime sentAt
     );
 
-    /** 본인 unread 0 으로 atomic UPDATE. 비참여자는 영향 0. */
+    
     @Modifying
     @Query("""
         UPDATE ChatRoom c
@@ -73,10 +69,8 @@ interface ChatRoomJpaRepository extends JpaRepository<ChatRoom, Long> {
     """)
     int markAsRead(@Param("roomId") Long roomId, @Param("userId") Long userId);
 
-    /**
-     * 본인 측 left_at 을 atomic UPDATE. 이미 nonnull 이면 보존 (idempotent).
-     * 비참여자는 0 행 영향. 본인 user 위치에 따라 한쪽 컬럼만 변경.
-     */
+    
+
     @Modifying
     @Query("""
         UPDATE ChatRoom c

@@ -5,9 +5,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.Map;
 
-/**
- * 관리자 dashboard 용 배달대행 통계.
- */
 @Schema(description = "관리자 dashboard — 배달대행 통계.")
 public record DeliveryStatsResult(
         @Schema(example = "42", description = "전체 배달 요청 수") long total,

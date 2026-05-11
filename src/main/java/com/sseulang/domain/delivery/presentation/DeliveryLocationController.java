@@ -14,14 +14,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 배달 실시간 위치 REST fallback (follow-up #51).
- *
- * <p>STOMP 구독을 막 시작한 클라이언트 (재연결 / 최초 진입) 가 마지막 좌표를 즉시 받기 위한
- * snapshot endpoint. 이후 갱신은 STOMP topic 으로.</p>
- *
- * <p>참여자(요청자/라이더) 만. 그 외 403 DELIVERY_FORBIDDEN. 캐시 미존재 시 204 No Content.</p>
- */
 @Tag(name = "Delivery", description = "배달 실시간 위치 (REST fallback)")
 @RestController
 @RequestMapping("/api/v1/deliveries/{id}/location")

@@ -86,19 +86,19 @@ public class TransactionRepositoryImpl implements TransactionRepository {
             java.util.Collection<Long> matchedUserIds,
             Pageable pageable
     ) {
-        // round 10 — keyword 가 숫자면 keywordId 로, 비숫자면 호출자가 미리 LIKE 매치한 userIds 로.
-        // 둘 다 비어있고 keyword 만 있으면 (= 비숫자인데 매치 0건) 빈 결과 즉시 반환.
+        
+        
         boolean hasKeyword = keyword != null && !keyword.isBlank();
         Long keywordId = parseKeywordId(keyword);
         boolean hasUserIds = matchedUserIds != null && !matchedUserIds.isEmpty();
         if (hasKeyword && keywordId == null && !hasUserIds) {
             return new org.springframework.data.domain.PageImpl<>(java.util.Collections.emptyList(), pageable, 0);
         }
-        java.util.Collection<Long> userIdsParam = hasUserIds ? matchedUserIds : java.util.List.of(0L); // dummy IN — JPA 빈 IN 회피
+        java.util.Collection<Long> userIdsParam = hasUserIds ? matchedUserIds : java.util.List.of(0L); 
         return jpa.adminSearchJpql(startDate, endDate, tradeType, status, keywordId, hasUserIds, userIdsParam, pageable);
     }
 
-    /** keyword 가 숫자면 long, 아니면 null. */
+    
     private static Long parseKeywordId(String keyword) {
         if (keyword == null || keyword.isBlank()) return null;
         try {
@@ -118,7 +118,7 @@ public class TransactionRepositoryImpl implements TransactionRepository {
             throw new IllegalArgumentException("from 은 to 이전이어야 합니다");
         }
         java.time.LocalDateTime fromTs = from.atDay(1).atStartOfDay();
-        // toTs 는 (to.다음월 1일 00:00) — exclusive 경계로 to 월 마지막 순간까지 포함.
+        
         java.time.LocalDateTime toTs = to.plusMonths(1).atDay(1).atStartOfDay();
         return jpa.countCompletedMonthlyRaw(fromTs, toTs).stream()
                 .map(r -> new com.sseulang.domain.transaction.domain.TransactionMonthlyStat(

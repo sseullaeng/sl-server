@@ -14,9 +14,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 사용자 공지 조회 — 노출 윈도우 통과한 공지만. SecurityConfig user chain 으로 ROLE_USER 강제.
- */
 @Tag(name = "Notice", description = "공지 조회 (공개)")
 @RestController
 @RequestMapping("/api/v1/notices")

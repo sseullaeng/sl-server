@@ -15,12 +15,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * Notice Aggregate Root. V1 스키마 {@code notices} 매핑.
- *
- * <p>관리자가 작성하는 공지/이벤트. 게시 윈도우 ({@code startsAt}/{@code endsAt}) 와 게시 여부
- * ({@code isPublished}) 두 축으로 사용자 노출 여부 결정.</p>
- */
 @Entity
 @Table(name = "notices")
 @Getter
@@ -88,12 +82,12 @@ public class Notice extends BaseEntity {
         n.adminId = adminId;
         n.type = type;
         n.title = title.trim();
-        n.content = content;  // 본문은 trim 안 함 — 줄바꿈/공백 의미 보존
+        n.content = content;  
         n.imageUrl = imageUrl;
         n.startsAt = startsAt;
         n.endsAt = endsAt;
         n.pinned = false;
-        n.published = true;  // 기본 게시 — 작성 즉시 노출 가능
+        n.published = true;  
         n.viewCount = 0;
         return n;
     }
@@ -143,9 +137,8 @@ public class Notice extends BaseEntity {
         this.viewCount++;
     }
 
-    /**
-     * 사용자에게 노출되는지: published + 게시 윈도우 안. startsAt/endsAt null 이면 그쪽은 무제한.
-     */
+    
+
     public boolean isVisibleAt(LocalDateTime now) {
         if (!published) {
             return false;
@@ -156,7 +149,7 @@ public class Notice extends BaseEntity {
         if (startsAt != null && now.isBefore(startsAt)) {
             return false;
         }
-        // ends_at 은 exclusive 로 취급 — endsAt == now 이면 종료
+        
         if (endsAt != null && !now.isBefore(endsAt)) {
             return false;
         }

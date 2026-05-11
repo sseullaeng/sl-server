@@ -24,10 +24,8 @@ public class CategoryApplicationService {
         this.categoryRepository = categoryRepository;
     }
 
-    /**
-     * 활성 카테고리 전체를 트리로 조립해 반환. 단일 SELECT 결과를 in-memory 로 그룹핑한다.
-     * Repository 가 parent NULL → parentId asc → sortOrder asc 순으로 정렬해주므로 1-pass 로 조립 가능.
-     */
+    
+
     public List<CategoryNodeResult> getActiveTree() {
         List<Category> all = categoryRepository.findAllActiveSorted();
 
@@ -46,10 +44,8 @@ public class CategoryApplicationService {
         return roots;
     }
 
-    /**
-     * 라운드 12 PR-D — 활성 카테고리 이름 부분일치 검색 (자동완성용).
-     * keyword 가 null/blank 이면 빈 리스트.
-     */
+    
+
     public List<CategoryResult> searchByKeyword(String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return List.of();
@@ -65,11 +61,8 @@ public class CategoryApplicationService {
         return new CategoryResult(c.getId(), c.getParentId(), c.getName(), c.getSortOrder());
     }
 
-    /**
-     * 다른 도메인 ApplicationService 가 카테고리 존재 검증할 때 사용. {@code id} 가 null 이면
-     * 검증 스킵 (카테고리 미지정 허용 정책). CLAUDE.md §3.3 의 "다른 도메인 Repository 직접 호출 금지"
-     * 룰에 맞춰 외부 도메인이 본 메서드만 의존하게 한다.
-     */
+    
+
     public void requireExists(Long id) {
         if (id == null) {
             return;

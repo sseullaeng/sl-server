@@ -11,15 +11,6 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/**
- * Category Aggregate Root. V1 스키마 {@code categories} 매핑 (self-ref).
- *
- * <p>트리 깊이는 시드(`V2__seed_categories.sql`) 기준 2단(1차→2차). 도메인 자체에 깊이 제한
- * 강제는 없음 — Application/Service 에서 트리 조립 시 단일 SELECT 후 in-memory 그룹핑.</p>
- *
- * <p>parent 는 self-ref FK 로 두되 도메인 모델은 {@code parentId(Long)} 만 보유. {@code @ManyToOne}
- * 자기참조는 N+1 위험이 커서 명시 ID 만 들고 트리는 어플리케이션 레이어에서 조립.</p>
- */
 @Entity
 @Table(name = "categories")
 @Getter

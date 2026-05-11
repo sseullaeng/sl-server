@@ -158,7 +158,7 @@ class SettlementRollbackIT {
             return null;
         });
 
-        Long itemId = txTemplate.execute(s -> itemService.register(new ItemRegisterCommand(
+        Long itemId = txTemplate.execute(s -> itemService.register(ItemRegisterCommand.legacy(
                 sellerId, null, "물건", "설명", 50_000L, null, null, TradeType.판매,
                 "서울", null, null
         )));

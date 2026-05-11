@@ -17,19 +17,15 @@ interface WishlistJpaRepository extends JpaRepository<Wishlist, Long> {
     @Query("DELETE FROM Wishlist w WHERE w.userId = :userId AND w.itemId = :itemId")
     int deleteByUserAndItem(@Param("userId") Long userId, @Param("itemId") Long itemId);
 
-    /**
-     * Item 도메인의 {@link com.sseulang.domain.item.domain.WishlistView} 어댑터 백킹 쿼리.
-     * userId 가 itemIds 중 어느 것을 찜했는지 단일 SELECT 로 반환 — N+1 회피용.
-     */
+    
+
     @Query("SELECT w.itemId FROM Wishlist w WHERE w.userId = :userId AND w.itemId IN :itemIds")
     java.util.List<Long> findItemIdsByUserIdAndItemIds(
             @Param("userId") Long userId,
             @Param("itemIds") java.util.Collection<Long> itemIds);
 
-    /**
-     * 본인이 찜한 Item 목록 — 삭제된 Item 은 자동 필터. Wishlist 의 createdAt 기준 최신순.
-     * cross-aggregate read JPQL.
-     */
+    
+
     @Query(value = """
             SELECT i FROM Item i
              WHERE i.id IN (SELECT w.itemId FROM Wishlist w WHERE w.userId = :userId)

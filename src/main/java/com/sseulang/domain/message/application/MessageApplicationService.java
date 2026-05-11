@@ -17,20 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-/**
- * 채팅 메시지 도메인. 가이드 §4.10:
- *
- * <ol>
- *   <li>채팅방 참여자 검증 + 상대방 식별</li>
- *   <li>MongoDB Message 저장</li>
- *   <li>MySQL ChatRoom.last_message + unread 원자 갱신 (가이드 §4.10 트랜잭션 분리, 실패 시 로그)</li>
- *   <li>상대방 Notification 생성 + STOMP push</li>
- *   <li>채팅방 토픽 broadcast</li>
- * </ol>
- *
- * <p>각 단계 실패는 다음 단계 진행을 막지 않는다 — 메시지는 잃어도 비즈니스 크리티컬 X.
- * 본 PR(Phase 2) 의 핵심 — WebSocket+STOMP 통합은 가이드 §9.6 즉시 게이트 1 영역.</p>
- */
 @Service
 @Transactional(readOnly = true)
 public class MessageApplicationService {
@@ -38,7 +24,7 @@ public class MessageApplicationService {
     private final MessageRepository messageRepository;
     private final ChatRoomApplicationService chatRoomApplicationService;
     private final NotificationApplicationService notificationApplicationService;
-    private final RealtimePublisher realtimePublisher;  // 단위 테스트 호환용 (deprecated 직접 호출)
+    private final RealtimePublisher realtimePublisher;  
     private final ApplicationEventPublisher eventPublisher;
 
     public MessageApplicationService(
@@ -55,22 +41,15 @@ public class MessageApplicationService {
         this.eventPublisher = eventPublisher;
     }
 
-    /**
-     * 메시지 발신. 텍스트 또는 이미지 (XOR — 한쪽 비어있어야).
-     *
-     * <p>명시 {@code @Transactional} (write) — 클래스 레벨 readOnly 무력화. ChatRoom 메타 갱신은 본 트랜잭션 안.
-     * MongoDB 저장은 트랜잭션 밖, broadcast/notify 는 동기 (가이드 §4.10 — 실패 시 보상 X).</p>
-     *
-     * <p>TODO: broadcast/notify 를 {@code TransactionSynchronization.AFTER_COMMIT} 으로 미루는 정합성 보강은
-     * Codex 게이트 1 검증의 후속 권고 영역.</p>
-     */
+    
+
     @Transactional
     public MessageResult send(MessageSendCommand cmd) {
-        // soft hide 가드 — 본인이 left 한 방에 송신 X / 상대방이 left 한 방도 송신 X (#3.1).
+        
         chatRoomApplicationService.requireSendable(cmd.chatRoomId(), cmd.senderId());
         Long opponentId = chatRoomApplicationService.findOpponent(cmd.chatRoomId(), cmd.senderId());
 
-        // 라운드 12 PR-C #6 — 첫 메시지 발신 시점에 systemCard lazy 생성 (멱등).
+        
         chatRoomApplicationService.ensureSystemCard(cmd.chatRoomId());
 
         Message saved;
@@ -81,12 +60,12 @@ public class MessageApplicationService {
             saved = messageRepository.save(Message.text(cmd.chatRoomId(), cmd.senderId(), cmd.content()));
         }
 
-        // ChatRoom 메타 갱신 — 별도 MySQL 트랜잭션. 실패 시 로그 (가이드 §4.10).
+        
         chatRoomApplicationService.recordIncomingMessage(cmd.chatRoomId(), cmd.senderId(), saved.preview());
 
         MessageResult result = MessageResult.from(saved);
 
-        // 상대방 알림 생성 (트랜잭션 안에서 저장)
+        
         Notification notification = notificationApplicationService.notify(
                 opponentId,
                 NotificationType.메시지,
@@ -96,7 +75,7 @@ public class MessageApplicationService {
                 cmd.chatRoomId()
         );
 
-        // 실시간 publish 는 AFTER_COMMIT 으로 분리 (follow-up #19) — 트랜잭션 롤백 시 발송 X.
+        
         eventPublisher.publishEvent(new ChatRealtimePublishRequestedEvent(
                 cmd.chatRoomId(),
                 opponentId,

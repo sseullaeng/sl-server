@@ -6,29 +6,14 @@ import com.sseulang.global.exception.ErrorCode;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-/**
- * 거래대행 수수료 계산 DomainService. 프론트 {@code calcFees} 와 동일 로직 (결정 #9, CC3).
- *
- * <pre>
- * adjustedKmRate = (truck ? truckBaseKmRate : baseKmRate)
- *                  + (fuelPricePerL - baseFuelPrice) * distance / fuelEfficiency
- * baseFee        = (truck ? truckBaseDeliveryFee : baseDeliveryFee)
- * deliveryFee    = baseFee + adjustedKmRate * distance
- * deliveryFee    = max(deliveryFee, truck ? truckMinDeliveryFee : minDeliveryFee)
- * deliveryFee    = round(deliveryFee * weightMul * volumeMul * fragMul)
- * </pre>
- *
- * <p>spring 컴포넌트 X — 순수 도메인 (의존성 없음). 호출자가 settings 주입.</p>
- */
 public final class EscrowFeeCalculator {
 
     private static final double EARTH_RADIUS_KM = 6371.0;
 
     private EscrowFeeCalculator() {}
 
-    /**
-     * 좌표 → distance (haversine). 프론트와 동일 공식.
-     */
+    
+
     public static BigDecimal distanceKm(double lat1, double lng1, double lat2, double lng2) {
         double dLat = Math.toRadians(lat2 - lat1);
         double dLng = Math.toRadians(lng2 - lng1);
@@ -40,14 +25,8 @@ public final class EscrowFeeCalculator {
         return BigDecimal.valueOf(km).setScale(2, RoundingMode.HALF_UP);
     }
 
-    /**
-     * 전체 수수료 산정 (snapshot 용).
-     *
-     * @param settings   현재 운영 정책 (singleton row)
-     * @param tradeMode  INTERNAL/EXTERNAL
-     * @param itemPrice  Mode B 만 > 0
-     * @param distanceKm 좌표로 사전 계산된 거리 (소수점 2)
-     */
+    
+
     public static FeeBreakdown calculate(
             EscrowFeeSettings settings,
             TradeMode tradeMode,
@@ -70,7 +49,7 @@ public final class EscrowFeeCalculator {
         boolean truck = weight.isTruck();
         double dist = distanceKm.doubleValue();
 
-        // 유류비 보정: (현재유가 - 기준유가) * 거리 / 연비 = 거리당 추가비용
+        
         long baseKmRate = truck ? settings.getTruckBaseKmRate() : settings.getBaseKmRate();
         double fuelEff = (truck ? settings.getTruckFuelEfficiency() : settings.getFuelEfficiency()).doubleValue();
         double fuelDiff = settings.getFuelPricePerL() - settings.getBaseFuelPrice();
@@ -100,10 +79,8 @@ public final class EscrowFeeCalculator {
         );
     }
 
-    /**
-     * 프론트가 보낸 fee 값을 ±10원 tolerance 로 검증 (결정 #10, EE2).
-     * mismatch 시 ESCROW_FEE_MISMATCH (race 또는 위변조 의심).
-     */
+    
+
     public static void verifyTolerance(FeeBreakdown calculated, long submittedDeliveryFee, long submittedCommissionFee, long submittedTotalFee) {
         long tolerance = 10L;
         if (Math.abs(calculated.deliveryFee() - submittedDeliveryFee) > tolerance ||

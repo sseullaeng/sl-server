@@ -10,13 +10,10 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 
-/** Spring Data JPA — {@link NoticeRepositoryImpl} 가 wrapping. 외부 직접 import 금지. */
 interface NoticeJpaRepository extends JpaRepository<Notice, Long> {
 
-    /**
-     * 사용자 노출 쿼리. type null 이면 전체 type. 윈도우는 startsAt/endsAt 두 축으로 판정 —
-     * NULL 이면 그쪽 무제한. 정렬은 pinned 우선, 그다음 최신.
-     */
+    
+
     @Query("""
             SELECT n FROM Notice n
              WHERE n.published = true

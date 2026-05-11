@@ -127,11 +127,11 @@ class ItemSearchTest {
     @Test
     @DisplayName("search tag 필터")
     void search_tag() {
-        Long id1 = service.register(new ItemRegisterCommand(
+        Long id1 = service.register(ItemRegisterCommand.legacy(
                 SELLER, catA, "i1", "d", 1L, null, null, TradeType.판매, null,
                 null, List.of("아이폰", "미개봉")
         ));
-        Long id2 = service.register(new ItemRegisterCommand(
+        Long id2 = service.register(ItemRegisterCommand.legacy(
                 SELLER, catA, "i2", "d", 1L, null, null, TradeType.판매, null,
                 null, List.of("갤럭시")
         ));
@@ -189,13 +189,13 @@ class ItemSearchTest {
 
     private Long register(String title, String desc, Long categoryId, TradeType type, long price, RentalUnit unit) {
         Long deposit = type.requiresDeposit() ? 10_000L : null;
-        return service.register(new ItemRegisterCommand(
+        return service.register(ItemRegisterCommand.legacy(
                 SELLER, categoryId, title, desc, price, deposit, unit, type, null, null, null
         ));
     }
 
     private Long registerSimple() {
-        return service.register(new ItemRegisterCommand(
+        return service.register(ItemRegisterCommand.legacy(
                 SELLER, catA, "t" + System.nanoTime(), "d", 1L, null, null, TradeType.판매, null, null, null
         ));
     }

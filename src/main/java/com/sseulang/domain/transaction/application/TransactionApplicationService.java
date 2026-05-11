@@ -31,21 +31,6 @@ import java.time.LocalDateTime;
 import java.util.EnumMap;
 import java.util.Map;
 
-/**
- * Transaction 거래 흐름. 가이드 §5.1 / §5.2 정합:
- *
- * <ul>
- *   <li>create: buyer 가 호출. <b>Item 비관적 락</b> + 활성(판매중) 검증 + 자기 거래 거부.
- *       reserve 동시 시 락 직렬화 — "예약 직후 새 채팅중 거래" 회귀 차단.</li>
- *   <li>reserve: seller 가 호출. <b>락 순서 Transaction → Item</b>.
- *       같은 거래에 대한 reserve vs cancel race 도 Transaction 락이 직렬화 (Codex 게이트 1 Critical 1 보강).
- *       다른 거래의 reserve 와는 Item 락이 직렬화 → status=예약 보고 거부.</li>
- *   <li>complete: seller 가 호출. <b>Item 락 → markAsSold</b> 후 PointApplicationService.transfer 로
- *       buyer 차감 → seller 적립 (id-asc 락 순서, 가이드 §5.3) + history 두 건. 정산 실패 시 트랜잭션
- *       롤백으로 Item / Tx / 잔액 / history 모두 원복 (Day 8 합류, SettlementRollbackIT 가드).</li>
- *   <li>cancel: 양쪽 참여자 모두 호출 가능. Transaction 락 → 예약 상태였으면 Item 복원 (예약 → 판매중).</li>
- * </ul>
- */
 @Service
 @Transactional(readOnly = true)
 public class TransactionApplicationService {
@@ -76,57 +61,55 @@ public class TransactionApplicationService {
         this.clock = clock;
     }
 
-    /**
-     * 거래 생성 — 라운드 12 (#3.2 + 판매자만 정책): 판매자가 채팅방 안에서 거래 시작.
-     *
-     * <p>검증 순서 (의도적):</p>
-     * <ol>
-     *   <li>chatRoomId 누락 → TX_CHATROOM_REQUIRED (다른 검증보다 먼저)</li>
-     *   <li>호출자(seller) verified — 자금 영향이라 이메일 인증 필수</li>
-     *   <li>chat_room 참여자 검증 + chatRoom.itemId == cmd.itemId 일치</li>
-     *   <li>호출자 == item.sellerId — 판매자만 거래 시작 가능 (TX_SELLER_ONLY)</li>
-     *   <li>한 채팅방 = 1 active transaction</li>
-     *   <li>buyer 도출 — chatRoom 의 상대방</li>
-     * </ol>
-     */
+    
+
     @Transactional
     public Long create(TransactionCreateCommand cmd) {
         if (cmd.chatRoomId() == null) {
             throw new BusinessException(ErrorCode.TX_CHATROOM_REQUIRED);
         }
-        // 호출자(seller) 인증 — 자금 흐름 진입자라 이메일 인증 필수.
+        
         userApplicationService.requireVerified(cmd.requesterId());
 
-        // Item 조회 먼저 — 미존재면 ITEM_NOT_FOUND (chatRoom 검증보다 우선).
+        
         ItemForTransactionResult info = itemApplicationService.findActiveForTransaction(cmd.itemId());
 
-        // 채팅방 가드 — 참여자 + chatRoom.itemId 일치 검증
+        
         ChatRoomApplicationService.ChatRoomMeta meta =
                 chatRoomApplicationService.findMetaForParticipant(cmd.chatRoomId(), cmd.requesterId());
         if (!meta.itemId().equals(cmd.itemId())) {
             throw new BusinessException(ErrorCode.TX_CHATROOM_ITEM_MISMATCH);
         }
 
-        // 판매자만 거래 시작 가능 (#3.2 round 12 정책 변경)
+        
         if (!info.sellerId().equals(cmd.requesterId())) {
             throw new BusinessException(ErrorCode.TX_SELLER_ONLY);
         }
 
-        // 한 채팅방 = 1 active transaction 가드 (#3.2)
+        
         if (transactionRepository.existsActiveByChatRoomId(cmd.chatRoomId())) {
             throw new BusinessException(ErrorCode.TX_ALREADY_ACTIVE_IN_ROOM);
         }
 
-        // buyer 도출 — chatRoom 참여자 중 seller 가 아닌 쪽
+        
         Long buyerId = chatRoomApplicationService.findOpponent(cmd.chatRoomId(), cmd.requesterId());
+
+        
+        
+        com.sseulang.domain.item.domain.TradeType mode = meta.tradeMode();
+        Long price = info.priceFor(mode);
+        if (price == null) {
+            throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
+        }
+        Long deposit = mode == com.sseulang.domain.item.domain.TradeType.대여 ? info.deposit() : null;
 
         Transaction tx = Transaction.create(
                 info.itemId(),
                 info.sellerId(),
                 buyerId,
-                info.tradeType(),
-                info.price(),
-                info.deposit(),
+                mode,
+                price,
+                deposit,
                 cmd.rentalStart(),
                 cmd.rentalEnd(),
                 cmd.chatRoomId()
@@ -134,30 +117,15 @@ public class TransactionApplicationService {
         return transactionRepository.save(tx).getId();
     }
 
-    /**
-     * 거래 예약 — seller 가 호출. 라운드 11 흐름:
-     * <ol>
-     *   <li>Transaction 비관적 락 (findByIdForUpdate)</li>
-     *   <li>seller 권한 가드 (TRANSACTION_FORBIDDEN)</li>
-     *   <li>Item 락 + markItemAsReserved (락 순서 Transaction → Item — deadlock 회피)</li>
-     *   <li>Transaction.markAsReserved(now, price) — escrowHoldAmount 동기 set</li>
-     *   <li>price &gt; 0 이면 PointApplicationService.escrowHold — buyer point_balance↓ + point_hold↑
-     *       + 거래보관 history. 잔액 부족 시 INSUFFICIENT_POINT 트랜잭션 롤백 (Item/Tx 도 원복).</li>
-     * </ol>
-     *
-     * <p>락 순서: Transaction → Item → User(buyer). 다른 거래의 reserve 와는 Item 락이, 같은 buyer 의
-     * 다른 거래 reserve 동시 시도는 buyer 행 락이 직렬화. 두 거래 모두 잔액 충분이면 차례로 통과,
-     * 한 쪽만 충분이면 다른 쪽은 INSUFFICIENT_POINT.</p>
-     *
-     * <p>나눔 거래 (price=0) 는 escrowHold 호출 X — escrowHoldAmount 도 0.</p>
-     */
+    
+
     @Transactional
     public void reserve(Long transactionId, Long requesterId) {
         Transaction tx = findOrThrowForUpdate(transactionId);
         if (!tx.isSeller(requesterId)) {
             throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
         }
-        // Item 락 + 상태 전이 — 락 순서 Transaction → Item 고정 (deadlock 회피)
+        
         itemApplicationService.markItemAsReserved(tx.getItemId());
         LocalDateTime now = LocalDateTime.now(clock);
         long holdAmount = tx.getPrice();
@@ -174,17 +142,8 @@ public class TransactionApplicationService {
                 tx.getId(), tx.getBuyerId(), tx.getSellerId(), tx.getPrice()));
     }
 
-    /**
-     * 라운드 11 — seller 인계확인. 예약 → 인계완료 전이.
-     *
-     * <ul>
-     *   <li>seller 가 아니면 TRANSACTION_HANDOVER_NOT_ALLOWED</li>
-     *   <li>이미 인계완료 상태이면 멱등 (no-op) — PATCH 재시도 시 사용자 혼란 방지</li>
-     *   <li>그 외 status (채팅중/거래완료/취소) 에서 호출 시 TRANSACTION_INVALID_STATE</li>
-     * </ul>
-     *
-     * <p>buyer 잔액/hold 변동 X — 단순 status 전이. Item 도 변동 X (markAsSold 는 markReceived 시점).</p>
-     */
+    
+
     @Transactional
     public void markHandover(Long transactionId, Long requesterId) {
         Transaction tx = findOrThrowForUpdate(transactionId);
@@ -192,27 +151,14 @@ public class TransactionApplicationService {
             throw new BusinessException(ErrorCode.TRANSACTION_HANDOVER_NOT_ALLOWED);
         }
         if (tx.getStatus() == TransactionStatus.인계완료) {
-            return;  // 멱등 — 이미 인계완료
+            return;  
         }
         tx.markHandover(LocalDateTime.now(clock));
         eventPublisher.publishEvent(new TransactionHandoverConfirmedEvent(tx.getId(), tx.getBuyerId()));
     }
 
-    /**
-     * 라운드 11 — buyer 인수확인. 인계완료 → 거래완료 자동 전이 + 정산.
-     *
-     * <ol>
-     *   <li>Transaction 락 + buyer 권한 가드 (TRANSACTION_RECEIVE_NOT_ALLOWED)</li>
-     *   <li>이미 거래완료 상태이면 멱등 (no-op)</li>
-     *   <li>Item 락 + markItemAsSold (락 순서 Transaction → Item — reserve 와 동일)</li>
-     *   <li>escrowHoldAmount &gt; 0 이면 PointApplicationService.escrowRelease — buyer hold↓ + seller balance↑
-     *       (id-asc 락 순서, 가이드 §5.3) + 판매정산 history 1건</li>
-     *   <li>Transaction.markReceived — status=거래완료, receiveConfirmedAt + completedAt 동기 set</li>
-     * </ol>
-     *
-     * <p>buyer hold 부족 (운영 이상) → TRANSACTION_HOLD_FAILED. 트랜잭션 롤백으로 Item / Tx / 잔액
-     * 모두 원복. 나눔 거래 (escrowHoldAmount=0) 는 escrowRelease skip.</p>
-     */
+    
+
     @Transactional
     public void markReceived(Long transactionId, Long requesterId) {
         Transaction tx = findOrThrowForUpdate(transactionId);
@@ -220,9 +166,9 @@ public class TransactionApplicationService {
             throw new BusinessException(ErrorCode.TRANSACTION_RECEIVE_NOT_ALLOWED);
         }
         if (tx.getStatus() == TransactionStatus.거래완료) {
-            return;  // 멱등 — 이미 거래완료
+            return;  
         }
-        // Item 락 + markAsSold (락 순서 Transaction → Item)
+        
         itemApplicationService.markItemAsSold(tx.getItemId());
         long settleAmount = tx.getEscrowHoldAmount();
         if (settleAmount > 0) {
@@ -239,19 +185,8 @@ public class TransactionApplicationService {
                 tx.getId(), tx.getSellerId(), settleAmount));
     }
 
-    /**
-     * 거래 취소 — 양쪽 참여자 누구나 호출. 라운드 11 단계별 환불:
-     *
-     * <ul>
-     *   <li>채팅중 단계: hold 없음 → 단순 status 전이만</li>
-     *   <li>예약 단계: Item 판매중 복원 + escrowRefund (buyer hold↓, balance↑) + 거래환불 history</li>
-     *   <li>인계완료 / 거래완료 / 취소 단계: Transaction.cancel 의 canCancel() 가드가 거부 (TRANSACTION_INVALID_STATE).
-     *       라운드 11 합의 (B-3) — 인계 후 환불은 R2 분쟁 endpoint 영역</li>
-     * </ul>
-     *
-     * <p>예약 단계 환불 시 락 순서: Transaction → Item → User(buyer). reserve 와 동일 순서라 deadlock 회피.
-     * 호출 시점에 escrowHoldAmount 를 미리 캡처 — tx.cancel() 후에도 컬럼은 유지되지만 명확성을 위해.</p>
-     */
+    
+
     @Transactional
     public void cancel(Long transactionId, Long requesterId, String reason) {
         Transaction tx = findOrThrowForUpdate(transactionId);
@@ -260,14 +195,14 @@ public class TransactionApplicationService {
         }
         boolean wasReserved = tx.getStatus() == TransactionStatus.예약;
         long holdAmount = tx.getEscrowHoldAmount();
-        // canCancel() 가드 — 인계완료 이후 status 는 TRANSACTION_INVALID_STATE
+        
         tx.cancel(LocalDateTime.now(clock), reason);
         if (wasReserved) {
-            // 예약 상태였던 거래만 Item 을 판매중으로 복원 (가이드 §5.2 채팅 재활성화)
+            
             itemApplicationService.restoreItemFromReserved(tx.getItemId());
             if (holdAmount > 0) {
-                // 라운드 11 — buyer escrow 환불 (hold↓, balance↑) + 거래환불 history.
-                // hold 부족 (운영 이상) → TRANSACTION_HOLD_FAILED 트랜잭션 롤백 (Item/Tx 도 원복).
+                
+                
                 pointApplicationService.escrowRefund(
                         tx.getBuyerId(),
                         holdAmount,
@@ -288,16 +223,8 @@ public class TransactionApplicationService {
         return TransactionResult.from(tx);
     }
 
-    /**
-     * Review 작성 시 호출. 가이드 §4.7:
-     * <ul>
-     *   <li>{@code status == 거래완료} 만 허용</li>
-     *   <li>거래 완료 후 7일 이내</li>
-     *   <li>requester 가 거래 참여자</li>
-     * </ul>
-     * reviewee 는 자동 결정 (seller 가 reviewer 면 buyer, 그 반대도). CLAUDE.md §3.3 — Review 도메인은
-     * 본 메서드만 의존, TransactionRepository 직접 접근 X.
-     */
+    
+
     public ReviewableTransactionResult findCompletedForReview(Long transactionId, Long requesterId) {
         Transaction tx = findOrThrow(transactionId);
         if (!tx.isParticipant(requesterId)) {
@@ -306,7 +233,7 @@ public class TransactionApplicationService {
         if (tx.getStatus() != TransactionStatus.거래완료 || tx.getCompletedAt() == null) {
             throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
         }
-        // 7일 경계 정확 비교 — Duration.toDays() 는 내림이라 7일 23시간도 허용되는 회귀 (Codex 게이트 2).
+        
         if (LocalDateTime.now(clock).isAfter(tx.getCompletedAt().plusDays(7))) {
             throw new BusinessException(ErrorCode.REVIEW_PERIOD_EXPIRED);
         }
@@ -314,26 +241,24 @@ public class TransactionApplicationService {
         return new ReviewableTransactionResult(tx.getId(), requesterId, revieweeId, tx.getCompletedAt());
     }
 
-    /** 차트 dashboard — 기간 [from, to) tradeType 별 카운트 (created_at 기준). */
+    
     public java.util.List<com.sseulang.domain.transaction.domain.TransactionRepository.TradeTypeCount>
             countByTradeTypeBetween(java.time.LocalDateTime from, java.time.LocalDateTime to) {
         return transactionRepository.countByTradeTypeBetween(from, to);
     }
 
-    /** 차트 dashboard — 기간 [from, to) status 별 카운트 (라운드 11 5단계, created_at 기준). */
+    
     public java.util.List<TransactionStatusCount> countByStatusBetween(
             java.time.LocalDateTime from, java.time.LocalDateTime to) {
         return transactionRepository.countByStatusBetween(from, to);
     }
 
-    /**
-     * 관리자 거래 통계 — total + status 별 카운트. byStatus 는 enum 모든 값 포함 (없는 status 는 0L).
-     * 단일 GROUP BY 쿼리 — N+1 없음.
-     */
+    
+
     public TransactionStatsResult adminGetStats() {
         Map<TransactionStatus, Long> byStatus = new EnumMap<>(TransactionStatus.class);
         for (TransactionStatus s : TransactionStatus.values()) {
-            byStatus.put(s, 0L);  // default 0
+            byStatus.put(s, 0L);  
         }
         long total = 0;
         for (TransactionStatusCount row : transactionRepository.countGroupByStatus()) {
@@ -343,10 +268,8 @@ public class TransactionApplicationService {
         return new TransactionStatsResult(total, byStatus);
     }
 
-    /**
-     * 월별 거래완료 집계 (Admin) — completed_at 기준. 거래 0 건 월은 응답에서 0 으로 채워진다.
-     * recharts 친화 — month ASC. (year, month, count, amount).
-     */
+    
+
     public java.util.List<com.sseulang.domain.transaction.domain.TransactionMonthlyStat> adminMonthlyTrades(
             java.time.YearMonth from, java.time.YearMonth to) {
         java.util.Map<java.time.YearMonth, com.sseulang.domain.transaction.domain.TransactionMonthlyStat> byMonth = new java.util.LinkedHashMap<>();
@@ -359,20 +282,11 @@ public class TransactionApplicationService {
         return new java.util.ArrayList<>(byMonth.values());
     }
 
-    /** Admin 거래 keyword LIKE 매칭 시 user IN 절 폭주 방지 — top N user. */
+    
     private static final int KEYWORD_USER_LIMIT = 200;
 
-    /**
-     * Admin 거래 검색 (round 9 + round 10 LIKE).
-     *
-     * <p>keyword 처리 (round 10):
-     * <ul>
-     *   <li>숫자: transactionId 또는 itemId 정확 매칭</li>
-     *   <li>비숫자: UserApplicationService.findUserIdsByKeyword 로 user 매치 (top {@value #KEYWORD_USER_LIMIT}) →
-     *       Transaction.sellerId/buyerId IN. user 매치 0건이면 빈 결과.</li>
-     * </ul>
-     * 모든 필터 nullable, 최신순.</p>
-     */
+    
+
     public Page<TransactionResult> adminSearch(
             java.time.LocalDateTime startDate,
             java.time.LocalDateTime endDate,
@@ -395,16 +309,10 @@ public class TransactionApplicationService {
         try { return Long.parseLong(s.trim()); } catch (NumberFormatException e) { return null; }
     }
 
-    /**
-     * 본인이 reviewer 로 아직 작성하지 않은 거래완료 거래 페이징 (follow-up #56).
-     *
-     * <p>completedAt 이 7일 이내인 것만 — 작성 가능 기간이 지난 거래는 제외 (가이드 §5.5).
-     * 응답 DTO 의 deadline = completedAt + 7d → 클라이언트가 남은 시간 UI 작성에 사용.</p>
-     */
-    /**
-     * 마이페이지 내 거래 목록 — viewer 가 buyer/seller/양쪽 으로 참여한 거래 페이징.
-     * role null = 양쪽, status null = 전체. 정렬: createdAt DESC + id DESC.
-     */
+    
+
+    
+
     public Page<TransactionResult> findMyTransactions(
             Long userId, TransactionRole role, TransactionStatus status, Pageable pageable) {
         return transactionRepository.findMyTransactions(userId, role, status, pageable)

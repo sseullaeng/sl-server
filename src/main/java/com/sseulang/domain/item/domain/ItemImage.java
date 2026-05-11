@@ -18,12 +18,6 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
-/**
- * Item 자식 엔티티. 외부 직접 생성/조작 금지 — Aggregate Root({@link Item}) 의 메서드를 통해서만.
- *
- * <p>{@code item_images} 테이블엔 {@code created_at} 만 있고 {@code updated_at} 이 없으므로
- * {@link com.sseulang.global.common.BaseEntity} 상속 X.</p>
- */
 @Entity
 @Table(name = "item_images")
 @EntityListeners(AuditingEntityListener.class)
@@ -52,7 +46,7 @@ public class ItemImage {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    /** Aggregate Root 만 호출 — package-private. */
+    
     ItemImage(Item item, String imageUrl, int sortOrder, boolean thumbnail) {
         if (imageUrl == null || imageUrl.isBlank()) {
             throw new IllegalArgumentException("imageUrl 은 비어있을 수 없습니다");

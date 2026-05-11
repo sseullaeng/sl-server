@@ -4,10 +4,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-/**
- * 거래 상태 전이 요청. 라운드 11 — action enum 은 사용자 의도 표현
- * (예약 / 인계확인 / 인수확인 / 취소). cancelReason 은 action=취소 일 때만 의미.
- */
 @Schema(description = "거래 상태 전이. action 별 권한: 예약/인계확인=seller, 인수확인=buyer, 취소=양쪽 참여자.")
 public record TransactionPatchRequest(
         @Schema(description = "전이 액션", example = "예약",

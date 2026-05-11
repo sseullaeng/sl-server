@@ -24,7 +24,7 @@ import java.util.Set;
 @Transactional(readOnly = true)
 public class ChatRoomApplicationService {
 
-    /** V1 스키마 {@code uk_chat_rooms_item_users} — 동시 openFor race 시 멱등 처리 (Codex 게이트 2 패턴). */
+    
     private static final String UNIQUE_ITEM_USERS = "uk_chat_rooms_item_users";
 
     private final ChatRoomRepository chatRoomRepository;
@@ -50,11 +50,8 @@ public class ChatRoomApplicationService {
         this.itemView = itemView;
     }
 
-    /**
-     * 물품 ID 로 채팅방 생성 (가이드 §6.1). 멱등 — 이미 있으면 기존 반환.
-     * 본인 물품 거부 (자기 자신과 채팅 X). UNIQUE race 는 좁은 catch 후 재조회.
-     * 미인증 사용자의 채팅 스팸 방지 — verified 가드 (게이트 1 round 2).
-     */
+    
+
     @Transactional
     public ChatRoomResult openFor(Long requesterId, Long itemId,
                                   com.sseulang.domain.item.domain.TradeType tradeMode) {
@@ -63,19 +60,18 @@ public class ChatRoomApplicationService {
         if (sellerId.equals(requesterId)) {
             throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
         }
-        // tradeMode null 이면 item 의 tradeType 그대로 (라운드 12 — 같은 item 다중 mode 는 PR-D 이후 실용)
+        
+        
         com.sseulang.domain.item.domain.TradeType mode = tradeMode != null
                 ? tradeMode
-                : itemApplicationService.findActiveForTransaction(itemId).tradeType();
+                : pickPrimary(itemApplicationService.findActiveForTransaction(itemId).tradeTypes());
         ChatRoom room = chatRoomRepository.findByItemAndUsers(itemId, requesterId, sellerId, mode)
                 .orElseGet(() -> createWithRaceGuard(itemId, requesterId, sellerId, mode));
         return enrichOne(room, requesterId);
     }
 
-    /**
-     * 본인 채팅방 페이징 — 페이지 결과의 opponent userId / itemId 들을 모아 단일 SELECT IN 으로 batch
-     * fetch (N+1 회피). viewer 기준 derive 후 응답.
-     */
+    
+
     public Page<ChatRoomResult> listMine(Long userId, Pageable pageable) {
         Page<ChatRoom> page = chatRoomRepository.findMine(userId, pageable);
         if (page.isEmpty()) {
@@ -99,7 +95,7 @@ public class ChatRoomApplicationService {
             throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
         }
         ChatRoomResult base = enrichOne(room, requesterId);
-        // 라운드 12 PR-C #6 — systemCard 단건 fetch (없으면 null)
+        
         ChatRoomResult.SystemCard card = chatRoomCardRepository.findByChatRoomId(id)
                 .map(ChatRoomResult.SystemCard::from)
                 .orElse(null);
@@ -116,10 +112,8 @@ public class ChatRoomApplicationService {
         );
     }
 
-    /**
-     * 라운드 12 PR-C #6 — 첫 메시지 발신 시점에 호출. 카드 미존재 시 생성 (멱등).
-     * MessageApplicationService.send 에서 호출.
-     */
+    
+
     @Transactional
     public void ensureSystemCard(Long chatRoomId) {
         if (chatRoomCardRepository.findByChatRoomId(chatRoomId).isPresent()) {
@@ -130,7 +124,7 @@ public class ChatRoomApplicationService {
         var itemMap = itemView.findByIds(List.of(room.getItemId()));
         var item = itemMap.get(room.getItemId());
         if (item == null) {
-            return;  // 아이템 삭제 등 — 카드 생성 skip (best-effort)
+            return;  
         }
         com.sseulang.domain.chat.domain.ChatRoomCard card = com.sseulang.domain.chat.domain.ChatRoomCard.create(
                 chatRoomId, room.getTradeMode(),
@@ -139,14 +133,12 @@ public class ChatRoomApplicationService {
         try {
             chatRoomCardRepository.save(card);
         } catch (org.springframework.dao.DuplicateKeyException race) {
-            // 다른 트랜잭션이 먼저 생성 — 무시 (멱등)
+            
         }
     }
 
-    /**
-     * 본인 unread 0 으로 리셋. 본인이 참여자가 아니면 atomic UPDATE 가 영향 0 — 그 경우 사전 권한
-     * 검증 후 CHAT_FORBIDDEN. 응답으로 갱신된 채팅방 반환 (myUnread = 0).
-     */
+    
+
     @Transactional
     public ChatRoomResult markAsRead(Long roomId, Long userId) {
         ChatRoom room = chatRoomRepository.findById(roomId)
@@ -155,22 +147,13 @@ public class ChatRoomApplicationService {
             throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
         }
         chatRoomRepository.markAsRead(roomId, userId);
-        // entity 메모리 상태도 동기화 (응답에 fresh 값 반영)
+        
         room.markAsRead(userId);
         return enrichOne(room, userId);
     }
 
-    /**
-     * 라운드 12 (#3.2 #3.3) — 거래/거래대행이 채팅방 안에서 시작되는지 가드용. 참여자 검증 +
-     * chatRoom 메타 (itemId, left flags) 노출. 호출자가 itemId 일치 / leftFlags 별로 분기.
-     *
-     * <ul>
-     *   <li>ChatRoom 미존재 → CHAT_ROOM_NOT_FOUND</li>
-     *   <li>비참여자 → CHAT_FORBIDDEN</li>
-     * </ul>
-     *
-     * <p>본 메서드는 read-only — 잔액/상태 변경 가드는 호출자 ApplicationService 가 책임.</p>
-     */
+    
+
     public ChatRoomMeta findMetaForParticipant(Long chatRoomId, Long userId) {
         ChatRoom room = chatRoomRepository.findById(chatRoomId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
@@ -178,16 +161,17 @@ public class ChatRoomApplicationService {
             throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
         }
         return new ChatRoomMeta(room.getId(), room.getItemId(),
+                room.getTradeMode(),
                 room.iLeft(userId), room.opponentLeft(userId));
     }
 
-    /**
-     * 라운드 12 — 외부 도메인용 chat_room 메타 read model. {@code itemId} 는 거래 영역의
-     * chat_room ↔ item 일치 검증, {@code iLeft / opponentLeft} 는 거래대행 신청 시 한쪽 left 차단용.
-     */
-    public record ChatRoomMeta(Long chatRoomId, Long itemId, boolean iLeft, boolean opponentLeft) { }
+    
 
-    /** Message 도메인이 메시지 보낼 권한 검증 시 호출. 참여자 아니면 CHAT_FORBIDDEN. */
+    public record ChatRoomMeta(Long chatRoomId, Long itemId,
+                               com.sseulang.domain.item.domain.TradeType tradeMode,
+                               boolean iLeft, boolean opponentLeft) { }
+
+    
     public void requireParticipant(Long chatRoomId, Long userId) {
         ChatRoom room = chatRoomRepository.findById(chatRoomId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
@@ -196,11 +180,8 @@ public class ChatRoomApplicationService {
         }
     }
 
-    /**
-     * 메시지 송신 가능 여부 검증 — 참여자 + 본인 left X + 상대방 left X.
-     * 본인 left → CHAT_FORBIDDEN (이미 나간 방).
-     * 상대방 left → CHAT_ROOM_OPPONENT_LEFT (상대방이 나가서 차단).
-     */
+    
+
     public void requireSendable(Long chatRoomId, Long userId) {
         ChatRoom room = chatRoomRepository.findById(chatRoomId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
@@ -215,11 +196,8 @@ public class ChatRoomApplicationService {
         }
     }
 
-    /**
-     * 채팅방 나가기 (soft hide) — 본인 측 left_at = NOW(). 데이터/메시지 보존.
-     * 본인 listMine 에서 제외, 상대방은 opponentLeft=true 응답 받음.
-     * 비참여자 호출은 CHAT_FORBIDDEN. 이미 left 상태도 idempotent (재호출 OK).
-     */
+    
+
     @Transactional
     public void leave(Long roomId, Long userId) {
         ChatRoom room = chatRoomRepository.findById(roomId)
@@ -230,10 +208,8 @@ public class ChatRoomApplicationService {
         chatRoomRepository.markAsLeft(roomId, userId);
     }
 
-    /**
-     * 1:1 채팅방의 상대방 userId 반환. requireParticipant 검증을 동시에 수행.
-     * 메시지 broadcast 시 상대방 알림 push 용.
-     */
+    
+
     public Long findOpponent(Long chatRoomId, Long requesterId) {
         ChatRoom room = chatRoomRepository.findById(chatRoomId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
@@ -243,16 +219,14 @@ public class ChatRoomApplicationService {
         return requesterId.equals(room.getUser1Id()) ? room.getUser2Id() : room.getUser1Id();
     }
 
-    /**
-     * 메시지 발신 시 ChatRoom 메타 갱신 — last_message / last_message_at / 상대방 unread 카운트.
-     * 단일 atomic UPDATE. 가이드 §4.10 — MongoDB↔MySQL 트랜잭션 분리 (실패 시 보상 X).
-     */
+    
+
     @Transactional
     public void recordIncomingMessage(Long chatRoomId, Long senderId, String preview) {
         chatRoomRepository.recordIncomingMessage(chatRoomId, senderId, preview);
     }
 
-    /** 단건 enrich — opponent + item batch fetch 후 ChatRoomResult.from. */
+    
     private ChatRoomResult enrichOne(ChatRoom room, Long viewerId) {
         Long opponentId = viewerId.equals(room.getUser1Id()) ? room.getUser2Id() : room.getUser1Id();
         Map<Long, UserView.UserProjection> userMap = userView.findByIds(List.of(opponentId));
@@ -291,6 +265,22 @@ public class ChatRoomApplicationService {
             }
             throw violation;
         }
+    }
+
+    
+    private static com.sseulang.domain.item.domain.TradeType pickPrimary(
+            java.util.Set<com.sseulang.domain.item.domain.TradeType> types
+    ) {
+        if (types == null || types.isEmpty()) {
+            throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
+        }
+        if (types.contains(com.sseulang.domain.item.domain.TradeType.판매)) {
+            return com.sseulang.domain.item.domain.TradeType.판매;
+        }
+        if (types.contains(com.sseulang.domain.item.domain.TradeType.대여)) {
+            return com.sseulang.domain.item.domain.TradeType.대여;
+        }
+        return com.sseulang.domain.item.domain.TradeType.나눔;
     }
 
     private static boolean isUniqueConflict(DataIntegrityViolationException violation) {

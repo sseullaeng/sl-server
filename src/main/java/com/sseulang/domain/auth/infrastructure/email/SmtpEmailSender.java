@@ -11,16 +11,6 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 
-/**
- * prod SMTP {@link EmailSender} 구현. Spring Mail (JavaMailSender) 사용.
- *
- * <p>활성화: {@code app.email.smtp-enabled=true} (prod 는 application-prod.yml 에서 강제 true,
- * local 은 .env 에서 SMTP 정보 채우면 켤 수 있음). false / 미설정 시 {@link LogEmailSender} 가 활성.
- * SMTP 설정은 {@code spring.mail.*} 환경변수 주입.</p>
- *
- * <p>발송 실패 시 {@link RuntimeException} 으로 throw — 호출자(LocalAuthService.signup) 가 회원 가입
- * 실패로 트랜잭션 롤백. 5/6 이후 outbox 패턴 도입 시 비동기 발송으로 변경 가능.</p>
- */
 @Component
 @ConditionalOnProperty(name = "app.email.smtp-enabled", havingValue = "true")
 public class SmtpEmailSender implements EmailSender {
@@ -69,7 +59,7 @@ public class SmtpEmailSender implements EmailSender {
         try {
             mailSender.send(message);
         } catch (MailException e) {
-            // 운영 모니터링 대상 — 5/6 이후 outbox 도입 시 비동기 retry 로 강화.
+            
             throw new RuntimeException("이메일 발송 실패: " + e.getMessage(), e);
         }
     }

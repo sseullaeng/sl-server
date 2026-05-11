@@ -3,7 +3,6 @@ package com.sseulang.domain.escrow.domain;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-/** 취급주의 등급 (안전 ~ 매우 높음). multiplier 코드 상수. */
 public enum Fragility {
     F1("f1", 1.0),
     F2("f2", 1.1),

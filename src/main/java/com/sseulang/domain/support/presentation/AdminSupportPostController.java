@@ -17,9 +17,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 관리자 — FAQ / QNA 게시글 CRUD. SecurityConfig admin chain 으로 ROLE_ADMIN 강제.
- */
 @Tag(name = "AdminSupportPost", description = "관리자 — FAQ/QNA 작성")
 @RestController
 @RequestMapping("/api/v1/admin/support/posts")

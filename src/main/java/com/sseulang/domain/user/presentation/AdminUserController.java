@@ -24,11 +24,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
 
-/**
- * 관리자 회원 관리. SecurityConfig admin chain 으로 ROLE_ADMIN 강제.
- *
- * <p>v8b: keyword/status/createdAfter/createdBefore 검색·필터, suspend/unsuspend, enriched response.</p>
- */
 @Tag(name = "AdminUser", description = "관리자 — 사용자 목록/검색/차단/정지")
 @RestController
 @RequestMapping("/api/v1/admin/users")

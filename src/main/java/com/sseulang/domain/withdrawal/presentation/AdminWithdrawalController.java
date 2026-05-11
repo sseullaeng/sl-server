@@ -19,10 +19,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 관리자 출금 처리 — SecurityConfig 의 admin chain 이 ROLE_ADMIN 강제. AuthenticationPrincipal 은
- * adminId (현재 SecurityFilter 정책 그대로 사용).
- */
 @Tag(name = "AdminWithdrawal", description = "관리자 — 출금 신청 승인/거부")
 @RestController
 @RequestMapping("/api/v1/admin/withdrawals")

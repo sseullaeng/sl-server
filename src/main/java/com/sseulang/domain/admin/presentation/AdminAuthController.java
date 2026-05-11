@@ -16,10 +16,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 관리자 로그인 진입점. SecurityConfig 의 {@code /api/v1/auth/**} permitAll 영역.
- * 일반 사용자 OAuth 흐름 ({@link com.sseulang.domain.auth.presentation.AuthController}) 와 분리.
- */
 @Tag(name = "AdminAuth", description = "관리자 로그인")
 @RestController
 @RequestMapping("/api/v1/auth/admin")

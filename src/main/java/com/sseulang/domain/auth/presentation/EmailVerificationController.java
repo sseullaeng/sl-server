@@ -12,15 +12,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 이메일 인증 — verify (token 검증, 익명 호출) + resend (재발송, 인증 필수).
- *
- * <p>SecurityConfig 정책:
- * <ul>
- *   <li>{@code /verify-email} — PUBLIC_AUTH_ENDPOINTS, CSRF 면제 (사용자가 메일 링크 클릭하는 흐름)</li>
- *   <li>{@code /resend-verification} — auth 필수 (hasRole("USER")) + CSRF 적용 (게이트 1 round 2 보강)</li>
- * </ul>
- */
 @Tag(name = "EmailVerification", description = "이메일 인증 메일 발송/확인")
 @RestController
 @RequestMapping("/api/v1/auth")

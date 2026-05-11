@@ -18,12 +18,6 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Escrow Link Aggregate Root. V15 {@code escrow_links} 매핑.
- *
- * <p>신청자가 link 생성 → 수신자에게 공유 → 수신자가 token 으로 진입. 첫 폼 제출자 = 수신자 확정
- * (결정 #2, B3). atomic UPDATE 는 ApplicationService 가 conditional WHERE 로 처리.</p>
- */
 @Entity
 @Table(name = "escrow_links")
 @Getter
@@ -62,7 +56,7 @@ public class EscrowLink extends BaseEntity {
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt;
 
-    /** 신청자가 link 생성. UUID v4 token + 24h expiry (호출자가 hours 주입). */
+    
     public static EscrowLink create(
             Long initiatorId,
             InitiatorRole initiatorRole,
@@ -87,7 +81,7 @@ public class EscrowLink extends BaseEntity {
         return link;
     }
 
-    /** 수신자 확정 — 결정 #2 B3. 본인 차단 가드는 ApplicationService 가 처리 (DB chk 제약 + 코드 가드). */
+    
     public void claimByReceiver(Long receiverId) {
         if (receiverId == null) {
             throw new IllegalArgumentException("receiverId required");
@@ -107,7 +101,7 @@ public class EscrowLink extends BaseEntity {
         this.receiverId = receiverId;
     }
 
-    /** Application 생성된 후 — link 본 의무 끝. */
+    
     public void markAsCompleted() {
         if (this.status != EscrowLinkStatus.대기) {
             throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);

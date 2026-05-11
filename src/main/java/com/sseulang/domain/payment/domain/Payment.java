@@ -17,12 +17,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * Payment Aggregate Root. V1 스키마 {@code payments} — 충전/거래결제/환불 통합.
- *
- * <p>가이드 §4.9 멱등성: {@code merchant_uid} UNIQUE — 우리 측 주문 ID 로 중복 결제 차단.
- * 위변조 방지: 토스 confirm 후 amount 재검증.</p>
- */
 @Entity
 @Table(name = "payments")
 @Getter
@@ -75,10 +69,8 @@ public class Payment extends BaseEntity {
     @Column(name = "raw_response", columnDefinition = "TEXT")
     private String rawResponse;
 
-    /**
-     * 충전 시작 — status=대기. amount 양수 강제.
-     * escrowApplicationId 가 NOT NULL 이면 거래대행 결제 — confirm 시 잔액 차감 + escrow 갱신 트리거.
-     */
+    
+
     public static Payment startCharge(Long userId, String merchantUid, long amount, Long escrowApplicationId) {
         if (userId == null || userId <= 0) {
             throw new IllegalArgumentException("userId 는 양수여야 합니다");
@@ -100,20 +92,16 @@ public class Payment extends BaseEntity {
         return p;
     }
 
-    /** Day 7 호환 (escrowApplicationId 없는 일반 충전). */
+    
     public static Payment startCharge(Long userId, String merchantUid, long amount) {
         return startCharge(userId, merchantUid, amount, null);
     }
 
-    /**
-     * 토스 confirm 응답 받아 완료 처리. 멱등 — 이미 완료면 무시 (true=새로 적용, false=중복).
-     *
-     * <p>paymentKey / paidAt 필수 — 완료 결제인데 paid_at 비는 상태 차단 (게이트 1 round 2 Warning).
-     * method 는 결제수단별 nullable 허용 (예: 일부 가상계좌는 method 없이 응답).</p>
-     */
+    
+
     public boolean markAsPaid(String paymentKey, PaymentMethod method, LocalDateTime paidAt, String rawResponse) {
         if (status == PaymentStatus.완료) {
-            return false;  // 멱등 — 이미 완료
+            return false;  
         }
         if (!status.canConfirm()) {
             throw new BusinessException(ErrorCode.PAYMENT_DUPLICATED);
@@ -140,7 +128,7 @@ public class Payment extends BaseEntity {
         this.failReason = reason;
     }
 
-    /** 토스 응답의 amount 가 우리가 저장한 amount 와 일치하는지 검증 — 위변조 방지. */
+    
     public void verifyAmount(long confirmedAmount) {
         if (confirmedAmount != this.amount) {
             throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);

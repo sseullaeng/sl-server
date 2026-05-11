@@ -15,10 +15,6 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
-/**
- * 사용자 차단 Aggregate. {@code user_blocks} 테이블 — UNIQUE(blocker_id, blocked_id),
- * CHECK blocker != blocked.
- */
 @Entity
 @Table(name = "user_blocks")
 @EntityListeners(AuditingEntityListener.class)

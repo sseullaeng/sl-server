@@ -74,14 +74,12 @@ public class AuthController {
         return setAuthCookiesWithMe(pair);
     }
 
-    /**
-     * 발급된 AT 에서 userId 추출 → 본인 정보 조회 → 응답 body 에 포함.
-     * 프론트가 로그인 후 별도 /users/me 호출 없이 바로 store 초기화 가능.
-     */
+    
+
     private ResponseEntity<ApiResponse<MeResponse>> setAuthCookiesWithMe(TokenPair pair) {
         ResponseCookie at = cookieUtil.accessTokenCookie(pair.accessToken());
         ResponseCookie rt = cookieUtil.refreshTokenCookie(pair.refreshToken());
-        // JWT role claim 그대로 응답에 노출 — 프론트가 ADMIN/USER 분기 (마이페이지 → 관리 페이지 redirect 등).
+        
         var claims = jwtProvider.parse(pair.accessToken());
         MeResponse me = MeResponse.from(userService.getById(claims.userId()), claims.role());
         return ResponseEntity.ok()

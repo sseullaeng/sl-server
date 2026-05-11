@@ -13,12 +13,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * Banner Aggregate Root. V1 스키마 {@code banners} 매핑.
- *
- * <p>배너는 {@code is_active} + 게시 윈도우 (startsAt/endsAt) 두 축으로 노출 결정.
- * sort_order 가 작을수록 먼저 노출.</p>
- */
 @Entity
 @Table(name = "banners")
 @Getter
@@ -110,7 +104,7 @@ public class Banner extends BaseEntity {
         this.active = false;
     }
 
-    /** 사용자 노출 — active + 게시 윈도우 안. */
+    
     public boolean isVisibleAt(LocalDateTime now) {
         if (!active || now == null) {
             return false;

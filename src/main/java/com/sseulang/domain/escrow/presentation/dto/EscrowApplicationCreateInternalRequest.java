@@ -15,11 +15,6 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.util.List;
 
-/**
- * 거래대행 내부 신청 요청 (PR-B-3 라운드 12). 채팅방 안에서 판매자가 한 번에 양쪽 정보 입력.
- *
- * <p>권한: 판매자만 (chat_room.itemId 의 sellerId 와 일치). 비참여자 / 미인증 / 비판매자 모두 차단.</p>
- */
 @Schema(description = "내부 거래대행 신청 (채팅방 + 판매자만).")
 public record EscrowApplicationCreateInternalRequest(
         @Schema(example = "7") @NotNull Long chatRoomId,

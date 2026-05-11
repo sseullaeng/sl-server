@@ -17,13 +17,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/**
- * 관리자 전용 S3 presigned URL 발급. SecurityConfig admin chain 으로 ROLE_ADMIN 강제.
- *
- * <p>일반 사용자 endpoint ({@link FileController}) 와 달리 purpose 화이트리스트 X — 관리자 전용
- * NOTICE / BANNER 등 모든 purpose 자유 발급. 일반 사용자가 NOTICE 폴더에 쓰는 누수 차단 목적
- * (게이트 1 의 USER_ALLOWED 정책 유지).</p>
- */
 @Tag(name = "AdminFile", description = "관리자 — S3 presigned URL (모든 purpose)")
 @RestController
 @RequestMapping("/api/v1/admin/files")
@@ -46,7 +39,7 @@ public class AdminFileController {
         List<PresignRequestItem> items = request.files().stream()
                 .map(f -> new PresignRequestItem(f.contentType(), f.contentLength()))
                 .toList();
-        // issue() — USER_ALLOWED 화이트리스트 우회. 권한은 admin chain 이 보장.
+        
         List<PresignResult> results = fileService.issue(request.purpose(), adminId, items);
         return ApiResponse.ok(PresignedUrlResponse.from(results));
     }

@@ -11,14 +11,6 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * 거래대행 수수료 정책 — singleton row (id=1).
- *
- * <p>운영 변경은 admin endpoint 로. 변경 시 진행 중 application 영향 X — application 등록 시
- * snapshot 컬럼에 lock (결정 #9, #12).</p>
- *
- * <p>11 fields = 프론트 calcFees 와 동일 (CC3). multiplier 는 enum 코드 상수.</p>
- */
 @Entity
 @Table(name = "escrow_fee_settings")
 @Getter
@@ -70,7 +62,7 @@ public class EscrowFeeSettings {
     @Column(name = "updated_by")
     private Long updatedBy;
 
-    /** 수수료 정책 일괄 변경 — admin endpoint 호출. */
+    
     public void apply(
             BigDecimal commissionRate,
             long fuelPricePerL, long baseFuelPrice,
@@ -90,6 +82,6 @@ public class EscrowFeeSettings {
         this.truckFuelEfficiency = truckFuelEfficiency;
         this.truckMinDeliveryFee = truckMinDeliveryFee;
         this.updatedBy = updatedBy;
-        // updated_at 은 DB ON UPDATE CURRENT_TIMESTAMP — JPA Dirty checking 으로 트리거
+        
     }
 }

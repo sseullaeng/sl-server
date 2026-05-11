@@ -17,12 +17,6 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
-/**
- * Review Aggregate Root. {@code reviews} 테이블. 거래 후 양방향 평가 — 가이드 §4.7.
- *
- * <p>UNIQUE(transaction_id, reviewer_id) — 같은 reviewer 같은 거래 두 번 X.
- * CHECK rating 1~5, reviewer != reviewee.</p>
- */
 @Entity
 @Table(name = "reviews")
 @EntityListeners(AuditingEntityListener.class)
@@ -45,7 +39,7 @@ public class Review {
     @Column(name = "reviewee_id", nullable = false)
     private Long revieweeId;
 
-    /** DB {@code rating TINYINT}. Java int 와 매핑 mismatch 방지를 위해 명시 JDBC TINYINT 사용. */
+    
     @Column(name = "rating", nullable = false)
     @JdbcTypeCode(SqlTypes.TINYINT)
     private int rating;

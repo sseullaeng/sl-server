@@ -15,15 +15,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * ChatRoom Aggregate Root. V1 스키마 {@code chat_rooms} 매핑 — 메타데이터만 (메시지는 MongoDB, Day 6).
- *
- * <p>가이드 §4.10: 1:1 고정. UNIQUE(item_id, user1_id, user2_id) — 같은 두 사용자 + 같은 물품 은 단일 방.
- * 정규화: 항상 {@code user1Id < user2Id} 강제 → 두 user 쌍이 어떤 순서로 들어와도 동일 행 매칭.</p>
- *
- * <p>last_message / last_message_at / unread 카운트 갱신은 메시지 도메인(Day 6)이 담당.
- * 본 PR 은 채팅방 메타 + 멱등 생성/조회만.</p>
- */
 @Entity
 @Table(name = "chat_rooms")
 @Getter
@@ -64,17 +55,14 @@ public class ChatRoom extends BaseEntity {
     @Column(name = "user2_left_at")
     private LocalDateTime user2LeftAt;
 
-    /**
-     * 채팅방 거래방식 — 판매 / 대여 / 나눔 (PR-C 라운드 12).
-     * UNIQUE(item_id, user1_id, user2_id, trade_mode) — 같은 두 사용자 + 같은 물품이라도 거래방식 다르면 별도 방.
-     */
+    
+
     @Enumerated(EnumType.STRING)
     @Column(name = "trade_mode", nullable = false, length = 10)
     private com.sseulang.domain.item.domain.TradeType tradeMode;
 
-    /**
-     * 라운드 12 PR-C — tradeMode 인자 추가. {@code user1Id < user2Id} 강제 정규화.
-     */
+    
+
     public static ChatRoom openFor(Long itemId, Long requesterId, Long opponentId,
                                    com.sseulang.domain.item.domain.TradeType tradeMode) {
         if (itemId == null || itemId <= 0) {
@@ -104,7 +92,7 @@ public class ChatRoom extends BaseEntity {
         return cr;
     }
 
-    /** @deprecated PR-C 라운드 12 — tradeMode 인자 받는 4-arg openFor 사용. */
+    
     @Deprecated
     public static ChatRoom openFor(Long itemId, Long requesterId, Long opponentId) {
         return openFor(itemId, requesterId, opponentId, com.sseulang.domain.item.domain.TradeType.판매);
@@ -114,10 +102,8 @@ public class ChatRoom extends BaseEntity {
         return userId != null && (userId.equals(user1Id) || userId.equals(user2Id));
     }
 
-    /**
-     * 본인이 user1 이면 user1Unread = 0, user2 면 user2Unread = 0. 상대방 unread 는 그대로.
-     * 호출자가 사전에 isParticipant 검증해야 함 (서비스 책임).
-     */
+    
+
     public void markAsRead(Long userId) {
         if (userId == null) {
             throw new IllegalArgumentException("userId 는 필수입니다");
@@ -129,10 +115,8 @@ public class ChatRoom extends BaseEntity {
         }
     }
 
-    /**
-     * 본인 측 채팅방을 soft hide. 본인이 user1 이면 user1LeftAt = now, user2 면 user2LeftAt = now.
-     * 이미 left 상태면 no-op (idempotent). 비참여자 호출은 IllegalStateException — 서비스가 사전 검증해야 함.
-     */
+    
+
     public void leave(Long userId, LocalDateTime now) {
         if (userId == null) {
             throw new IllegalArgumentException("userId 는 필수입니다");
@@ -153,9 +137,8 @@ public class ChatRoom extends BaseEntity {
         }
     }
 
-    /**
-     * 본인이 채팅방을 나갔는지. 비참여자는 false (의미 없는 질문이라 false 로 통일).
-     */
+    
+
     public boolean iLeft(Long userId) {
         if (userId == null) return false;
         if (userId.equals(user1Id)) return this.user1LeftAt != null;
@@ -163,9 +146,8 @@ public class ChatRoom extends BaseEntity {
         return false;
     }
 
-    /**
-     * 상대방이 채팅방을 나갔는지. 비참여자는 false (의미 없는 질문이라 false 로 통일).
-     */
+    
+
     public boolean opponentLeft(Long userId) {
         if (userId == null) return false;
         if (userId.equals(user1Id)) return this.user2LeftAt != null;

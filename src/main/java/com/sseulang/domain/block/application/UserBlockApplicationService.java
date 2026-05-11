@@ -24,7 +24,7 @@ public class UserBlockApplicationService {
         this.repository = repository;
     }
 
-    /** 멱등 차단 추가. 자기 차단 거부, 이미 차단되어 있으면 무시. UNIQUE race 좁은 catch. */
+    
     @Transactional
     public void block(Long blockerId, Long blockedId) {
         if (blockerId.equals(blockedId)) {

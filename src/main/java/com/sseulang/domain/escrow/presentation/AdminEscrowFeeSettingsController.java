@@ -16,11 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/**
- * 거래대행 수수료 정책 (admin). 결정 #9 — 프론트 11 fields schema (CC3) + AdminEscrowConfigPage 연동.
- *
- * <p>변경 시 진행 중 N건 표시 (12-a HH2) — PATCH 응답에 inProgressCount 포함.</p>
- */
 @Tag(name = "AdminEscrowFeeSettings", description = "관리자 — 거래대행 수수료 정책 운영")
 @RestController
 @RequestMapping("/api/v1/admin/escrow/fee-settings")
