@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -32,6 +33,16 @@ public class CategoryController {
                 .map(CategoryNodeResponse::from)
                 .toList();
         return ApiResponse.ok(tree);
+    }
+
+    @Operation(summary = "카테고리 자동완성 검색 (공개)",
+            description = "활성 카테고리 이름 부분일치 (LIKE). keyword 가 비어있으면 빈 배열. 라운드 12 PR-D.")
+    @GetMapping("/search")
+    public ApiResponse<List<CategoryResponse>> search(@RequestParam("keyword") String keyword) {
+        List<CategoryResponse> list = categoryService.searchByKeyword(keyword).stream()
+                .map(CategoryResponse::from)
+                .toList();
+        return ApiResponse.ok(list);
     }
 
     @Operation(summary = "카테고리 단건 조회 (공개)")

@@ -46,6 +46,19 @@ public class CategoryApplicationService {
         return roots;
     }
 
+    /**
+     * 라운드 12 PR-D — 활성 카테고리 이름 부분일치 검색 (자동완성용).
+     * keyword 가 null/blank 이면 빈 리스트.
+     */
+    public List<CategoryResult> searchByKeyword(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return List.of();
+        }
+        return categoryRepository.searchByKeyword(keyword.trim()).stream()
+                .map(c -> new CategoryResult(c.getId(), c.getParentId(), c.getName(), c.getSortOrder()))
+                .toList();
+    }
+
     public CategoryResult getById(Long id) {
         Category c = categoryRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
