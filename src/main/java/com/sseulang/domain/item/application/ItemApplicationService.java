@@ -144,6 +144,24 @@ public class ItemApplicationService {
     }
 
     /**
+     * Admin 우회 삭제 (라운드 12 PR-F #6). owner 검증 우회 — admin chain (ROLE_ADMIN) 만 호출.
+     * soft delete (status=삭제). 관련 거래/채팅방은 유지. audit 로그.
+     */
+    @Transactional
+    public void adminDelete(Long id, Long adminId) {
+        Item item = itemRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
+        if (item.getStatus() == ItemStatus.삭제) {
+            // idempotent — 이미 삭제 상태면 no-op.
+            return;
+        }
+        item.markAsDeleted();
+        org.slf4j.LoggerFactory.getLogger(ItemApplicationService.class)
+                .warn("[admin] item soft-deleted itemId={} sellerId={} adminId={}",
+                        item.getId(), item.getSellerId(), adminId);
+    }
+
+    /**
      * 부분 추가 — 본인 + 이메일 인증 + 5장 한도 체크 (도메인). temp 폴더 url 은 promote, 정식 폴더 url 은
      * 그대로 재사용 (no-op). 응답으로 반영 후 전체 image url 리스트 반환.
      */
