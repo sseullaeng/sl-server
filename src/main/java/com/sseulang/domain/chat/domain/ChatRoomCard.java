@@ -1,0 +1,68 @@
+package com.sseulang.domain.chat.domain;
+
+import com.sseulang.domain.item.domain.TradeType;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+
+import java.time.Instant;
+
+/**
+ * 채팅방 시스템 카드 (PR-C #6 라운드 12). 첫 메시지 send 시점에 lazy 생성 후 채팅방에서 영구 노출.
+ *
+ * <p>MongoDB {@code chat_room_cards} 컬렉션 — chatRoomId 당 1건 (UNIQUE).
+ * 내용: 거래방식 + 아이템 title + thumbnail + 가격 (snapshot — 거래 시점 그대로 보존).</p>
+ */
+@Document(collection = "chat_room_cards")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class ChatRoomCard {
+
+    @Id
+    private String id;
+
+    @Indexed(unique = true)
+    @Field("chat_room_id")
+    private Long chatRoomId;
+
+    @Field("trade_mode")
+    private TradeType tradeMode;
+
+    @Field("item_id")
+    private Long itemId;
+
+    @Field("item_title")
+    private String itemTitle;
+
+    @Field("thumbnail_url")
+    private String thumbnailUrl;
+
+    @Field("price")
+    private Long price;
+
+    @CreatedDate
+    @Field("created_at")
+    private Instant createdAt;
+
+    public static ChatRoomCard create(Long chatRoomId, TradeType tradeMode,
+                                      Long itemId, String itemTitle,
+                                      String thumbnailUrl, Long price) {
+        if (chatRoomId == null) throw new IllegalArgumentException("chatRoomId 는 필수입니다");
+        if (tradeMode == null) throw new IllegalArgumentException("tradeMode 는 필수입니다");
+        if (itemId == null) throw new IllegalArgumentException("itemId 는 필수입니다");
+        if (itemTitle == null || itemTitle.isBlank()) throw new IllegalArgumentException("itemTitle 은 필수입니다");
+        ChatRoomCard c = new ChatRoomCard();
+        c.chatRoomId = chatRoomId;
+        c.tradeMode = tradeMode;
+        c.itemId = itemId;
+        c.itemTitle = itemTitle;
+        c.thumbnailUrl = thumbnailUrl;
+        c.price = price;
+        return c;
+    }
+}

@@ -94,7 +94,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         com.sseulang.domain.chat.infrastructure.persistence.ChatRoomRepositoryImpl.class,
         com.sseulang.domain.chat.application.ChatRoomApplicationService.class,
         com.sseulang.domain.user.infrastructure.persistence.UserViewAdapter.class,
-        com.sseulang.domain.item.infrastructure.persistence.ItemViewAdapter.class
+        com.sseulang.domain.item.infrastructure.persistence.ItemViewAdapter.class,
+        // 라운드 12 PR-C #6 — ChatRoomApplicationService 가 ChatRoomCardRepository 의존 추가 (Mongo). DataJpaTest 라 NoOp 주입.
+        com.sseulang.domain.chat.application.NoOpChatRoomCardRepository.class
 })
 @Testcontainers
 @Transactional(propagation = Propagation.NOT_SUPPORTED)

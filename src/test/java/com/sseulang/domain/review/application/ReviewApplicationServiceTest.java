@@ -52,6 +52,7 @@ class ReviewApplicationServiceTest {
         com.sseulang.domain.chat.application.ChatRoomApplicationService chatSvc =
                 new com.sseulang.domain.chat.application.ChatRoomApplicationService(
                         new com.sseulang.domain.chat.application.InMemoryFakeChatRoomRepository(),
+                        new com.sseulang.domain.chat.application.InMemoryFakeChatRoomCardRepository(),
                         itemSvc, userSvc, null, null);
         TransactionApplicationService txSvc = new TransactionApplicationService(
                 txRepo, itemSvc, pointSvc, userSvc, chatSvc,

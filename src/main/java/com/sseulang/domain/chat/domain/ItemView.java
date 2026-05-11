@@ -17,6 +17,9 @@ public interface ItemView {
      */
     Map<Long, ItemProjection> findByIds(Collection<Long> itemIds);
 
-    /** 채팅 응답용 아이템 최소 projection. 제목 + 썸네일 + 판매자 id (viewer 본인=isSeller 판정용). */
-    record ItemProjection(Long id, String title, String thumbnailUrl, Long sellerId) { }
+    /**
+     * 채팅 응답용 아이템 최소 projection. 제목 + 썸네일 + 판매자 id (viewer 본인=isSeller 판정용).
+     * 라운드 12 PR-C #6 — 시스템 카드 생성 시 price 도 필요해 필드 추가 (snapshot).
+     */
+    record ItemProjection(Long id, String title, String thumbnailUrl, Long sellerId, Long price) { }
 }

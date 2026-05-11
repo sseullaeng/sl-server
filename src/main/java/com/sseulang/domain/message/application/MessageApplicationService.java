@@ -70,6 +70,9 @@ public class MessageApplicationService {
         chatRoomApplicationService.requireSendable(cmd.chatRoomId(), cmd.senderId());
         Long opponentId = chatRoomApplicationService.findOpponent(cmd.chatRoomId(), cmd.senderId());
 
+        // 라운드 12 PR-C #6 — 첫 메시지 발신 시점에 systemCard lazy 생성 (멱등).
+        chatRoomApplicationService.ensureSystemCard(cmd.chatRoomId());
+
         Message saved;
         boolean hasImages = cmd.imageUrls() != null && !cmd.imageUrls().isEmpty();
         if (hasImages) {
