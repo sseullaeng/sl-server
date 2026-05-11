@@ -3,6 +3,7 @@ package com.sseulang.domain.escrow.presentation;
 import com.sseulang.domain.escrow.application.EscrowApplicationService;
 import com.sseulang.domain.escrow.application.dto.EscrowApplicationResult;
 import com.sseulang.domain.escrow.application.dto.EscrowLinkResult;
+import com.sseulang.domain.escrow.domain.EscrowApplicationStatus;
 import com.sseulang.domain.escrow.presentation.dto.EscrowApplicationCancelRequest;
 import com.sseulang.domain.escrow.presentation.dto.EscrowApplicationCreateRequest;
 import com.sseulang.domain.escrow.presentation.dto.EscrowLinkCreateRequest;
@@ -130,6 +131,18 @@ public class EscrowController {
             @Valid @RequestBody com.sseulang.domain.escrow.presentation.dto.EscrowBuyerInfoPatchRequest request
     ) {
         return ApiResponse.ok(service.patchBuyerInfo(id, userId, request.toCommand()));
+    }
+
+    @Operation(summary = "본인 share 포인트 결제 (PR-B-5)",
+            description = "결제대기 상태에서 본인 share 만큼 포인트 잔액 차감. 양쪽 결제 완료 시 자동 결제완료 + 라이더 매칭. "
+                    + "에러: 400 INSUFFICIENT_POINT (잔액 부족), 400 ESCROW_INVALID_STATE (상태/시점/이미 결제됨), 403 ESCROW_FORBIDDEN (참여자 아님).")
+    @PostMapping("/applications/{id}/pay")
+    public ApiResponse<com.sseulang.domain.escrow.presentation.dto.EscrowPayResponse> payShare(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        EscrowApplicationStatus status = service.payShare(id, userId);
+        return ApiResponse.ok(new com.sseulang.domain.escrow.presentation.dto.EscrowPayResponse(status.name()));
     }
 
     @Operation(summary = "본인 거래대행 신청 목록", description = "최신순. 필터는 후속 (5/11 단순).")

@@ -460,6 +460,75 @@ public class EscrowApplicationService {
     }
 
     // =============================================================
+    // Use case 4b — 포인트 잔액 결제 (PR-B-5 라운드 12).
+    // 토스 결제창 X — 포인트 잔액에서 본인 share 만큼 차감 + paid 마킹.
+    // 양쪽 paid 시 자동 결제완료 + EscrowConfirmedEvent → 라이더 매칭.
+    // =============================================================
+    @Transactional
+    public EscrowApplicationStatus payShare(Long applicationId, Long payerId) {
+        userApplicationService.requireVerified(payerId);
+
+        EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+
+        if (app.getStatus() != EscrowApplicationStatus.결제대기) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (app.isPaymentTimedOut()) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+
+        long expectedShare;
+        if (payerId.equals(app.getInitiatorId())) {
+            if (app.getInitiatorPaidAt() != null) {
+                throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+            }
+            expectedShare = app.getInitiatorShare() == null ? 0L : app.getInitiatorShare();
+        } else if (payerId.equals(app.getReceiverId())) {
+            if (app.getReceiverPaidAt() != null) {
+                throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+            }
+            expectedShare = app.getReceiverShare() == null ? 0L : app.getReceiverShare();
+        } else {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
+        }
+
+        if (expectedShare <= 0) {
+            // 본인 share 가 0 — 결제 의무 없음.
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+
+        // 포인트 잔액 차감 (atomic UPDATE — 잔액 부족 시 INSUFFICIENT_POINT throw)
+        pointApplicationService.deduct(
+                payerId, expectedShare,
+                com.sseulang.domain.point.domain.PointHistoryType.결제,
+                com.sseulang.domain.point.domain.PointReferenceType.ESCROW,
+                app.getId(),
+                "거래대행 결제 — 본인 분담분"
+        );
+
+        // paid 마킹
+        if (payerId.equals(app.getInitiatorId())) {
+            app.markInitiatorPaid();
+        } else {
+            app.markReceiverPaid();
+        }
+
+        // 양쪽 결제 완료 시 EscrowConfirmedEvent 발행 → Delivery 도메인 라이더 자동 매칭
+        if (app.getStatus() == EscrowApplicationStatus.결제완료) {
+            eventPublisher.publishEvent(new EscrowConfirmedEvent(
+                    app.getId(),
+                    app.getPickupAddress(), app.getPickupLat().doubleValue(), app.getPickupLng().doubleValue(),
+                    app.getDeliveryAddress(), app.getDeliveryLat().doubleValue(), app.getDeliveryLng().doubleValue(),
+                    app.getItemDescription(),
+                    app.getAppliedDeliveryFee(),
+                    app.getBuyerId()
+            ));
+        }
+        return app.getStatus();
+    }
+
+    // =============================================================
     // Use case 4 — 결제 confirm 후 호출 (Payment 도메인이 호출)
     // =============================================================
     @Transactional
