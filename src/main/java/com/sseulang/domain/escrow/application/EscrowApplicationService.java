@@ -3,6 +3,7 @@ package com.sseulang.domain.escrow.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.sseulang.domain.escrow.application.dto.EscrowApplicationByLinkCommand;
 import com.sseulang.domain.escrow.application.dto.EscrowApplicationCreateCommand;
 import com.sseulang.domain.escrow.application.dto.EscrowApplicationCreateInternalCommand;
 import com.sseulang.domain.escrow.application.dto.EscrowApplicationPreviewCommand;
@@ -288,21 +289,33 @@ public class EscrowApplicationService {
     @Transactional
     public EscrowLinkResult createLink(EscrowLinkCreateCommand cmd) {
         userApplicationService.requireVerified(cmd.initiatorId());
-        EscrowLink link = EscrowLink.create(
-                cmd.initiatorId(),
-                cmd.initiatorRole(),
-                cmd.feePayer(),
-                cmd.tradeMode(),
-                linkExpiryHours
-        );
+        boolean hasInitiatorInfo =
+                cmd.initiatorPickupAddress() != null || cmd.initiatorDeliveryAddress() != null
+                        || cmd.initiatorItemPrice() != null || cmd.initiatorReceiverPhone() != null;
+        EscrowLink link;
+        if (hasInitiatorInfo) {
+            link = EscrowLink.createWithInitiatorInfo(
+                    cmd.initiatorId(), cmd.initiatorRole(), cmd.feePayer(), cmd.tradeMode(), linkExpiryHours,
+                    cmd.initiatorPickupAddress(), cmd.initiatorPickupLat(), cmd.initiatorPickupLng(),
+                    cmd.initiatorItemPrice(), cmd.initiatorItemDescription(),
+                    cmd.initiatorWeight(), cmd.initiatorVolume(), cmd.initiatorFragility(),
+                    cmd.initiatorDeliveryNotes(), serializeImageUrls(cmd.initiatorImageUrls()),
+                    cmd.initiatorDeliveryAddress(), cmd.initiatorDeliveryLat(), cmd.initiatorDeliveryLng(),
+                    cmd.initiatorReceiverPhone()
+            );
+        } else {
+            link = EscrowLink.create(
+                    cmd.initiatorId(), cmd.initiatorRole(), cmd.feePayer(), cmd.tradeMode(), linkExpiryHours
+            );
+        }
         EscrowLink saved = linkRepository.save(link);
         User initiator = userApplicationService.getById(cmd.initiatorId());
-        return EscrowLinkResult.from(saved, initiator.getNickname());
+        return EscrowLinkResult.from(saved, initiator.getNickname(), parseImageUrls(saved.getInitiatorImageUrls()));
     }
 
-    
-    
-    
+
+
+
     public EscrowLinkResult getByToken(String linkToken) {
         EscrowLink link = linkRepository.findByLinkToken(linkToken)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_LINK_NOT_FOUND));
@@ -316,7 +329,7 @@ public class EscrowApplicationService {
             throw new BusinessException(ErrorCode.ESCROW_LINK_ALREADY_TAKEN);
         }
         User initiator = userApplicationService.getById(link.getInitiatorId());
-        return EscrowLinkResult.from(link, initiator.getNickname());
+        return EscrowLinkResult.from(link, initiator.getNickname(), parseImageUrls(link.getInitiatorImageUrls()));
     }
 
     
@@ -383,12 +396,139 @@ public class EscrowApplicationService {
                 serializeImageUrls(cmd.imageUrls())
         );
         EscrowApplication saved = applicationRepository.save(app);
-        
+
         link.markAsCompleted();
         return EscrowApplicationResult.from(saved, parseImageUrls(saved.getImageUrls()));
     }
 
-    
+    // 라운드 12 — 분리 입력 흐름. 발급자가 link 발급 시 본인 영역을 미리 입력했고
+    // 수신자는 본인 영역만 채워서 by-link 신청. 양쪽 정보 합쳐 application 생성.
+    @Transactional
+    public EscrowApplicationResult createByLinkApplication(EscrowApplicationByLinkCommand cmd) {
+        userApplicationService.requireVerified(cmd.receiverId());
+
+        EscrowLink link = linkRepository.findByLinkToken(cmd.linkToken())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_LINK_NOT_FOUND));
+
+        // 멱등 — 동일 수신자 재제출 시 기존 application 반환
+        if (cmd.receiverId().equals(link.getReceiverId())) {
+            return applicationRepository.findByLinkId(link.getId())
+                    .map(a -> EscrowApplicationResult.from(a, parseImageUrls(a.getImageUrls())))
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_INVALID_STATE));
+        }
+
+        int affected = linkRepository.claimReceiverIfAvailable(link.getId(), cmd.receiverId());
+        if (affected == 0) {
+            if (link.getInitiatorId().equals(cmd.receiverId())) {
+                throw new BusinessException(ErrorCode.ESCROW_SELF_NOT_ALLOWED);
+            }
+            if (link.isExpired() || link.getStatus() == EscrowLinkStatus.만료) {
+                throw new BusinessException(ErrorCode.ESCROW_LINK_EXPIRED);
+            }
+            throw new BusinessException(ErrorCode.ESCROW_LINK_ALREADY_TAKEN);
+        }
+
+        // role 별 영역 머지 — 발급자 영역은 link 에서, 수신자 영역은 cmd 에서
+        String pickupAddress;
+        BigDecimal pickupLat;
+        BigDecimal pickupLng;
+        long itemPrice;
+        String itemDescription;
+        com.sseulang.domain.escrow.domain.Weight weight;
+        com.sseulang.domain.escrow.domain.Volume volume;
+        com.sseulang.domain.escrow.domain.Fragility fragility;
+        String deliveryNotes;
+        String imageUrlsJson;
+        String deliveryAddress;
+        BigDecimal deliveryLat;
+        BigDecimal deliveryLng;
+        String receiverPhone;
+
+        if (link.getInitiatorRole() == InitiatorRole.seller) {
+            // 발급자(seller) = pickup + 물품, 수신자(buyer) = delivery + receiverPhone
+            if (link.getInitiatorPickupAddress() == null || link.getInitiatorItemPrice() == null) {
+                throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+            }
+            if (cmd.deliveryAddress() == null || cmd.deliveryLat() == null || cmd.deliveryLng() == null
+                    || cmd.receiverPhone() == null || cmd.receiverPhone().isBlank()) {
+                throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+            }
+            pickupAddress = link.getInitiatorPickupAddress();
+            pickupLat = link.getInitiatorPickupLat();
+            pickupLng = link.getInitiatorPickupLng();
+            itemPrice = link.getInitiatorItemPrice();
+            itemDescription = link.getInitiatorItemDescription();
+            weight = link.getInitiatorWeight();
+            volume = link.getInitiatorVolume();
+            fragility = link.getInitiatorFragility();
+            deliveryNotes = link.getInitiatorDeliveryNotes();
+            imageUrlsJson = link.getInitiatorImageUrls();
+            deliveryAddress = cmd.deliveryAddress();
+            deliveryLat = cmd.deliveryLat();
+            deliveryLng = cmd.deliveryLng();
+            receiverPhone = cmd.receiverPhone();
+        } else {
+            // 발급자(buyer) = delivery + receiverPhone, 수신자(seller) = pickup + 물품
+            if (link.getInitiatorDeliveryAddress() == null || link.getInitiatorReceiverPhone() == null) {
+                throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+            }
+            if (cmd.pickupAddress() == null || cmd.pickupLat() == null || cmd.pickupLng() == null
+                    || cmd.itemPrice() == null || cmd.itemDescription() == null
+                    || cmd.weight() == null || cmd.volume() == null || cmd.fragility() == null) {
+                throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+            }
+            pickupAddress = cmd.pickupAddress();
+            pickupLat = cmd.pickupLat();
+            pickupLng = cmd.pickupLng();
+            itemPrice = cmd.itemPrice();
+            itemDescription = cmd.itemDescription();
+            weight = cmd.weight();
+            volume = cmd.volume();
+            fragility = cmd.fragility();
+            deliveryNotes = cmd.deliveryNotes();
+            imageUrlsJson = serializeImageUrls(cmd.imageUrls());
+            deliveryAddress = link.getInitiatorDeliveryAddress();
+            deliveryLat = link.getInitiatorDeliveryLat();
+            deliveryLng = link.getInitiatorDeliveryLng();
+            receiverPhone = link.getInitiatorReceiverPhone();
+        }
+
+        EscrowFeeSettings settings = feeSettingsRepository.findSingleton();
+        BigDecimal calculatedDistance = EscrowFeeCalculator.distanceKm(
+                pickupLat.doubleValue(), pickupLng.doubleValue(),
+                deliveryLat.doubleValue(), deliveryLng.doubleValue()
+        );
+        FeeBreakdown calculated = EscrowFeeCalculator.calculate(
+                settings, link.getTradeMode(), itemPrice, calculatedDistance,
+                weight, volume, fragility
+        );
+        EscrowFeeCalculator.verifyTolerance(
+                calculated, cmd.submittedDeliveryFee(), cmd.submittedCommissionFee(), cmd.submittedTotalFee()
+        );
+
+        long buyerOwed = computeBuyerOwed(link.getTradeMode(), itemPrice, calculated, link.getFeePayer());
+        long sellerOwed = computeSellerOwed(calculated, link.getFeePayer());
+        long initiatorShare = link.getInitiatorRole() == InitiatorRole.buyer ? buyerOwed : sellerOwed;
+        long receiverShare = link.getInitiatorRole() == InitiatorRole.buyer ? sellerOwed : buyerOwed;
+
+        EscrowApplication app = EscrowApplication.create(
+                link.getId(),
+                link.getInitiatorId(), cmd.receiverId(), link.getInitiatorRole(),
+                link.getTradeMode(), link.getFeePayer(),
+                itemPrice, itemDescription,
+                pickupAddress, pickupLat, pickupLng,
+                deliveryAddress, deliveryLat, deliveryLng,
+                weight, volume, fragility, deliveryNotes,
+                calculated, initiatorShare, receiverShare,
+                imageUrlsJson
+        );
+        EscrowApplication saved = applicationRepository.save(app);
+        saved.attachReceiverPhone(receiverPhone);
+        link.markAsCompleted();
+        return EscrowApplicationResult.from(saved, parseImageUrls(saved.getImageUrls()));
+    }
+
+
 
     private long computeBuyerOwed(TradeMode mode, long itemPrice, FeeBreakdown fee, FeePayer payer) {
         long feeTotal = fee.deliveryFee() + fee.commissionFee();

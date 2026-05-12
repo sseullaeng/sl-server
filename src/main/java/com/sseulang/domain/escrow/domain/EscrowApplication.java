@@ -363,7 +363,12 @@ public class EscrowApplication extends BaseEntity {
         this.sellerInfoFilled = true;
     }
 
-    
+    // 라운드 12 — 분리 입력 by-link 신청용. 생성 직후 receiverPhone 만 추가로 셋팅 (deliveryAddress 는 이미 create 시점에 셋팅됨).
+    public void attachReceiverPhone(String receiverPhone) {
+        if (receiverPhone != null && !receiverPhone.isBlank()) {
+            this.receiverPhone = receiverPhone;
+        }
+    }
 
     public void patchBuyerInfo(
             String deliveryAddress, BigDecimal deliveryLat, BigDecimal deliveryLng,

@@ -106,11 +106,24 @@ class EscrowFeeCalculatorTest {
     }
 
     @Test
-    @DisplayName("calculate_INTERNAL_itemPrice0_FORM_INVALID")
-    void calculate_internal_zero_item_rejected() {
+    @DisplayName("calculate_INTERNAL_itemPrice0_나눔허용")
+    void calculate_internal_zero_item_allowed() {
+        EscrowFeeSettings s = defaultSettings();
+        // 5/11 변경: 나눔(0원) INTERNAL 거래대행 허용. 음수만 거부.
+        FeeBreakdown fb = EscrowFeeCalculator.calculate(
+                s, TradeMode.INTERNAL, 0L,
+                new BigDecimal("5.00"),
+                Weight.LT1, Volume.S, Fragility.F1
+        );
+        assertThat(fb.deliveryFee()).isGreaterThan(0L);
+    }
+
+    @Test
+    @DisplayName("calculate_INTERNAL_itemPrice음수_FORM_INVALID")
+    void calculate_internal_negative_item_rejected() {
         EscrowFeeSettings s = defaultSettings();
         assertThatThrownBy(() -> EscrowFeeCalculator.calculate(
-                s, TradeMode.INTERNAL, 0L,
+                s, TradeMode.INTERNAL, -1L,
                 new BigDecimal("5.00"),
                 Weight.LT1, Volume.S, Fragility.F1
         )).isInstanceOf(BusinessException.class)
