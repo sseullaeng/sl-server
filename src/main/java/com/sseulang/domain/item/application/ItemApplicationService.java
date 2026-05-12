@@ -123,16 +123,18 @@ public class ItemApplicationService {
             item.assignCategory(cmd.categoryId());
         }
         if (cmd.imageUrls() != null) {
-            
-            
+
+
             validateImageOwnershipForUpdate(item.getSellerId(), item.getId(), cmd.imageUrls());
             item.clearImages();
-            
+            itemRepository.flush();
+
             List<String> promoted = promoteImageUrls(item.getSellerId(), item.getId(), cmd.imageUrls());
             applyImages(item, promoted);
         }
         if (cmd.hashtags() != null) {
             item.clearHashtags();
+            itemRepository.flush();
             applyHashtags(item, cmd.hashtags());
         }
     }

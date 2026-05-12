@@ -55,6 +55,11 @@ public class ItemRepositoryImpl implements ItemRepository {
     }
 
     @Override
+    public void flush() {
+        jpa.flush();
+    }
+
+    @Override
     public int incrementWishlistCount(Long itemId) {
         return jpa.incrementWishlistCount(itemId);
     }
