@@ -118,4 +118,38 @@ public class ItemQuerydslRepository {
                 .map(s -> "+" + s)
                 .collect(Collectors.joining(" "));
     }
+
+    // 라운드 12 — admin item 검색. 삭제 포함 모든 상태, REPORT_DESC 정렬은 service 후처리.
+    public Page<Item> adminSearch(
+            com.sseulang.domain.item.application.dto.AdminItemSearchCriteria criteria,
+            java.util.Collection<Long> matchedSellerIds,
+            Pageable pageable
+    ) {
+        QItem item = QItem.item;
+        BooleanBuilder where = new BooleanBuilder();
+        if (criteria.q() != null && !criteria.q().isBlank()) {
+            String pattern = "%" + criteria.q().strip() + "%";
+            BooleanBuilder kw = new BooleanBuilder(item.title.like(pattern));
+            if (matchedSellerIds != null && !matchedSellerIds.isEmpty()) {
+                kw.or(item.sellerId.in(matchedSellerIds));
+            }
+            where.and(kw);
+        }
+        if (criteria.status() != null) where.and(item.status.eq(criteria.status()));
+        if (criteria.tradeType() != null) where.and(item.tradeType.eq(criteria.tradeType()));
+        if (criteria.categoryId() != null) where.and(item.categoryId.eq(criteria.categoryId()));
+        if (criteria.createdAfter() != null) where.and(item.createdAt.goe(criteria.createdAfter()));
+        if (criteria.createdBefore() != null) where.and(item.createdAt.lt(criteria.createdBefore()));
+
+        OrderSpecifier<?>[] orders = switch (criteria.sort()) {
+            case VIEW_DESC -> new OrderSpecifier<?>[]{ item.viewCount.desc(), item.id.desc() };
+            case REPORT_DESC, LATEST -> new OrderSpecifier<?>[]{ item.createdAt.desc(), item.id.desc() };
+        };
+
+        List<Item> content = queryFactory
+                .selectFrom(item).where(where).orderBy(orders)
+                .offset(pageable.getOffset()).limit(pageable.getPageSize()).fetch();
+        Long total = queryFactory.select(item.count()).from(item).where(where).fetchOne();
+        return new PageImpl<>(content, pageable, total == null ? 0L : total);
+    }
 }

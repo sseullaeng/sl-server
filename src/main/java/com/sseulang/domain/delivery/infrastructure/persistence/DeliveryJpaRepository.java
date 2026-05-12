@@ -86,4 +86,24 @@ interface DeliveryJpaRepository extends JpaRepository<DeliveryRequest, Long> {
     java.util.Optional<DeliveryRequest> findByEscrowApplicationId(Long escrowApplicationId);
 
     java.util.List<DeliveryRequest> findByEscrowApplicationIdIn(java.util.Collection<Long> escrowApplicationIds);
+
+    @Query("""
+            SELECT d FROM DeliveryRequest d
+             WHERE (:status IS NULL OR d.status = :status)
+               AND (:riderId IS NULL OR d.riderId = :riderId)
+               AND (:requesterId IS NULL OR d.requesterId = :requesterId)
+               AND (:createdAfter IS NULL OR d.requestedAt >= :createdAfter)
+               AND (:createdBefore IS NULL OR d.requestedAt < :createdBefore)
+            """)
+    Page<DeliveryRequest> adminSearch(
+            @Param("status") DeliveryStatus status,
+            @Param("riderId") Long riderId,
+            @Param("requesterId") Long requesterId,
+            @Param("createdAfter") LocalDateTime createdAfter,
+            @Param("createdBefore") LocalDateTime createdBefore,
+            Pageable pageable
+    );
+
+    @Query("SELECT COUNT(d) FROM DeliveryRequest d WHERE d.requestedAt >= :since")
+    long countCreatedSince(@Param("since") LocalDateTime since);
 }

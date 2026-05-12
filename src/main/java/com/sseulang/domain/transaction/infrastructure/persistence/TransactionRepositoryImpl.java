@@ -46,6 +46,12 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public java.util.List<Transaction> findByItemIdOrderByIdDesc(Long itemId) {
+        if (itemId == null) return java.util.List.of();
+        return jpa.findByItemIdOrderByIdDesc(itemId);
+    }
+
+    @Override
     public Optional<Transaction> findByEscrowApplicationId(Long escrowApplicationId) {
         if (escrowApplicationId == null) return Optional.empty();
         return jpa.findByEscrowApplicationId(escrowApplicationId);

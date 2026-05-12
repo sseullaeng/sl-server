@@ -36,7 +36,7 @@ class ItemSearchTest {
         InMemoryFakeCategoryRepository categoryRepo = new InMemoryFakeCategoryRepository();
         com.sseulang.domain.category.application.CategoryApplicationService catSvc =
                 new com.sseulang.domain.category.application.CategoryApplicationService(categoryRepo);
-        service = new ItemApplicationService(itemRepo, catSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class), new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(), new com.sseulang.domain.item.application.NoOpWishlistView());
+        service = new ItemApplicationService(itemRepo, catSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class), new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(), new com.sseulang.domain.item.application.NoOpWishlistView(), new com.sseulang.domain.item.application.NoOpItemReportView());
         catA = categoryRepo.insert(Category.createRoot("A", 1)).getId();
         catB = categoryRepo.insert(Category.createRoot("B", 2)).getId();
     }

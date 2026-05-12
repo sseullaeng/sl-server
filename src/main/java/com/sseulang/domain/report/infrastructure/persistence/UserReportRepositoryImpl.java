@@ -59,4 +59,22 @@ public class UserReportRepositoryImpl implements UserReportRepository {
     public long countCreatedSince(java.time.LocalDateTime since) {
         return jpa.countCreatedSince(since);
     }
+
+    @Override
+    public java.util.Map<Long, Long> countByItemIds(java.util.Collection<Long> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        java.util.Map<Long, Long> result = new java.util.HashMap<>();
+        for (UserReportJpaRepository.ItemCountRow row : jpa.countByItemIdsRaw(itemIds)) {
+            result.put(row.getItemId(), row.getCnt());
+        }
+        return result;
+    }
+
+    @Override
+    public java.util.List<UserReport> findByItemIdOrderByCreatedAtDesc(Long itemId) {
+        if (itemId == null) return java.util.List.of();
+        return jpa.findByItemIdOrderByCreatedAtDesc(itemId);
+    }
 }

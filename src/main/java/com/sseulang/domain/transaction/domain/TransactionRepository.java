@@ -22,6 +22,9 @@ public interface TransactionRepository {
 
     boolean existsActiveByChatRoomId(Long chatRoomId);
 
+    // 라운드 12 — admin item 상세에서 거래 이력 조회 (최신순).
+    java.util.List<Transaction> findByItemIdOrderByIdDesc(Long itemId);
+
     // 라운드 12 — 거래대행 paired 매핑 (1:1, UNIQUE).
     Optional<Transaction> findByEscrowApplicationId(Long escrowApplicationId);
 

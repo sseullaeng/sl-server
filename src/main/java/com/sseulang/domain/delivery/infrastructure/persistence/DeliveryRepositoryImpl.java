@@ -77,4 +77,25 @@ public class DeliveryRepositoryImpl implements DeliveryRepository {
         if (escrowApplicationIds == null || escrowApplicationIds.isEmpty()) return java.util.List.of();
         return jpa.findByEscrowApplicationIdIn(escrowApplicationIds);
     }
+
+    @Override
+    public Page<DeliveryRequest> adminSearch(
+            DeliveryStatus status, Long riderId, Long requesterId,
+            LocalDateTime createdAfter, LocalDateTime createdBefore,
+            String sort, Pageable pageable
+    ) {
+        org.springframework.data.domain.Sort order = "picked_up_desc".equals(sort)
+                ? org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Order.desc("pickedUpAt").nullsLast(),
+                        org.springframework.data.domain.Sort.Order.desc("id"))
+                : org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Order.desc("requestedAt"),
+                        org.springframework.data.domain.Sort.Order.desc("id"));
+        org.springframework.data.domain.PageRequest pr = org.springframework.data.domain.PageRequest.of(
+                pageable.getPageNumber(), pageable.getPageSize(), order);
+        return jpa.adminSearch(status, riderId, requesterId, createdAfter, createdBefore, pr);
+    }
+
+    @Override
+    public long countCreatedSince(LocalDateTime since) {
+        return jpa.countCreatedSince(since);
+    }
 }

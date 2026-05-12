@@ -77,4 +77,24 @@ public class InMemoryFakeUserReportRepository implements UserReportRepository {
                 .filter(r -> r.getCreatedAt() != null && !r.getCreatedAt().isBefore(since))
                 .count();
     }
+
+    @Override
+    public Map<Long, Long> countByItemIds(java.util.Collection<Long> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) return Map.of();
+        java.util.Map<Long, Long> map = new java.util.HashMap<>();
+        store.values().stream()
+                .filter(r -> r.getItemId() != null && itemIds.contains(r.getItemId()))
+                .forEach(r -> map.merge(r.getItemId(), 1L, Long::sum));
+        return map;
+    }
+
+    @Override
+    public java.util.List<com.sseulang.domain.report.domain.UserReport> findByItemIdOrderByCreatedAtDesc(Long itemId) {
+        if (itemId == null) return java.util.List.of();
+        return store.values().stream()
+                .filter(r -> itemId.equals(r.getItemId()))
+                .sorted(java.util.Comparator.comparing(com.sseulang.domain.report.domain.UserReport::getCreatedAt,
+                        java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
+                .toList();
+    }
 }
