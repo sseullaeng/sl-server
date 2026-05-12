@@ -34,14 +34,35 @@ public record ChatRoomResult(
 
 
     public record SystemCard(
+            // 카드 종류 — Item(거래 없음) / Transaction / EscrowApplication 중 활성 거래 우선
+            String cardKind,
             com.sseulang.domain.item.domain.TradeType tradeMode,
             Long itemId,
             String itemTitle,
             String itemThumbnailUrl,
-            Long price
+            Long price,
+            // 활성 직거래 — 없으면 null
+            Long transactionId,
+            String transactionStatus,
+            // 활성 거래대행 — 없으면 null. INTERNAL 거래대행만.
+            Long escrowApplicationId,
+            String escrowStatus,
+            Long deliveryId
     ) {
         public static SystemCard from(com.sseulang.domain.chat.domain.ChatRoomCard c) {
-            return new SystemCard(c.getTradeMode(), c.getItemId(), c.getItemTitle(), c.getThumbnailUrl(), c.getPrice());
+            return new SystemCard("Item", c.getTradeMode(), c.getItemId(), c.getItemTitle(),
+                    c.getThumbnailUrl(), c.getPrice(),
+                    null, null, null, null, null);
+        }
+
+        public SystemCard withTransaction(Long txId, String status) {
+            return new SystemCard("Transaction", tradeMode, itemId, itemTitle, itemThumbnailUrl, price,
+                    txId, status, null, null, null);
+        }
+
+        public SystemCard withEscrow(Long escrowId, String status, Long deliveryId) {
+            return new SystemCard("EscrowApplication", tradeMode, itemId, itemTitle, itemThumbnailUrl, price,
+                    null, null, escrowId, status, deliveryId);
         }
     }
     

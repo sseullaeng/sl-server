@@ -64,4 +64,22 @@ public class EscrowApplicationRepositoryImpl implements EscrowApplicationReposit
     public long countInProgress() {
         return jpa.countInProgress();
     }
+
+    @Override
+    public Optional<EscrowApplication> findLatestNonCanceledByChatRoomId(Long chatRoomId) {
+        if (chatRoomId == null) return Optional.empty();
+        List<EscrowApplication> rows = jpa.findLatestNonCanceledByChatRoomIdJpql(
+                chatRoomId, org.springframework.data.domain.PageRequest.of(0, 1));
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    @Override
+    public List<EscrowApplication> findLatestNonCanceledByChatRoomIdIn(java.util.Collection<Long> chatRoomIds) {
+        if (chatRoomIds == null || chatRoomIds.isEmpty()) return List.of();
+        List<EscrowApplication> all = jpa.findNonCanceledByChatRoomIdInJpql(chatRoomIds);
+        all.sort(java.util.Comparator.comparing(EscrowApplication::getId).reversed());
+        java.util.Map<Long, EscrowApplication> latest = new java.util.LinkedHashMap<>();
+        for (EscrowApplication a : all) latest.putIfAbsent(a.getChatRoomId(), a);
+        return new java.util.ArrayList<>(latest.values());
+    }
 }

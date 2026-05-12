@@ -47,4 +47,20 @@ public interface EscrowApplicationJpaRepository extends JpaRepository<EscrowAppl
             )
             """)
     long countInProgress();
+
+    // 라운드 12 — 채팅방 카드용. 비취소 최신 1건 (id desc).
+    @Query("""
+            SELECT a FROM EscrowApplication a
+             WHERE a.chatRoomId = :chatRoomId
+               AND a.status <> com.sseulang.domain.escrow.domain.EscrowApplicationStatus.취소
+             ORDER BY a.id DESC
+            """)
+    List<EscrowApplication> findLatestNonCanceledByChatRoomIdJpql(@Param("chatRoomId") Long chatRoomId, Pageable pageable);
+
+    @Query("""
+            SELECT a FROM EscrowApplication a
+             WHERE a.chatRoomId IN :chatRoomIds
+               AND a.status <> com.sseulang.domain.escrow.domain.EscrowApplicationStatus.취소
+            """)
+    List<EscrowApplication> findNonCanceledByChatRoomIdInJpql(@Param("chatRoomIds") java.util.Collection<Long> chatRoomIds);
 }

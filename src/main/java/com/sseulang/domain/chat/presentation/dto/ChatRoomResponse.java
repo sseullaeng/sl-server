@@ -35,17 +35,31 @@ public record ChatRoomResponse(
         @Schema(description = "채팅방 시스템 카드 — 첫 메시지 도착 시 lazy 생성. 없으면 null.")
         SystemCard card
 ) {
-    @Schema(description = "거래 모드 + 아이템 요약 카드.")
+    @Schema(description = "거래 모드 + 아이템 요약 + 활성 거래(Transaction or EscrowApplication) 메타.")
     public record SystemCard(
+            @Schema(example = "Transaction", allowableValues = {"Item", "Transaction", "EscrowApplication"},
+                    description = "카드 종류 — 활성 거래가 있으면 Transaction/EscrowApplication, 없으면 Item")
+            String cardKind,
             @Schema(example = "대여") TradeType tradeMode,
             @Schema(example = "42") Long itemId,
             @Schema(example = "맥북 프로") String itemTitle,
             @Schema(description = "아이템 썸네일 URL") String itemThumbnailUrl,
-            @Schema(example = "30000") Long price
+            @Schema(example = "30000") Long price,
+            @Schema(description = "활성 직거래 ID (없으면 null)") Long transactionId,
+            @Schema(example = "거래완료", description = "Transaction 상태 (채팅중/예약/인계완료/거래완료/취소)")
+            String transactionStatus,
+            @Schema(description = "활성 거래대행 ID (INTERNAL 거래대행 + 미취소, 없으면 null)") Long escrowApplicationId,
+            @Schema(example = "진행중", description = "EscrowApplication 상태 (정보입력대기/결제대기/결제완료/진행중/완료/취소)")
+            String escrowStatus,
+            @Schema(description = "거래대행에 매칭된 DeliveryRequest ID (없으면 null)") Long deliveryId
     ) {
         public static SystemCard from(ChatRoomResult.SystemCard c) {
             if (c == null) return null;
-            return new SystemCard(c.tradeMode(), c.itemId(), c.itemTitle(), c.itemThumbnailUrl(), c.price());
+            return new SystemCard(
+                    c.cardKind(), c.tradeMode(), c.itemId(), c.itemTitle(), c.itemThumbnailUrl(), c.price(),
+                    c.transactionId(), c.transactionStatus(),
+                    c.escrowApplicationId(), c.escrowStatus(), c.deliveryId()
+            );
         }
     }
 

@@ -55,6 +55,26 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
     }
 
     @Override
+    public java.util.Optional<Transaction> findLatestNonCanceledByChatRoomId(Long chatRoomId) {
+        if (chatRoomId == null) return java.util.Optional.empty();
+        return store.values().stream()
+                .filter(t -> chatRoomId.equals(t.getChatRoomId()) && t.getStatus() != TransactionStatus.취소)
+                .max(java.util.Comparator.comparing(Transaction::getId));
+    }
+
+    @Override
+    public java.util.List<Transaction> findLatestNonCanceledByChatRoomIdIn(java.util.Collection<Long> chatRoomIds) {
+        if (chatRoomIds == null || chatRoomIds.isEmpty()) return java.util.List.of();
+        java.util.Map<Long, Transaction> latest = new java.util.LinkedHashMap<>();
+        store.values().stream()
+                .filter(t -> t.getChatRoomId() != null && chatRoomIds.contains(t.getChatRoomId())
+                        && t.getStatus() != TransactionStatus.취소)
+                .sorted(java.util.Comparator.comparing(Transaction::getId).reversed())
+                .forEach(t -> latest.putIfAbsent(t.getChatRoomId(), t));
+        return new java.util.ArrayList<>(latest.values());
+    }
+
+    @Override
     public List<TransactionStatusCount> countGroupByStatus() {
         return store.values().stream()
                 .collect(Collectors.groupingBy(Transaction::getStatus, Collectors.counting()))
