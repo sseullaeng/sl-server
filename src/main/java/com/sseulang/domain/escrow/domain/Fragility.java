@@ -27,7 +27,7 @@ public enum Fragility {
         return multiplier;
     }
 
-    @JsonCreator
+    @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
     public static Fragility fromCode(String code) {
         for (Fragility f : values()) if (f.code.equals(code)) return f;
         throw new IllegalArgumentException("Unknown Fragility: " + code);

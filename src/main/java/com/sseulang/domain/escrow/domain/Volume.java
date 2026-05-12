@@ -25,7 +25,7 @@ public enum Volume {
         return multiplier;
     }
 
-    @JsonCreator
+    @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
     public static Volume fromCode(String code) {
         for (Volume v : values()) if (v.code.equals(code)) return v;
         throw new IllegalArgumentException("Unknown Volume: " + code);
