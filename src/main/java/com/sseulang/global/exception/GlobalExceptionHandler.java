@@ -38,6 +38,7 @@ public class GlobalExceptionHandler {
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
                 .collect(Collectors.joining(", "));
+        log.warn("[validation] {}", message);
         return badRequest(ErrorCode.INVALID_REQUEST, message);
     }
 
@@ -46,12 +47,20 @@ public class GlobalExceptionHandler {
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
                 .collect(Collectors.joining(", "));
+        log.warn("[bind] {}", message);
         return badRequest(ErrorCode.INVALID_REQUEST, message);
     }
 
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
     public ResponseEntity<ApiResponse<Void>> handleBadJson(Exception ex) {
+        log.warn("[bad-json] {} — mostCause={}", ex.getMessage(), rootCauseMessage(ex));
         return badRequest(ErrorCode.INVALID_REQUEST, "요청 형식이 올바르지 않습니다.");
+    }
+
+    private static String rootCauseMessage(Throwable t) {
+        Throwable cause = t;
+        while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+        return cause.getClass().getSimpleName() + ": " + cause.getMessage();
     }
 
     @ExceptionHandler({NoHandlerFoundException.class, NoResourceFoundException.class})
