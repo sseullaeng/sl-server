@@ -668,8 +668,17 @@ public class EscrowApplicationService {
     
     
     public Page<EscrowApplicationResult> listMine(Long userId, Pageable pageable) {
-        return applicationRepository.findMyApplications(userId, pageable)
-                .map(a -> EscrowApplicationResult.from(a, parseImageUrls(a.getImageUrls())));
+        Page<EscrowApplication> page = applicationRepository.findMyApplications(userId, pageable);
+        if (page.isEmpty()) {
+            return page.map(a -> EscrowApplicationResult.from(a, parseImageUrls(a.getImageUrls())));
+        }
+        java.util.List<Long> appIds = page.getContent().stream().map(EscrowApplication::getId).toList();
+        java.util.Map<Long, Long> deliveryMap = new java.util.HashMap<>();
+        for (var d : deliveryRepository.findByEscrowApplicationIdIn(appIds)) {
+            deliveryMap.put(d.getEscrowApplicationId(), d.getId());
+        }
+        return page.map(a -> EscrowApplicationResult.from(
+                a, parseImageUrls(a.getImageUrls()), deliveryMap.get(a.getId())));
     }
 
     public EscrowApplicationResult getById(Long id, Long requesterId) {

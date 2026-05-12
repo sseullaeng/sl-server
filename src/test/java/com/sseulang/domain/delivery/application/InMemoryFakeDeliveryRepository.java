@@ -106,4 +106,12 @@ public class InMemoryFakeDeliveryRepository implements DeliveryRepository {
                 .filter(d -> escrowApplicationId.equals(d.getEscrowApplicationId()))
                 .findFirst();
     }
+
+    @Override
+    public java.util.List<DeliveryRequest> findByEscrowApplicationIdIn(java.util.Collection<Long> escrowApplicationIds) {
+        if (escrowApplicationIds == null || escrowApplicationIds.isEmpty()) return java.util.List.of();
+        return store.values().stream()
+                .filter(d -> d.getEscrowApplicationId() != null && escrowApplicationIds.contains(d.getEscrowApplicationId()))
+                .toList();
+    }
 }

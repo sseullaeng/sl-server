@@ -39,4 +39,6 @@ public interface DeliveryRepository {
 
     
     Optional<DeliveryRequest> findByEscrowApplicationId(Long escrowApplicationId);
+
+    java.util.List<DeliveryRequest> findByEscrowApplicationIdIn(java.util.Collection<Long> escrowApplicationIds);
 }
