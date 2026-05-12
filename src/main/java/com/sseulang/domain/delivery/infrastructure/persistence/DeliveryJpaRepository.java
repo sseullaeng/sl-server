@@ -84,4 +84,6 @@ interface DeliveryJpaRepository extends JpaRepository<DeliveryRequest, Long> {
     Long sumSettledFeeJpql();
 
     java.util.Optional<DeliveryRequest> findByEscrowApplicationId(Long escrowApplicationId);
+
+    java.util.List<DeliveryRequest> findByEscrowApplicationIdIn(java.util.Collection<Long> escrowApplicationIds);
 }

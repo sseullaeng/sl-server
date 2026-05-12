@@ -71,4 +71,10 @@ public class DeliveryRepositoryImpl implements DeliveryRepository {
     public Optional<DeliveryRequest> findByEscrowApplicationId(Long escrowApplicationId) {
         return jpa.findByEscrowApplicationId(escrowApplicationId);
     }
+
+    @Override
+    public java.util.List<DeliveryRequest> findByEscrowApplicationIdIn(java.util.Collection<Long> escrowApplicationIds) {
+        if (escrowApplicationIds == null || escrowApplicationIds.isEmpty()) return java.util.List.of();
+        return jpa.findByEscrowApplicationIdIn(escrowApplicationIds);
+    }
 }
