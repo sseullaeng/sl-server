@@ -75,17 +75,20 @@ public class ChatRoomApplicationService {
     public Page<ChatRoomResult> listMine(Long userId, Pageable pageable) {
         Page<ChatRoom> page = chatRoomRepository.findMine(userId, pageable);
         if (page.isEmpty()) {
-            return page.map(c -> ChatRoomResult.from(c, userId, null, null, null, null, null));
+            return page.map(c -> ChatRoomResult.from(c, userId, null, null, null, null, null, null));
         }
         Set<Long> opponentIds = new HashSet<>();
         Set<Long> itemIds = new HashSet<>();
+        Set<Long> roomIds = new HashSet<>();
         for (ChatRoom c : page.getContent()) {
             opponentIds.add(userId.equals(c.getUser1Id()) ? c.getUser2Id() : c.getUser1Id());
             itemIds.add(c.getItemId());
+            roomIds.add(c.getId());
         }
         Map<Long, UserView.UserProjection> userMap = userView.findByIds(opponentIds);
         Map<Long, ItemView.ItemProjection> itemMap = itemView.findByIds(itemIds);
-        return page.map(c -> enrichWithMaps(c, userId, userMap, itemMap));
+        Map<Long, ChatRoomResult.SystemCard> cardMap = loadCards(roomIds);
+        return page.map(c -> enrichWithMaps(c, userId, userMap, itemMap, cardMap));
     }
 
     public ChatRoomResult getOne(Long id, Long requesterId) {
@@ -94,22 +97,7 @@ public class ChatRoomApplicationService {
         if (!room.isParticipant(requesterId)) {
             throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
         }
-        ChatRoomResult base = enrichOne(room, requesterId);
-        
-        ChatRoomResult.SystemCard card = chatRoomCardRepository.findByChatRoomId(id)
-                .map(ChatRoomResult.SystemCard::from)
-                .orElse(null);
-        return new ChatRoomResult(
-                base.id(), base.itemId(),
-                base.user1Id(), base.user2Id(),
-                base.user1Unread(), base.user2Unread(),
-                base.opponentId(), base.opponentNickname(), base.opponentProfileImage(), base.myUnread(),
-                base.itemTitle(), base.itemThumbnailUrl(), base.isSeller(),
-                base.iLeft(), base.opponentLeft(),
-                base.lastMessage(), base.lastMessageAt(),
-                base.active(), base.createdAt(), base.updatedAt(),
-                card
-        );
+        return enrichOne(room, requesterId);
     }
 
     
@@ -231,25 +219,38 @@ public class ChatRoomApplicationService {
         Long opponentId = viewerId.equals(room.getUser1Id()) ? room.getUser2Id() : room.getUser1Id();
         Map<Long, UserView.UserProjection> userMap = userView.findByIds(List.of(opponentId));
         Map<Long, ItemView.ItemProjection> itemMap = itemView.findByIds(List.of(room.getItemId()));
-        return enrichWithMaps(room, viewerId, userMap, itemMap);
+        Map<Long, ChatRoomResult.SystemCard> cardMap = loadCards(List.of(room.getId()));
+        return enrichWithMaps(room, viewerId, userMap, itemMap, cardMap);
+    }
+
+    private Map<Long, ChatRoomResult.SystemCard> loadCards(java.util.Collection<Long> roomIds) {
+        if (roomIds == null || roomIds.isEmpty()) return Map.of();
+        Map<Long, ChatRoomResult.SystemCard> map = new java.util.HashMap<>();
+        for (var c : chatRoomCardRepository.findByChatRoomIdIn(roomIds)) {
+            map.put(c.getChatRoomId(), ChatRoomResult.SystemCard.from(c));
+        }
+        return map;
     }
 
     private static ChatRoomResult enrichWithMaps(
             ChatRoom c,
             Long viewerId,
             Map<Long, UserView.UserProjection> userMap,
-            Map<Long, ItemView.ItemProjection> itemMap
+            Map<Long, ItemView.ItemProjection> itemMap,
+            Map<Long, ChatRoomResult.SystemCard> cardMap
     ) {
         Long opponentId = viewerId.equals(c.getUser1Id()) ? c.getUser2Id() : c.getUser1Id();
         UserView.UserProjection u = userMap.get(opponentId);
         ItemView.ItemProjection i = itemMap.get(c.getItemId());
+        ChatRoomResult.SystemCard card = cardMap != null ? cardMap.get(c.getId()) : null;
         return ChatRoomResult.from(
                 c, viewerId,
                 u != null ? u.nickname() : null,
                 u != null ? u.profileImage() : null,
                 i != null ? i.title() : null,
                 i != null ? i.thumbnailUrl() : null,
-                i != null ? i.sellerId() : null
+                i != null ? i.sellerId() : null,
+                card
         );
     }
 
