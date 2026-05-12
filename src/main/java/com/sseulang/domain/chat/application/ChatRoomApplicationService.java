@@ -243,7 +243,7 @@ public class ChatRoomApplicationService {
             if (base == null) continue;
             var e = escrowMap.get(roomId);
             if (e != null) {
-                map.put(roomId, base.withEscrow(e.escrowApplicationId(), e.status(), e.deliveryId()));
+                map.put(roomId, base.withEscrow(e.escrowApplicationId(), e.status(), e.deliveryId(), e.transactionId()));
                 continue;
             }
             var t = txMap.get(roomId);

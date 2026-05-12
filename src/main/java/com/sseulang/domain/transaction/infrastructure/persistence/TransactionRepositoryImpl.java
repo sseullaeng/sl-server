@@ -46,6 +46,18 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public Optional<Transaction> findByEscrowApplicationId(Long escrowApplicationId) {
+        if (escrowApplicationId == null) return Optional.empty();
+        return jpa.findByEscrowApplicationId(escrowApplicationId);
+    }
+
+    @Override
+    public List<Transaction> findByEscrowApplicationIdIn(java.util.Collection<Long> escrowApplicationIds) {
+        if (escrowApplicationIds == null || escrowApplicationIds.isEmpty()) return List.of();
+        return jpa.findByEscrowApplicationIdIn(escrowApplicationIds);
+    }
+
+    @Override
     public Optional<Transaction> findLatestNonCanceledByChatRoomId(Long chatRoomId) {
         if (chatRoomId == null) return Optional.empty();
         List<Transaction> rows = jpa.findLatestNonCanceledByChatRoomIdJpql(

@@ -33,6 +33,11 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
             """)
     boolean existsActiveByChatRoomIdJpql(@Param("chatRoomId") Long chatRoomId);
 
+    // 라운드 12 — 거래대행 paired Transaction (1:1).
+    Optional<Transaction> findByEscrowApplicationId(Long escrowApplicationId);
+
+    List<Transaction> findByEscrowApplicationIdIn(java.util.Collection<Long> escrowApplicationIds);
+
     // 라운드 12 — 채팅방 카드용. 비취소 최신 1건 (id desc).
     @Query("""
             SELECT t FROM Transaction t

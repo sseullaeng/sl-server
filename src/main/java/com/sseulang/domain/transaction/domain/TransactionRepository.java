@@ -22,6 +22,11 @@ public interface TransactionRepository {
 
     boolean existsActiveByChatRoomId(Long chatRoomId);
 
+    // 라운드 12 — 거래대행 paired 매핑 (1:1, UNIQUE).
+    Optional<Transaction> findByEscrowApplicationId(Long escrowApplicationId);
+
+    java.util.List<Transaction> findByEscrowApplicationIdIn(java.util.Collection<Long> escrowApplicationIds);
+
     // 라운드 12 — 채팅방 카드용. 비취소 최신 1건 (취소 제외, 거래완료까지 포함).
     Optional<Transaction> findLatestNonCanceledByChatRoomId(Long chatRoomId);
 

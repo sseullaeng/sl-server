@@ -59,6 +59,7 @@ public class EscrowApplicationService {
     private final ApplicationEventPublisher eventPublisher;
     private final com.sseulang.domain.chat.application.ChatRoomApplicationService chatRoomApplicationService;
     private final com.sseulang.domain.item.application.ItemApplicationService itemApplicationService;
+    private final com.sseulang.domain.transaction.application.TransactionApplicationService transactionApplicationService;
     private final int linkExpiryHours;
 
     public EscrowApplicationService(
@@ -71,6 +72,7 @@ public class EscrowApplicationService {
             ApplicationEventPublisher eventPublisher,
             com.sseulang.domain.chat.application.ChatRoomApplicationService chatRoomApplicationService,
             com.sseulang.domain.item.application.ItemApplicationService itemApplicationService,
+            com.sseulang.domain.transaction.application.TransactionApplicationService transactionApplicationService,
             @Value("${app.escrow.link.expiry-hours:24}") int linkExpiryHours
     ) {
         this.linkRepository = linkRepository;
@@ -82,6 +84,7 @@ public class EscrowApplicationService {
         this.eventPublisher = eventPublisher;
         this.chatRoomApplicationService = chatRoomApplicationService;
         this.itemApplicationService = itemApplicationService;
+        this.transactionApplicationService = transactionApplicationService;
         this.linkExpiryHours = linkExpiryHours;
     }
 
@@ -789,6 +792,15 @@ public class EscrowApplicationService {
             );
         }
         app.markSettled();
+        // 라운드 12 — paired Transaction 자동 생성. 어드민/리뷰가 직거래와 동일 모델로 통합.
+        transactionApplicationService.createFromEscrow(
+                app.getId(),
+                null,            // 거래대행은 Item 미연결 (INTERNAL 도 chatRoom.itemId 와 별개 트랙)
+                app.getSellerId(), app.getBuyerId(),
+                app.getItemPrice(),
+                app.getChatRoomId(),
+                app.getSettledAt() != null ? app.getSettledAt() : java.time.LocalDateTime.now()
+        );
     }
 
     

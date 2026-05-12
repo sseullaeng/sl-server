@@ -68,10 +68,12 @@ class EscrowApplicationServiceTest {
                 mock(com.sseulang.domain.chat.application.ChatRoomApplicationService.class);
         com.sseulang.domain.item.application.ItemApplicationService itemAppService =
                 mock(com.sseulang.domain.item.application.ItemApplicationService.class);
+        com.sseulang.domain.transaction.application.TransactionApplicationService txAppService =
+                mock(com.sseulang.domain.transaction.application.TransactionApplicationService.class);
         service = new EscrowApplicationService(
                 linkRepo, appRepo, settingsRepo,
                 userService, pointService, deliveryRepo, eventPublisher,
-                chatRoomService, itemAppService,
+                chatRoomService, itemAppService, txAppService,
                 24
         );
     }

@@ -60,9 +60,9 @@ public record ChatRoomResult(
                     txId, status, null, null, null);
         }
 
-        public SystemCard withEscrow(Long escrowId, String status, Long deliveryId) {
+        public SystemCard withEscrow(Long escrowId, String status, Long deliveryId, Long pairedTransactionId) {
             return new SystemCard("EscrowApplication", tradeMode, itemId, itemTitle, itemThumbnailUrl, price,
-                    null, null, escrowId, status, deliveryId);
+                    pairedTransactionId, status, escrowId, status, deliveryId);
         }
     }
     

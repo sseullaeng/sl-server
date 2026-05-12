@@ -28,8 +28,13 @@ public class Transaction extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "item_id", nullable = false)
+    // 라운드 12 — 거래대행 paired Transaction 은 Item 없을 수 있음(EXTERNAL).
+    @Column(name = "item_id")
     private Long itemId;
+
+    // 라운드 12 — 거래대행 paired Transaction 의 1:1 역참조. UNIQUE 가드로 중복 paired 방지.
+    @Column(name = "escrow_application_id", updatable = false)
+    private Long escrowApplicationId;
 
     @Column(name = "seller_id", nullable = false)
     private Long sellerId;
@@ -103,6 +108,7 @@ public class Transaction extends BaseEntity {
         if (itemId == null || itemId <= 0) {
             throw new IllegalArgumentException("itemId 는 양수여야 합니다");
         }
+        // 직거래는 Item 필수. paired-from-escrow 는 createFromEscrow 팩토리 사용.
         if (sellerId == null || sellerId <= 0) {
             throw new IllegalArgumentException("sellerId 는 양수여야 합니다");
         }
@@ -193,6 +199,51 @@ public class Transaction extends BaseEntity {
         this.receiveConfirmedAt = now;
         this.completedAt = now;
         this.status = TransactionStatus.거래완료;
+    }
+
+    // 라운드 12 — 거래대행 정산 시점에 paired Transaction 자동 생성.
+    // tradeType 매핑: itemPrice==0(나눔) → 나눔, 그 외 → 판매. (대여는 거래대행 흐름에 안 들어옴)
+    // Item 은 INTERNAL escrow 면 linkedItem, EXTERNAL 이면 null.
+    public static Transaction createFromEscrow(
+            Long escrowApplicationId,
+            Long itemId,
+            Long sellerId, Long buyerId,
+            long itemPrice,
+            Long chatRoomId,
+            LocalDateTime settledAt
+    ) {
+        if (escrowApplicationId == null || escrowApplicationId <= 0) {
+            throw new IllegalArgumentException("escrowApplicationId 는 양수여야 합니다");
+        }
+        if (sellerId == null || sellerId <= 0 || buyerId == null || buyerId <= 0) {
+            throw new IllegalArgumentException("seller/buyerId 양수 필수");
+        }
+        if (sellerId.equals(buyerId)) {
+            throw new IllegalArgumentException("seller 와 buyer 는 같을 수 없습니다");
+        }
+        if (itemPrice < 0) {
+            throw new IllegalArgumentException("itemPrice 는 0 이상이어야 합니다");
+        }
+        if (settledAt == null) {
+            throw new IllegalArgumentException("settledAt 필수");
+        }
+        Transaction t = new Transaction();
+        t.escrowApplicationId = escrowApplicationId;
+        t.itemId = itemId;   // nullable
+        t.sellerId = sellerId;
+        t.buyerId = buyerId;
+        t.tradeType = itemPrice == 0 ? TradeType.나눔 : TradeType.판매;
+        t.price = itemPrice;
+        t.deposit = null;
+        t.rentalStart = null;
+        t.rentalEnd = null;
+        t.chatRoomId = chatRoomId;
+        t.status = TransactionStatus.거래완료;
+        t.reservedAt = settledAt;
+        t.handoverConfirmedAt = settledAt;
+        t.receiveConfirmedAt = settledAt;
+        t.completedAt = settledAt;
+        return t;
     }
 
     public void cancel(LocalDateTime now, String reason) {

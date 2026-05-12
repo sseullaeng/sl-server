@@ -8,5 +8,6 @@ public interface EscrowApplicationView {
 
     Map<Long, EscrowApplicationProjection> findActiveByChatRoomIds(Collection<Long> chatRoomIds);
 
-    record EscrowApplicationProjection(Long escrowApplicationId, String status, Long deliveryId) { }
+    // 라운드 12 — 거래대행 완료 시 paired Transaction 생성. card 에서 리뷰용으로 transactionId 함께 노출.
+    record EscrowApplicationProjection(Long escrowApplicationId, String status, Long deliveryId, Long transactionId) { }
 }
