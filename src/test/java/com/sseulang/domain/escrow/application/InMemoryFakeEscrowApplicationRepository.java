@@ -81,4 +81,24 @@ public class InMemoryFakeEscrowApplicationRepository implements EscrowApplicatio
                 .filter(a -> a.getStatus() != EscrowApplicationStatus.완료 && a.getStatus() != EscrowApplicationStatus.취소)
                 .count();
     }
+
+    @Override
+    public java.util.Optional<com.sseulang.domain.escrow.domain.EscrowApplication> findLatestNonCanceledByChatRoomId(Long chatRoomId) {
+        if (chatRoomId == null) return java.util.Optional.empty();
+        return store.values().stream()
+                .filter(a -> chatRoomId.equals(a.getChatRoomId()) && a.getStatus() != EscrowApplicationStatus.취소)
+                .max(java.util.Comparator.comparing(com.sseulang.domain.escrow.domain.EscrowApplication::getId));
+    }
+
+    @Override
+    public java.util.List<com.sseulang.domain.escrow.domain.EscrowApplication> findLatestNonCanceledByChatRoomIdIn(java.util.Collection<Long> chatRoomIds) {
+        if (chatRoomIds == null || chatRoomIds.isEmpty()) return java.util.List.of();
+        java.util.Map<Long, com.sseulang.domain.escrow.domain.EscrowApplication> latest = new java.util.LinkedHashMap<>();
+        store.values().stream()
+                .filter(a -> a.getChatRoomId() != null && chatRoomIds.contains(a.getChatRoomId())
+                        && a.getStatus() != EscrowApplicationStatus.취소)
+                .sorted(java.util.Comparator.comparing(com.sseulang.domain.escrow.domain.EscrowApplication::getId).reversed())
+                .forEach(a -> latest.putIfAbsent(a.getChatRoomId(), a));
+        return new java.util.ArrayList<>(latest.values());
+    }
 }

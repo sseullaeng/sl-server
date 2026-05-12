@@ -46,6 +46,25 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public Optional<Transaction> findLatestNonCanceledByChatRoomId(Long chatRoomId) {
+        if (chatRoomId == null) return Optional.empty();
+        List<Transaction> rows = jpa.findLatestNonCanceledByChatRoomIdJpql(
+                chatRoomId, org.springframework.data.domain.PageRequest.of(0, 1));
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    @Override
+    public List<Transaction> findLatestNonCanceledByChatRoomIdIn(java.util.Collection<Long> chatRoomIds) {
+        if (chatRoomIds == null || chatRoomIds.isEmpty()) return List.of();
+        // 채팅방당 최신 1건만 — id desc 정렬 후 chatRoomId 첫 등장만 유지
+        List<Transaction> all = jpa.findNonCanceledByChatRoomIdInJpql(chatRoomIds);
+        all.sort(java.util.Comparator.comparing(Transaction::getId).reversed());
+        java.util.Map<Long, Transaction> latest = new java.util.LinkedHashMap<>();
+        for (Transaction t : all) latest.putIfAbsent(t.getChatRoomId(), t);
+        return new java.util.ArrayList<>(latest.values());
+    }
+
+    @Override
     public List<TransactionStatusCount> countGroupByStatus() {
         return jpa.countGroupByStatusJpql();
     }

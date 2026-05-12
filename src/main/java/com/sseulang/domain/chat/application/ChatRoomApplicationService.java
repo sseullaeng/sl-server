@@ -33,6 +33,8 @@ public class ChatRoomApplicationService {
     private final com.sseulang.domain.user.application.UserApplicationService userApplicationService;
     private final UserView userView;
     private final ItemView itemView;
+    private final com.sseulang.domain.chat.domain.TransactionView transactionView;
+    private final com.sseulang.domain.chat.domain.EscrowApplicationView escrowApplicationView;
 
     public ChatRoomApplicationService(
             ChatRoomRepository chatRoomRepository,
@@ -40,7 +42,9 @@ public class ChatRoomApplicationService {
             ItemApplicationService itemApplicationService,
             com.sseulang.domain.user.application.UserApplicationService userApplicationService,
             UserView userView,
-            ItemView itemView
+            ItemView itemView,
+            com.sseulang.domain.chat.domain.TransactionView transactionView,
+            com.sseulang.domain.chat.domain.EscrowApplicationView escrowApplicationView
     ) {
         this.chatRoomRepository = chatRoomRepository;
         this.chatRoomCardRepository = chatRoomCardRepository;
@@ -48,6 +52,8 @@ public class ChatRoomApplicationService {
         this.userApplicationService = userApplicationService;
         this.userView = userView;
         this.itemView = itemView;
+        this.transactionView = transactionView;
+        this.escrowApplicationView = escrowApplicationView;
     }
 
     
@@ -228,6 +234,22 @@ public class ChatRoomApplicationService {
         Map<Long, ChatRoomResult.SystemCard> map = new java.util.HashMap<>();
         for (var c : chatRoomCardRepository.findByChatRoomIdIn(roomIds)) {
             map.put(c.getChatRoomId(), ChatRoomResult.SystemCard.from(c));
+        }
+        // 활성 거래 / 거래대행 동적 룩업해서 카드에 합성. 거래대행 우선 (INTERNAL 거래대행이면 직거래 Tx 없음).
+        var escrowMap = escrowApplicationView.findActiveByChatRoomIds(roomIds);
+        var txMap = transactionView.findActiveByChatRoomIds(roomIds);
+        for (Long roomId : roomIds) {
+            ChatRoomResult.SystemCard base = map.get(roomId);
+            if (base == null) continue;
+            var e = escrowMap.get(roomId);
+            if (e != null) {
+                map.put(roomId, base.withEscrow(e.escrowApplicationId(), e.status(), e.deliveryId()));
+                continue;
+            }
+            var t = txMap.get(roomId);
+            if (t != null) {
+                map.put(roomId, base.withTransaction(t.transactionId(), t.status()));
+            }
         }
         return map;
     }

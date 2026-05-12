@@ -53,7 +53,9 @@ class ReviewApplicationServiceTest {
                 new com.sseulang.domain.chat.application.ChatRoomApplicationService(
                         new com.sseulang.domain.chat.application.InMemoryFakeChatRoomRepository(),
                         new com.sseulang.domain.chat.application.InMemoryFakeChatRoomCardRepository(),
-                        itemSvc, userSvc, null, null);
+                        itemSvc, userSvc, null, null,
+                        new com.sseulang.domain.chat.application.NoOpTransactionView(),
+                        new com.sseulang.domain.chat.application.NoOpEscrowApplicationView());
         TransactionApplicationService txSvc = new TransactionApplicationService(
                 txRepo, itemSvc, pointSvc, userSvc, chatSvc,
                 (org.springframework.context.ApplicationEventPublisher) event -> {},

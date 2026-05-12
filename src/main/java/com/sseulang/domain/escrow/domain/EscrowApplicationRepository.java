@@ -33,4 +33,9 @@ public interface EscrowApplicationRepository {
 
     
     long countInProgress();
+
+    // 라운드 12 — 채팅방 카드용. INTERNAL 거래의 비취소 최신 1건.
+    Optional<EscrowApplication> findLatestNonCanceledByChatRoomId(Long chatRoomId);
+
+    java.util.List<EscrowApplication> findLatestNonCanceledByChatRoomIdIn(java.util.Collection<Long> chatRoomIds);
 }

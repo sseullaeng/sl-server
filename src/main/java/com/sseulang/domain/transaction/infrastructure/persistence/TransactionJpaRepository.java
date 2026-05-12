@@ -33,6 +33,22 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
             """)
     boolean existsActiveByChatRoomIdJpql(@Param("chatRoomId") Long chatRoomId);
 
+    // 라운드 12 — 채팅방 카드용. 비취소 최신 1건 (id desc).
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE t.chatRoomId = :chatRoomId
+               AND t.status <> com.sseulang.domain.transaction.domain.TransactionStatus.취소
+             ORDER BY t.id DESC
+            """)
+    List<Transaction> findLatestNonCanceledByChatRoomIdJpql(@Param("chatRoomId") Long chatRoomId, Pageable pageable);
+
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE t.chatRoomId IN :chatRoomIds
+               AND t.status <> com.sseulang.domain.transaction.domain.TransactionStatus.취소
+            """)
+    List<Transaction> findNonCanceledByChatRoomIdInJpql(@Param("chatRoomIds") java.util.Collection<Long> chatRoomIds);
+
     
 
     @Query("""
