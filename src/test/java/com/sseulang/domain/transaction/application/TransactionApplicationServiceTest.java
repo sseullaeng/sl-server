@@ -113,8 +113,9 @@ class TransactionApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("create dual item 대여 PERCENT deposit_대여가 기준 환산 금액 저장")
+    @DisplayName("create dual item 대여 PERCENT deposit_물품가(salePrice) 기준 환산")
     void create_dual_item_대여_percent_deposit_환산() {
+        // 라운드 12 — salePrice 기준 환산. 120_000 × 30% = 36_000.
         Item rental = itemRepo.save(Item.createMulti(
                 SELLER, null, "대여물건", "설명", java.util.EnumSet.of(TradeType.판매, TradeType.대여),
                 120_000L, 99_997L, 30L, DepositType.PERCENT, RentalUnit.일, "서울"
@@ -131,7 +132,7 @@ class TransactionApplicationServiceTest {
 
         TransactionResult r = service.getById(txId, BUYER);
         assertThat(r.price()).isEqualTo(99_997L);
-        assertThat(r.deposit()).isEqualTo(30_000L);
+        assertThat(r.deposit()).isEqualTo(36_000L);
     }
 
     @Test
@@ -171,35 +172,33 @@ class TransactionApplicationServiceTest {
     // ───────── reserve (hold 흐름) ─────────
 
     @Test
-    @DisplayName("reserve 정상_buyer balance↓ + hold↑ + escrowHoldAmount + 거래보관 history + ReservedEvent")
+    @DisplayName("reserve 정상_Item 예약 + escrowHoldAmount=0 + ReservedEvent (라운드 12 — 직거래 hold 제거)")
     void reserve_정상_hold() {
         Long txId = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
-        userRepo.creditPointBalance(BUYER, 50_000L);  // 잔액 충전
 
         service.reserve(txId, SELLER);
 
         TransactionResult r = service.getById(txId, SELLER);
         assertThat(r.status()).isEqualTo(TransactionStatus.예약);
-        assertThat(r.escrowHoldAmount()).isEqualTo(50_000L);
+        assertThat(r.escrowHoldAmount()).isZero();   // 직거래 = 사이트 포인트 거래 X
         assertThat(itemRepo.findById(itemId).orElseThrow().getStatus()).isEqualTo(ItemStatus.예약);
         assertThat(userRepo.findPointBalance(BUYER)).isZero();
-        assertThat(userRepo.findPointHold(BUYER)).isEqualTo(50_000L);
-        assertThat(pointHistoryRepo.size()).isEqualTo(1);  // 거래보관 1건
+        assertThat(userRepo.findPointHold(BUYER)).isZero();
+        assertThat(pointHistoryRepo.size()).isZero();  // history 안 남음
         assertThat(publishedEvents)
                 .hasSize(1)
                 .first().isInstanceOf(com.sseulang.domain.transaction.domain.event.TransactionReservedEvent.class);
     }
 
     @Test
-    @DisplayName("reserve 잔액 부족_INSUFFICIENT_POINT")
+    @DisplayName("reserve 잔액 0_정상 동작 (라운드 12 — hold 없음)")
     void reserve_잔액부족_거부() {
         Long txId = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
-        userRepo.creditPointBalance(BUYER, 10_000L);  // 부족
+        // 잔액 0 이어도 hold 가 없으니 정상 reserve.
+        service.reserve(txId, SELLER);
 
-        assertThatThrownBy(() -> service.reserve(txId, SELLER))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.INSUFFICIENT_POINT);
+        assertThat(service.getById(txId, SELLER).status()).isEqualTo(TransactionStatus.예약);
+        assertThat(userRepo.findPointBalance(BUYER)).isZero();
     }
 
     @Test
@@ -251,7 +250,7 @@ class TransactionApplicationServiceTest {
     // ───────── markHandover (라운드 11) ─────────
 
     @Test
-    @DisplayName("markHandover seller 정상_status=인계완료 + HandoverEvent")
+    @DisplayName("markHandover seller 정상_status=인계완료 + HandoverEvent (라운드 12 — hold 없음)")
     void handover_정상() {
         Long txId = reservedTxByBuyer();
 
@@ -260,9 +259,9 @@ class TransactionApplicationServiceTest {
         TransactionResult r = service.getById(txId, SELLER);
         assertThat(r.status()).isEqualTo(TransactionStatus.인계완료);
         assertThat(r.handoverConfirmedAt()).isNotNull();
-        assertThat(itemRepo.findById(itemId).orElseThrow().getStatus()).isEqualTo(ItemStatus.예약);  // 아직 sold X
-        assertThat(userRepo.findPointBalance(BUYER)).isZero();  // hold 유지
-        assertThat(userRepo.findPointHold(BUYER)).isEqualTo(50_000L);
+        assertThat(itemRepo.findById(itemId).orElseThrow().getStatus()).isEqualTo(ItemStatus.예약);
+        assertThat(userRepo.findPointBalance(BUYER)).isZero();
+        assertThat(userRepo.findPointHold(BUYER)).isZero();
         assertThat(eventTypes()).contains("TransactionHandoverConfirmedEvent");
     }
 
@@ -293,7 +292,7 @@ class TransactionApplicationServiceTest {
     // ───────── markReceived (라운드 11) ─────────
 
     @Test
-    @DisplayName("markReceived buyer 정상_정산_buyer hold↓ + seller balance↑ + 판매정산 history + ReceiveEvent")
+    @DisplayName("markReceived buyer 정상_단순 마킹 + Item 거래완료 + ReceiveEvent (라운드 12 — 정산 없음)")
     void receive_정상() {
         Long txId = reservedTxByBuyer();
         service.markHandover(txId, SELLER);
@@ -305,11 +304,11 @@ class TransactionApplicationServiceTest {
         assertThat(r.receiveConfirmedAt()).isNotNull();
         assertThat(r.completedAt()).isEqualTo(r.receiveConfirmedAt());
         assertThat(itemRepo.findById(itemId).orElseThrow().getStatus()).isEqualTo(ItemStatus.거래완료);
+        // 직거래 = 사이트 포인트 거래 X
         assertThat(userRepo.findPointBalance(BUYER)).isZero();
-        assertThat(userRepo.findPointHold(BUYER)).isZero();  // 해제됨
-        assertThat(userRepo.findPointBalance(SELLER)).isEqualTo(50_000L);
-        // history: 거래보관(buyer, reserve) + 판매정산(seller, receive) = 2건
-        assertThat(pointHistoryRepo.size()).isEqualTo(2);
+        assertThat(userRepo.findPointHold(BUYER)).isZero();
+        assertThat(userRepo.findPointBalance(SELLER)).isZero();
+        assertThat(pointHistoryRepo.size()).isZero();
         assertThat(eventTypes()).contains("TransactionReceiveConfirmedEvent");
     }
 
@@ -367,21 +366,18 @@ class TransactionApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("cancel 예약 상태_Item 복원 + buyer hold 환불 + 거래환불 history + CancelEvent")
+    @DisplayName("cancel 예약 상태_Item 복원 + CancelEvent (라운드 12 — 환불 없음)")
     void cancel_예약_환불() {
         Long txId = reservedTxByBuyer();
-        int historyBefore = pointHistoryRepo.size();
 
         service.cancel(txId, SELLER, "물건 파손");
 
         assertThat(service.getById(txId, SELLER).status()).isEqualTo(TransactionStatus.취소);
         assertThat(itemRepo.findById(itemId).orElseThrow().getStatus()).isEqualTo(ItemStatus.판매중);
-        assertThat(userRepo.findPointBalance(BUYER)).isEqualTo(50_000L);  // 환불
+        // 직거래 = 사이트 포인트 거래 X
+        assertThat(userRepo.findPointBalance(BUYER)).isZero();
         assertThat(userRepo.findPointHold(BUYER)).isZero();
-        assertThat(pointHistoryRepo.size()).isEqualTo(historyBefore + 1);
-        assertThat(pointHistoryRepo.findByUserIdOrderByCreatedAtDesc(BUYER))
-                .extracting("pointType")
-                .contains(PointHistoryType.거래보관, PointHistoryType.거래환불);
+        assertThat(pointHistoryRepo.size()).isZero();
         assertThat(eventTypes()).contains("TransactionCanceledEvent");
     }
 
@@ -426,13 +422,12 @@ class TransactionApplicationServiceTest {
                 SocialProvider.KAKAO, "k-buyer2-" + System.nanoTime(),
                 new Email("buyer2-" + System.nanoTime() + "@x.com"), "buyer2", null
         )).getId();
-        userRepo.creditPointBalance(BUYER, 50_000L);
-        userRepo.creditPointBalance(buyer2, 50_000L);
 
         Long tx1 = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
         service.reserve(tx1, SELLER);
         service.cancel(tx1, SELLER, "재예약 가능");
-        assertThat(userRepo.findPointBalance(BUYER)).isEqualTo(50_000L);  // 환불 OK
+        // 라운드 12 — 직거래 hold 없음. cancel 후 잔액 변동 X.
+        assertThat(userRepo.findPointBalance(BUYER)).isZero();
 
         // 라운드 12 — buyer2 와 SELLER 의 새 chatRoom 필요 (한 채팅방=1 active 정책 + 거래 시작은 판매자만).
         com.sseulang.domain.chat.domain.ChatRoom room2 =
@@ -446,9 +441,8 @@ class TransactionApplicationServiceTest {
 
     // ───────── helpers ─────────
 
-    /** buyer 충전 + 거래 생성 + reserve 까지 진행한 trasaction id 반환. */
+    /** 거래 생성 + reserve 까지 진행한 transaction id 반환. 라운드 12 — 직거래 hold 제거 후 잔액 충전 불필요. */
     private Long reservedTxByBuyer() {
-        userRepo.creditPointBalance(BUYER, 50_000L);
         Long txId = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
         service.reserve(txId, SELLER);
         return txId;

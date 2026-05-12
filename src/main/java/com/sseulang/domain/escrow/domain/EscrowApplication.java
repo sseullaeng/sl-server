@@ -172,6 +172,10 @@ public class EscrowApplication extends BaseEntity {
     @Column(name = "image_urls", columnDefinition = "TEXT", updatable = false)
     private String imageUrls;
 
+    // 라운드 12 — seller 가 [물품 인계] 확인한 시점. 상태 머신 영향 X, UX 용 audit.
+    @Column(name = "handover_confirmed_by_seller_at")
+    private LocalDateTime handoverConfirmedBySellerAt;
+
     
 
     public static EscrowApplication create(
@@ -368,6 +372,20 @@ public class EscrowApplication extends BaseEntity {
         if (receiverPhone != null && !receiverPhone.isBlank()) {
             this.receiverPhone = receiverPhone;
         }
+    }
+
+    // 라운드 12 — seller 가 [물품 인계] 확인. 진행중 상태에서만 호출. 상태 영향 X, 타임스탬프 + 알림용.
+    public void confirmHandoverBySeller(Long sellerId) {
+        if (this.status != EscrowApplicationStatus.진행중) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (!this.sellerId.equals(sellerId)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
+        }
+        if (this.handoverConfirmedBySellerAt != null) {
+            return; // idempotent
+        }
+        this.handoverConfirmedBySellerAt = LocalDateTime.now();
     }
 
     public void patchBuyerInfo(

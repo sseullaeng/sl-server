@@ -60,10 +60,10 @@ public class TransactionController {
 
     
 
-    @Operation(summary = "거래 상태 전이 (예약 / 인계확인 / 인수확인 / 취소)",
-            description = "action 분기 — 예약: seller(잔액 부족 시 INSUFFICIENT_POINT), 인계확인: seller, "
-                    + "인수확인: buyer(자동 거래완료 + 정산), 취소: 양쪽(채팅중/예약 단계만). "
-                    + "동시 reserve 는 한 건만 성공(409 TRANSACTION_RESERVED_BY_OTHER).")
+    @Operation(summary = "거래 상태 전이 (예약 / 인계확인 / 인수확인 / 완료 / 취소)",
+            description = "action 분기 — 예약: seller, 인계확인: seller, 인수확인: buyer, "
+                    + "완료: seller (한 번에 거래완료, 라운드 12 단순화), 취소: 양쪽(채팅중/예약/인계완료 단계). "
+                    + "직거래는 사이트 포인트 거래 없음(외부 결제). 동시 reserve 는 한 건만 성공.")
     @PatchMapping("/{id}")
     public ApiResponse<Void> patch(
             @AuthenticationPrincipal Long requesterId,
@@ -76,6 +76,8 @@ public class TransactionController {
             transactionService.markHandover(id, requesterId);
         } else if (request.isReceive()) {
             transactionService.markReceived(id, requesterId);
+        } else if (request.isComplete()) {
+            transactionService.completeBySeller(id, requesterId);
         } else if (request.isCancel()) {
             transactionService.cancel(id, requesterId, request.cancelReason());
         } else {

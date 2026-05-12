@@ -7,5 +7,6 @@ public enum TransactionPatchAction {
     예약,
     인계확인,
     인수확인,
+    완료,
     취소
 }

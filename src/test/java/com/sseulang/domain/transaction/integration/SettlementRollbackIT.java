@@ -148,6 +148,7 @@ class SettlementRollbackIT {
     }
 
     @Test
+    @org.junit.jupiter.api.Disabled("라운드 12 — 직거래는 사이트 포인트 거래 없음. reserve 시 hold 안 함 → 잔액 부족 시나리오 자체가 무의미.")
     @DisplayName("라운드 11 — reserve 시 buyer 잔액 부족_INSUFFICIENT_POINT + Item/Tx/잔액/history 모두 원복")
     void reserve_hold_실패_롤백() {
         Long sellerId = txTemplate.execute(s -> persistUser("seller"));
