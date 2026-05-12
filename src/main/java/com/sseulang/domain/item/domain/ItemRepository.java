@@ -25,6 +25,8 @@ public interface ItemRepository {
 
     void delete(Item item);
 
+    void flush();
+
     
 
     int incrementWishlistCount(Long itemId);

@@ -93,6 +93,11 @@ public class InMemoryFakeItemRepository implements ItemRepository {
     }
 
     @Override
+    public void flush() {
+        // in-memory — no-op
+    }
+
+    @Override
     public int incrementWishlistCount(Long itemId) {
         Item item = store.get(itemId);
         if (item == null) return 0;
