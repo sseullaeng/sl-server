@@ -198,6 +198,7 @@ class EndToEndGuardScenariosIT {
     // ───────── 시나리오 2: 잔액 부족 정산 실패 ─────────
 
     @Test
+    @org.junit.jupiter.api.Disabled("라운드 12 — 직거래는 사이트 포인트 거래 없음. 예약 시 INSUFFICIENT_POINT 발생 안함.")
     @DisplayName("라운드 11 — buyer 충전 안 한 상태_예약 시점에 INSUFFICIENT_POINT + Item/Tx 모두 롤백")
     void scenario_잔액부족_롤백() throws Exception {
         // Seller — OAuth (verified=true). Item 등록.

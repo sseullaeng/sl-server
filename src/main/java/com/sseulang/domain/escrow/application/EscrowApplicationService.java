@@ -728,6 +728,14 @@ public class EscrowApplicationService {
     
     
     
+    // 라운드 12 — seller 가 [물품 인계] 확인. 상태 머신 영향 X, 타임스탬프 + buyer 알림.
+    @Transactional
+    public void confirmHandoverBySeller(Long applicationId, Long requesterId) {
+        EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        app.confirmHandoverBySeller(requesterId);
+    }
+
     @Transactional
     public void confirmReceipt(Long applicationId, Long requesterId) {
         EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)

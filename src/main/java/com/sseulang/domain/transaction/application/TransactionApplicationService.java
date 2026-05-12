@@ -119,25 +119,16 @@ public class TransactionApplicationService {
 
     
 
+    // 직거래는 사이트 포인트 거래 없음(외부 결제). reserve 는 Item 잠금 + 상태 마킹만.
     @Transactional
     public void reserve(Long transactionId, Long requesterId) {
         Transaction tx = findOrThrowForUpdate(transactionId);
         if (!tx.isSeller(requesterId)) {
             throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
         }
-        
         itemApplicationService.markItemAsReserved(tx.getItemId());
         LocalDateTime now = LocalDateTime.now(clock);
-        long holdAmount = tx.getPrice();
-        tx.markAsReserved(now, holdAmount);
-        if (holdAmount > 0) {
-            pointApplicationService.escrowHold(
-                    tx.getBuyerId(),
-                    holdAmount,
-                    tx.getId(),
-                    "거래 #" + tx.getId() + " 보관"
-            );
-        }
+        tx.markAsReserved(now, 0L);
         eventPublisher.publishEvent(new TransactionReservedEvent(
                 tx.getId(), tx.getBuyerId(), tx.getSellerId(), tx.getPrice()));
     }
@@ -166,26 +157,34 @@ public class TransactionApplicationService {
             throw new BusinessException(ErrorCode.TRANSACTION_RECEIVE_NOT_ALLOWED);
         }
         if (tx.getStatus() == TransactionStatus.거래완료) {
-            return;  
+            return;
         }
-        
         itemApplicationService.markItemAsSold(tx.getItemId());
-        long settleAmount = tx.getEscrowHoldAmount();
-        if (settleAmount > 0) {
-            pointApplicationService.escrowRelease(
-                    tx.getBuyerId(),
-                    tx.getSellerId(),
-                    settleAmount,
-                    tx.getId(),
-                    "거래 #" + tx.getId() + " 정산 수령"
-            );
-        }
         tx.markReceived(LocalDateTime.now(clock));
         eventPublisher.publishEvent(new TransactionReceiveConfirmedEvent(
-                tx.getId(), tx.getSellerId(), settleAmount));
+                tx.getId(), tx.getSellerId(), 0L));
     }
 
-    
+    // 라운드 12 — 판매자가 한 번에 거래완료. 직거래는 사이트 포인트 거래 없음.
+    @Transactional
+    public void completeBySeller(Long transactionId, Long requesterId) {
+        Transaction tx = findOrThrowForUpdate(transactionId);
+        if (!tx.isSeller(requesterId)) {
+            throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
+        }
+        if (tx.getStatus() == TransactionStatus.거래완료) {
+            return;
+        }
+        // Item 잠금 / 판매완료 전이
+        if (tx.getStatus() == TransactionStatus.채팅중) {
+            itemApplicationService.markItemAsReserved(tx.getItemId());
+        }
+        itemApplicationService.markItemAsSold(tx.getItemId());
+        tx.completeBySeller(LocalDateTime.now(clock));
+        eventPublisher.publishEvent(new TransactionReceiveConfirmedEvent(
+                tx.getId(), tx.getSellerId(), 0L));
+    }
+
 
     @Transactional
     public void cancel(Long transactionId, Long requesterId, String reason) {
@@ -193,23 +192,11 @@ public class TransactionApplicationService {
         if (!tx.isParticipant(requesterId)) {
             throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
         }
-        boolean wasReserved = tx.getStatus() == TransactionStatus.예약;
-        long holdAmount = tx.getEscrowHoldAmount();
-        
+        boolean wasReserved = tx.getStatus() == TransactionStatus.예약
+                || tx.getStatus() == TransactionStatus.인계완료;
         tx.cancel(LocalDateTime.now(clock), reason);
         if (wasReserved) {
-            
             itemApplicationService.restoreItemFromReserved(tx.getItemId());
-            if (holdAmount > 0) {
-                
-                
-                pointApplicationService.escrowRefund(
-                        tx.getBuyerId(),
-                        holdAmount,
-                        tx.getId(),
-                        "거래 #" + tx.getId() + " 취소 환불"
-                );
-            }
         }
         eventPublisher.publishEvent(new TransactionCanceledEvent(
                 tx.getId(), tx.getBuyerId(), tx.getSellerId(), requesterId));

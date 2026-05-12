@@ -223,6 +223,7 @@ class TransactionConcurrencyIT {
      * (WHERE point_balance >= :amount) 가 두 번째 호출을 INSUFFICIENT_POINT 로 차단.
      */
     @Test
+    @org.junit.jupiter.api.Disabled("라운드 12 — 직거래는 사이트 포인트 거래 없음. buyer hold race 시나리오 무의미.")
     @DisplayName("라운드 11 — 같은 buyer 두 거래 동시 reserve_잔액 한건만 충당_정확히 1건만 성공")
     void buyer_hold_race() throws Exception {
         // 별도 두 Item + 두 거래 (buyer 동일, 잔액 50000 한 건만 가능). 라운드 12 — 거래는 채팅방 안에서만 (판매자만).

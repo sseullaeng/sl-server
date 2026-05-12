@@ -210,4 +210,16 @@ public class EscrowController {
         service.confirmReceipt(id, userId);
         return ApiResponse.ok();
     }
+
+    @Operation(summary = "seller 물품 인계 확인 (라운드 12)",
+            description = "진행중 상태에서 seller 만 호출. 상태 머신 영향 X — UX 용 audit 타임스탬프. "
+                    + "에러: ESCROW_INVALID_STATE (진행중 외 상태), ESCROW_FORBIDDEN (seller 아님).")
+    @PostMapping("/applications/{id}/confirm-handover")
+    public ApiResponse<Void> confirmHandover(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        service.confirmHandoverBySeller(id, userId);
+        return ApiResponse.ok();
+    }
 }

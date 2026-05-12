@@ -424,7 +424,9 @@ public class Item extends BaseEntity {
             return null;
         }
         if (depositType == DepositType.PERCENT) {
-            return (long) Math.ceil(rentalPrice * deposit / 100.0);
+            // 라운드 12 — 물품 가격(salePrice) 기준. 판매 모드가 없으면 rentalPrice fallback.
+            long base = (salePrice != null) ? salePrice : rentalPrice;
+            return (long) Math.ceil(base * deposit / 100.0);
         }
         return deposit;
     }

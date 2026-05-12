@@ -25,6 +25,10 @@ public record TransactionPatchRequest(
         return action == TransactionPatchAction.인수확인;
     }
 
+    public boolean isComplete() {
+        return action == TransactionPatchAction.완료;
+    }
+
     public boolean isCancel() {
         return action == TransactionPatchAction.취소;
     }

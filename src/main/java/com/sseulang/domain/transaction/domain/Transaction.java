@@ -178,6 +178,23 @@ public class Transaction extends BaseEntity {
         this.completedAt = now;
     }
 
+    // 라운드 12 — 직거래 단순 완료. 사이트 포인트 거래 없음(외부 결제).
+    // 채팅중/예약/인계완료 어떤 상태에서든 거래완료로 전이. 판매자 호출 가정.
+    public void completeBySeller(LocalDateTime now) {
+        if (status == TransactionStatus.거래완료 || status == TransactionStatus.취소) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
+        }
+        if (this.reservedAt == null) {
+            this.reservedAt = now;
+        }
+        if (this.handoverConfirmedAt == null) {
+            this.handoverConfirmedAt = now;
+        }
+        this.receiveConfirmedAt = now;
+        this.completedAt = now;
+        this.status = TransactionStatus.거래완료;
+    }
+
     public void cancel(LocalDateTime now, String reason) {
         if (!status.canCancel()) {
             throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
