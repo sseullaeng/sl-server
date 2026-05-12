@@ -165,6 +165,24 @@ public class TransactionApplicationService {
                 tx.getId(), tx.getSellerId(), 0L));
     }
 
+    // 라운드 12 — 거래대행 정산 시 paired Transaction 자동 생성.
+    // 이미 paired Tx 있으면 (UNIQUE 가드) idempotent — 기존 id 반환.
+    @Transactional
+    public Long createFromEscrow(
+            Long escrowApplicationId,
+            Long itemId,
+            Long sellerId, Long buyerId,
+            long itemPrice,
+            Long chatRoomId,
+            LocalDateTime settledAt
+    ) {
+        return transactionRepository.findByEscrowApplicationId(escrowApplicationId)
+                .map(Transaction::getId)
+                .orElseGet(() -> transactionRepository.save(Transaction.createFromEscrow(
+                        escrowApplicationId, itemId, sellerId, buyerId, itemPrice, chatRoomId, settledAt
+                )).getId());
+    }
+
     // 라운드 12 — 판매자가 한 번에 거래완료. 직거래는 사이트 포인트 거래 없음.
     @Transactional
     public void completeBySeller(Long transactionId, Long requesterId) {

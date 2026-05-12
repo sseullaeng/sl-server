@@ -55,6 +55,22 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
     }
 
     @Override
+    public java.util.Optional<Transaction> findByEscrowApplicationId(Long escrowApplicationId) {
+        if (escrowApplicationId == null) return java.util.Optional.empty();
+        return store.values().stream()
+                .filter(t -> escrowApplicationId.equals(t.getEscrowApplicationId()))
+                .findFirst();
+    }
+
+    @Override
+    public java.util.List<Transaction> findByEscrowApplicationIdIn(java.util.Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) return java.util.List.of();
+        return store.values().stream()
+                .filter(t -> t.getEscrowApplicationId() != null && ids.contains(t.getEscrowApplicationId()))
+                .toList();
+    }
+
+    @Override
     public java.util.Optional<Transaction> findLatestNonCanceledByChatRoomId(Long chatRoomId) {
         if (chatRoomId == null) return java.util.Optional.empty();
         return store.values().stream()
