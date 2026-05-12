@@ -34,7 +34,7 @@ public enum Weight {
         return truck;
     }
 
-    @JsonCreator
+    @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
     public static Weight fromCode(String code) {
         for (Weight w : values()) if (w.code.equals(code)) return w;
         throw new IllegalArgumentException("Unknown Weight: " + code);
