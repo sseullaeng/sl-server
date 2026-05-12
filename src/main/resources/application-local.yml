@@ -98,3 +98,5 @@ app:
   # 로컬 smoke test 전용 인증 우회 — DevAuthController. prod 배포 시 절대 true 금지.
   dev-auth:
     enabled: true
+  delivery:
+    auto-accept-rider-id: ${APP_DELIVERY_AUTO_ACCEPT_RIDER_ID:0}

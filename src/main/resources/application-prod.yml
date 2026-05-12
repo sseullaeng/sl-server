@@ -90,8 +90,10 @@ app:
     # prod 는 SMTP 강제. SmtpEmailSender 만 활성화 — env 미주입 시 SmtpEmailSender 가 부팅에서 실패.
     smtp-enabled: ${APP_EMAIL_SMTP_ENABLED:true}
     from: ${MAIL_FROM:noreply@sseulang.test}
-    # 인증 메일 본문 클릭 URL prefix. 프론트 라우트 (`/auth/verify-email?token=...`).
     verification-url-base: ${APP_EMAIL_VERIFICATION_URL_BASE:https://sseulang.com/auth/verify-email}
+  delivery:
+    # 시연/QA 용 — 0 이거나 미설정이면 자동 매칭 X. 양수면 EscrowConfirmedEvent 발행 시 그 user 로 즉시 accept.
+    auto-accept-rider-id: ${APP_DELIVERY_AUTO_ACCEPT_RIDER_ID:0}
 
 # Swagger prod 노출 정책 — default 비활성. 외부 API 검수 / 응급 디버그 시에만 일시 true 로.
 # false 시 /swagger-ui.html, /v3/api-docs/** 가 404. Spring Security PUBLIC chain 도 막혀
