@@ -176,7 +176,7 @@ class EscrowFlowE2EIT {
     @DisplayName("Mode B INTERNAL feePayer=buyer e2e — buyer 잔액 변동 X + seller 정산 + rider 정산")
     void mode_b_internal_full_flow() {
         // 1) link 생성 (buyer initiator, feePayer=buyer)
-        EscrowLinkResult link = escrowService.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = escrowService.createLink(EscrowLinkCreateCommand.legacy(
                 buyerId, InitiatorRole.buyer, FeePayer.buyer, TradeMode.INTERNAL
         ));
 
@@ -235,7 +235,7 @@ class EscrowFlowE2EIT {
     @Test
     @DisplayName("createApplication race — 두 수신자 중 한 명만 성공")
     void claim_race() {
-        EscrowLinkResult link = escrowService.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = escrowService.createLink(EscrowLinkCreateCommand.legacy(
                 buyerId, InitiatorRole.buyer, FeePayer.buyer, TradeMode.INTERNAL
         ));
         // seller 가 첫 폼 제출

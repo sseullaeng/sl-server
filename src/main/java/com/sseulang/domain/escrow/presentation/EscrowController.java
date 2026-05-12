@@ -84,6 +84,19 @@ public class EscrowController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(result));
     }
 
+    @Operation(summary = "거래대행 by-link 신청 (분리 입력 흐름)",
+            description = "라운드 12 추가. 발급자가 link 발급 시 본인 영역(pickup+물품 / delivery+연락처)을 미리 입력한 경우, "
+                    + "수신자는 본인 영역만 채워서 신청. role=seller link → buyer 가 delivery+receiverPhone, "
+                    + "role=buyer link → seller 가 pickup+물품 정보. 양쪽 합쳐 application 생성 + ±10원 fee 검증.")
+    @PostMapping("/applications/by-link")
+    public ResponseEntity<ApiResponse<EscrowApplicationResult>> createByLinkApplication(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody com.sseulang.domain.escrow.presentation.dto.EscrowApplicationByLinkRequest request
+    ) {
+        EscrowApplicationResult result = service.createByLinkApplication(request.toCommand(userId));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(result));
+    }
+
     @Operation(summary = "거래대행 내부 신청 (판매자가 채팅방에서)",
             description = "PR-B-3 라운드 12. 채팅방 안에서 판매자가 한 번에 양쪽 정보 입력. link 토큰 미사용. "
                     + "검증: chatRoom 참여자 + chatRoom.itemId == cmd.itemId + 본인 == item.sellerId. "

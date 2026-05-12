@@ -94,7 +94,7 @@ class EscrowApplicationServiceTest {
     @Test
     @DisplayName("createLink_정상_token+expiresAt_발급")
     void createLink_normal() {
-        EscrowLinkResult r = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult r = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         assertThat(r.linkToken()).hasSize(36);
@@ -107,7 +107,7 @@ class EscrowApplicationServiceTest {
     void createLink_unverified_blocked() {
         doThrow(new BusinessException(ErrorCode.AUTH_EMAIL_NOT_VERIFIED))
                 .when(userService).requireVerified(99L);
-        assertThatThrownBy(() -> service.createLink(new EscrowLinkCreateCommand(
+        assertThatThrownBy(() -> service.createLink(EscrowLinkCreateCommand.legacy(
                 99L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ))).isInstanceOf(BusinessException.class);
     }
@@ -189,7 +189,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("createApplication_정상_status_결제대기_+_share_산정")
     void createApplication_normal() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         EscrowApplicationResult r = service.createApplication(validForm(
@@ -209,7 +209,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("createApplication_본인_SELF_NOT_ALLOWED")
     void createApplication_self_rejected() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         assertThatThrownBy(() -> service.createApplication(validForm(
@@ -224,7 +224,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("createApplication_idempotent_본인_더블클릭_같은application")
     void createApplication_idempotent() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         EscrowApplicationResult first = service.createApplication(validForm(
@@ -242,7 +242,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("createApplication_race_다른receiver_ALREADY_TAKEN")
     void createApplication_race_other_receiver() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         // 첫 수신자 확정
@@ -263,7 +263,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("createApplication_fee_위변조_FEE_MISMATCH")
     void createApplication_fee_tampering_rejected() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         // 100원 차이 — tolerance 초과
@@ -281,7 +281,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("recordPaymentConfirmed_양쪽결제완료_EscrowConfirmedEvent_발행")
     void recordPaymentConfirmed_event_published() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         EscrowApplicationResult app = service.createApplication(validForm(
@@ -305,7 +305,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("verifyChargeIntent_본인_share_일치_통과")
     void verifyChargeIntent_match_pass() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         EscrowApplicationResult app = service.createApplication(validForm(
@@ -322,7 +322,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("verifyChargeIntent_share_불일치_FEE_MISMATCH")
     void verifyChargeIntent_amount_mismatch() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         EscrowApplicationResult app = service.createApplication(validForm(
@@ -339,7 +339,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("verifyChargeIntent_제3자_FORBIDDEN")
     void verifyChargeIntent_other_user_rejected() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         EscrowApplicationResult app = service.createApplication(validForm(
@@ -358,7 +358,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("cancel_매칭전_status_취소")
     void cancel_before_match() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         EscrowApplicationResult app = service.createApplication(validForm(
@@ -375,7 +375,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("cancel_제3자_FORBIDDEN")
     void cancel_third_party_rejected() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         EscrowApplicationResult app = service.createApplication(validForm(
@@ -394,7 +394,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("previewPayShare_잔액_충분_canPay=true_deficit=0")
     void previewPayShare_canPay() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         EscrowApplicationResult app = service.createApplication(validForm(
@@ -418,7 +418,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("previewPayShare_잔액_부족_deficit_정확_canPay=false")
     void previewPayShare_deficit() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         EscrowApplicationResult app = service.createApplication(validForm(
@@ -440,7 +440,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("previewPayShare_제3자_FORBIDDEN")
     void previewPayShare_third_party_rejected() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         EscrowApplicationResult app = service.createApplication(validForm(
@@ -457,7 +457,7 @@ class EscrowApplicationServiceTest {
     @DisplayName("previewPayShare_이미_본인_share_결제_완료_alreadyPaid=true_canPay=false")
     void previewPayShare_already_paid() {
         cacheExpectedFees();
-        EscrowLinkResult link = service.createLink(new EscrowLinkCreateCommand(
+        EscrowLinkResult link = service.createLink(EscrowLinkCreateCommand.legacy(
                 11L, InitiatorRole.buyer, FeePayer.both, TradeMode.INTERNAL
         ));
         EscrowApplicationResult app = service.createApplication(validForm(
