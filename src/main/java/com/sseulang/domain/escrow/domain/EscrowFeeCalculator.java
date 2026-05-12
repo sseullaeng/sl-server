@@ -39,7 +39,7 @@ public final class EscrowFeeCalculator {
         if (settings == null || tradeMode == null || weight == null || volume == null || fragility == null) {
             throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
         }
-        if (tradeMode == TradeMode.INTERNAL && itemPrice <= 0) {
+        if (tradeMode == TradeMode.INTERNAL && itemPrice < 0) {
             throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
         }
         if (tradeMode == TradeMode.EXTERNAL && itemPrice != 0) {
