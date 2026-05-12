@@ -41,4 +41,19 @@ interface UserReportJpaRepository extends JpaRepository<UserReport, Long> {
     
     @Query("SELECT COUNT(r) FROM UserReport r WHERE r.createdAt >= :since")
     long countCreatedSince(@org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
+
+    // 라운드 12 — admin item 화면. itemId 별 신고 누적 카운트.
+    @Query("""
+            SELECT r.itemId AS itemId, COUNT(r) AS cnt FROM UserReport r
+             WHERE r.itemId IN :ids
+             GROUP BY r.itemId
+            """)
+    java.util.List<ItemCountRow> countByItemIdsRaw(@Param("ids") java.util.Collection<Long> ids);
+
+    interface ItemCountRow {
+        Long getItemId();
+        Long getCnt();
+    }
+
+    java.util.List<UserReport> findByItemIdOrderByCreatedAtDesc(Long itemId);
 }

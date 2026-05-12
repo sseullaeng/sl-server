@@ -114,4 +114,30 @@ public class InMemoryFakeDeliveryRepository implements DeliveryRepository {
                 .filter(d -> d.getEscrowApplicationId() != null && escrowApplicationIds.contains(d.getEscrowApplicationId()))
                 .toList();
     }
+
+    @Override
+    public Page<DeliveryRequest> adminSearch(
+            DeliveryStatus status, Long riderId, Long requesterId,
+            LocalDateTime createdAfter, LocalDateTime createdBefore,
+            String sort, Pageable pageable
+    ) {
+        java.util.Comparator<DeliveryRequest> cmp = "picked_up_desc".equals(sort)
+                ? java.util.Comparator.comparing(DeliveryRequest::getPickedUpAt,
+                        java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder()))
+                : java.util.Comparator.comparing(DeliveryRequest::getRequestedAt).reversed();
+        java.util.List<DeliveryRequest> filtered = store.values().stream()
+                .filter(d -> status == null || d.getStatus() == status)
+                .filter(d -> riderId == null || riderId.equals(d.getRiderId()))
+                .filter(d -> requesterId == null || requesterId.equals(d.getRequesterId()))
+                .filter(d -> createdAfter == null || !d.getRequestedAt().isBefore(createdAfter))
+                .filter(d -> createdBefore == null || d.getRequestedAt().isBefore(createdBefore))
+                .sorted(cmp)
+                .toList();
+        return new PageImpl<>(filtered, pageable, filtered.size());
+    }
+
+    @Override
+    public long countCreatedSince(LocalDateTime since) {
+        return store.values().stream().filter(d -> !d.getRequestedAt().isBefore(since)).count();
+    }
 }

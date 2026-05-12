@@ -21,6 +21,13 @@ public interface ItemRepository {
 
     Page<Item> findBySellerIdAndStatus(Long sellerId, ItemStatus status, Pageable pageable);
 
+    // 라운드 12 — admin item 검색. 삭제 포함 모든 상태 + 키워드(title or sellerId IN matched users)
+    Page<Item> adminSearch(
+            com.sseulang.domain.item.application.dto.AdminItemSearchCriteria criteria,
+            java.util.Collection<Long> matchedSellerIds,
+            Pageable pageable
+    );
+
     Item save(Item item);
 
     void delete(Item item);

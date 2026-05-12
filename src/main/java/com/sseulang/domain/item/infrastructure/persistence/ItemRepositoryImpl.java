@@ -37,6 +37,15 @@ public class ItemRepositoryImpl implements ItemRepository {
     }
 
     @Override
+    public Page<Item> adminSearch(
+            com.sseulang.domain.item.application.dto.AdminItemSearchCriteria criteria,
+            java.util.Collection<Long> matchedSellerIds,
+            Pageable pageable
+    ) {
+        return querydsl.adminSearch(criteria, matchedSellerIds, pageable);
+    }
+
+    @Override
     public Page<Item> findBySellerIdAndStatus(Long sellerId, ItemStatus status, Pageable pageable) {
         if (status == null) {
             return jpa.findBySellerIdExcludingDeleted(sellerId, pageable);

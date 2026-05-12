@@ -121,6 +121,21 @@ public class InMemoryFakeItemRepository implements ItemRepository {
     }
 
     @Override
+    public Page<Item> adminSearch(
+            com.sseulang.domain.item.application.dto.AdminItemSearchCriteria criteria,
+            java.util.Collection<Long> matchedSellerIds,
+            Pageable pageable
+    ) {
+        // 라운드 12 — 테스트 단순화: criteria 무시하고 전체 정렬 후 페이징
+        List<Item> filtered = store.values().stream()
+                .sorted(Comparator.comparingLong(Item::getId).reversed())
+                .toList();
+        int start = Math.min((int) pageable.getOffset(), filtered.size());
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        return new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
+    }
+
+    @Override
     public Page<Item> findBySellerIdAndStatus(Long sellerId, ItemStatus status, Pageable pageable) {
         Stream<Item> stream = store.values().stream()
                 .filter(i -> sellerId.equals(i.getSellerId()));

@@ -41,4 +41,14 @@ public interface DeliveryRepository {
     Optional<DeliveryRequest> findByEscrowApplicationId(Long escrowApplicationId);
 
     java.util.List<DeliveryRequest> findByEscrowApplicationIdIn(java.util.Collection<Long> escrowApplicationIds);
+
+    // 라운드 12 — admin delivery 검색.
+    Page<DeliveryRequest> adminSearch(
+            DeliveryStatus status, Long riderId, Long requesterId,
+            LocalDateTime createdAfter, LocalDateTime createdBefore,
+            String sort,   // "latest" | "picked_up_desc"
+            Pageable pageable
+    );
+
+    long countCreatedSince(LocalDateTime since);
 }

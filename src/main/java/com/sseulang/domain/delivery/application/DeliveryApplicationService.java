@@ -231,6 +231,44 @@ public class DeliveryApplicationService {
 
     
 
+    // 라운드 12 — admin delivery 검색.
+    public org.springframework.data.domain.Page<com.sseulang.domain.delivery.application.dto.AdminDeliveryResult> adminSearch(
+            DeliveryStatus status, Long riderId, Long requesterId,
+            java.time.LocalDateTime createdAfter, java.time.LocalDateTime createdBefore,
+            String sort, Pageable pageable
+    ) {
+        Page<DeliveryRequest> page = deliveryRepository.adminSearch(
+                status, riderId, requesterId, createdAfter, createdBefore, sort, pageable);
+        if (page.isEmpty()) return org.springframework.data.domain.Page.empty(pageable);
+        java.util.Set<Long> userIds = new java.util.HashSet<>();
+        for (DeliveryRequest d : page.getContent()) {
+            userIds.add(d.getRequesterId());
+            if (d.getRiderId() != null) userIds.add(d.getRiderId());
+        }
+        java.util.Map<Long, UserApplicationService.UserProjection> userMap =
+                userApplicationService.findProjectionsByIds(userIds);
+        return page.map(d -> com.sseulang.domain.delivery.application.dto.AdminDeliveryResult.from(
+                d,
+                java.util.Optional.ofNullable(userMap.get(d.getRequesterId()))
+                        .map(UserApplicationService.UserProjection::nickname).orElse(null),
+                d.getRiderId() == null ? null : java.util.Optional.ofNullable(userMap.get(d.getRiderId()))
+                        .map(UserApplicationService.UserProjection::nickname).orElse(null)
+        ));
+    }
+
+    public com.sseulang.domain.delivery.application.dto.AdminDeliveryStatsResult adminGetStatsV2() {
+        Map<DeliveryStatus, Long> byStatus = new EnumMap<>(DeliveryStatus.class);
+        for (DeliveryStatus s : DeliveryStatus.values()) byStatus.put(s, 0L);
+        long total = 0;
+        for (DeliveryStatusCount row : deliveryRepository.countGroupByStatus()) {
+            byStatus.put(row.status(), row.count());
+            total += row.count();
+        }
+        long todayNew = deliveryRepository.countCreatedSince(
+                java.time.LocalDate.now().atStartOfDay());
+        return new com.sseulang.domain.delivery.application.dto.AdminDeliveryStatsResult(byStatus, total, todayNew);
+    }
+
     public DeliveryStatsResult adminGetStats() {
         Map<DeliveryStatus, Long> byStatus = new EnumMap<>(DeliveryStatus.class);
         for (DeliveryStatus s : DeliveryStatus.values()) {

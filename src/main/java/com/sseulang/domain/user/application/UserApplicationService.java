@@ -323,6 +323,19 @@ public class UserApplicationService {
         return userRepository.findIdsByKeywordLike(keyword, limit);
     }
 
+    // 라운드 12 — admin 화면용 nickname/profile 배치 조회.
+    public java.util.Map<Long, UserProjection> findProjectionsByIds(java.util.Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) return java.util.Map.of();
+        java.util.Map<Long, UserProjection> map = new java.util.HashMap<>();
+        for (Long id : userIds) {
+            userRepository.findById(id).ifPresent(u ->
+                    map.put(u.getId(), new UserProjection(u.getId(), u.getNickname(), u.getProfileImage())));
+        }
+        return map;
+    }
+
+    public record UserProjection(Long id, String nickname, String profileImage) { }
+
     
     @Transactional
     public void recordLogin(Long userId) {

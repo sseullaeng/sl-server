@@ -33,6 +33,9 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
             """)
     boolean existsActiveByChatRoomIdJpql(@Param("chatRoomId") Long chatRoomId);
 
+    // 라운드 12 — admin item 상세 거래 이력.
+    List<Transaction> findByItemIdOrderByIdDesc(Long itemId);
+
     // 라운드 12 — 거래대행 paired Transaction (1:1).
     Optional<Transaction> findByEscrowApplicationId(Long escrowApplicationId);
 

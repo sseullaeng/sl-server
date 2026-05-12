@@ -33,19 +33,22 @@ public class ItemApplicationService {
     private final UserApplicationService userApplicationService;
     private final PresignedUrlGenerator presignedUrlGenerator;
     private final WishlistView wishlistView;
+    private final com.sseulang.domain.item.domain.ItemReportView itemReportView;
 
     public ItemApplicationService(
             ItemRepository itemRepository,
             CategoryApplicationService categoryApplicationService,
             UserApplicationService userApplicationService,
             PresignedUrlGenerator presignedUrlGenerator,
-            WishlistView wishlistView
+            WishlistView wishlistView,
+            com.sseulang.domain.item.domain.ItemReportView itemReportView
     ) {
         this.itemRepository = itemRepository;
         this.categoryApplicationService = categoryApplicationService;
         this.userApplicationService = userApplicationService;
         this.presignedUrlGenerator = presignedUrlGenerator;
         this.wishlistView = wishlistView;
+        this.itemReportView = itemReportView;
     }
 
     @Transactional
@@ -146,6 +149,89 @@ public class ItemApplicationService {
     }
 
     
+
+    // 라운드 12 — admin item 목록. q 키워드는 title or sellerId IN matchedUsers, status/tradeType/category 필터.
+    public Page<com.sseulang.domain.item.application.dto.AdminItemSummaryResult> adminSearch(
+            com.sseulang.domain.item.application.dto.AdminItemSearchCriteria criteria,
+            Pageable pageable
+    ) {
+        java.util.List<Long> matchedSellerIds = java.util.Collections.emptyList();
+        if (criteria.q() != null && !criteria.q().isBlank()) {
+            matchedSellerIds = userApplicationService.findUserIdsByKeyword(criteria.q().strip(), 200);
+        }
+        Page<Item> page = itemRepository.adminSearch(criteria, matchedSellerIds, pageable);
+        if (page.isEmpty()) return Page.empty(pageable);
+
+        java.util.List<Long> sellerIds = page.getContent().stream().map(Item::getSellerId).distinct().toList();
+        java.util.Map<Long, com.sseulang.domain.user.application.UserApplicationService.UserProjection> userMap =
+                userApplicationService.findProjectionsByIds(sellerIds);
+        java.util.List<Long> itemIds = page.getContent().stream().map(Item::getId).toList();
+        java.util.Map<Long, Long> reportMap = itemReportView.countByItemIds(itemIds);
+
+        java.util.List<com.sseulang.domain.item.application.dto.AdminItemSummaryResult> rows = page.getContent().stream()
+                .map(it -> com.sseulang.domain.item.application.dto.AdminItemSummaryResult.from(
+                        it,
+                        java.util.Optional.ofNullable(userMap.get(it.getSellerId()))
+                                .map(com.sseulang.domain.user.application.UserApplicationService.UserProjection::nickname).orElse(null),
+                        reportMap.getOrDefault(it.getId(), 0L)
+                ))
+                .toList();
+
+        if (criteria.sort() == com.sseulang.domain.item.application.dto.AdminItemSort.REPORT_DESC) {
+            rows = new java.util.ArrayList<>(rows);
+            rows.sort(java.util.Comparator.comparingLong(
+                    com.sseulang.domain.item.application.dto.AdminItemSummaryResult::reportCount).reversed());
+        }
+        return new org.springframework.data.domain.PageImpl<>(rows, pageable, page.getTotalElements());
+    }
+
+    // 라운드 12 — admin item 상세.
+    public com.sseulang.domain.item.application.dto.AdminItemDetailResult adminGetDetail(
+            Long itemId,
+            java.util.List<com.sseulang.domain.report.domain.UserReport> reports,
+            java.util.List<com.sseulang.domain.transaction.domain.Transaction> transactions
+    ) {
+        Item item = findOrThrow(itemId);
+        com.sseulang.domain.item.application.dto.ItemDetailResult detail =
+                com.sseulang.domain.item.application.dto.ItemDetailResult.from(item);
+
+        com.sseulang.domain.user.application.UserApplicationService.UserProjection seller =
+                userApplicationService.findProjectionsByIds(java.util.List.of(item.getSellerId()))
+                        .get(item.getSellerId());
+
+        java.util.List<Long> buyerIds = transactions.stream()
+                .map(com.sseulang.domain.transaction.domain.Transaction::getBuyerId)
+                .distinct().toList();
+        java.util.Map<Long, com.sseulang.domain.user.application.UserApplicationService.UserProjection> buyerMap =
+                userApplicationService.findProjectionsByIds(buyerIds);
+
+        java.util.List<com.sseulang.domain.item.application.dto.AdminItemDetailResult.ReportHistoryItem> reportRows =
+                reports.stream()
+                        .map(r -> new com.sseulang.domain.item.application.dto.AdminItemDetailResult.ReportHistoryItem(
+                                r.getId(), r.getReporterId(), r.getReason(),
+                                r.getStatus().name(), r.getCreatedAt()
+                        ))
+                        .toList();
+
+        java.util.List<com.sseulang.domain.item.application.dto.AdminItemDetailResult.TransactionHistoryItem> txRows =
+                transactions.stream()
+                        .map(t -> new com.sseulang.domain.item.application.dto.AdminItemDetailResult.TransactionHistoryItem(
+                                t.getId(), t.getBuyerId(),
+                                java.util.Optional.ofNullable(buyerMap.get(t.getBuyerId()))
+                                        .map(com.sseulang.domain.user.application.UserApplicationService.UserProjection::nickname)
+                                        .orElse(null),
+                                t.getStatus().name(), t.getPrice(), t.getCompletedAt()
+                        ))
+                        .toList();
+
+        return new com.sseulang.domain.item.application.dto.AdminItemDetailResult(
+                detail,
+                seller != null ? seller.nickname() : null,
+                reportRows.size(),
+                reportRows,
+                txRows
+        );
+    }
 
     @Transactional
     public void adminDelete(Long id, Long adminId) {

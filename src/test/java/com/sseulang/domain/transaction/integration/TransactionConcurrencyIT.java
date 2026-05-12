@@ -89,7 +89,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         // 라운드 12 PR-C #6 — ChatRoomCardRepository 의존 (Mongo, DataJpaTest 라 NoOp).
         com.sseulang.domain.chat.application.NoOpChatRoomCardRepository.class,
         com.sseulang.domain.chat.application.NoOpTransactionView.class,
-        com.sseulang.domain.chat.application.NoOpEscrowApplicationView.class
+        com.sseulang.domain.chat.application.NoOpEscrowApplicationView.class,
+        com.sseulang.domain.report.infrastructure.ItemReportViewAdapter.class
 })
 @Testcontainers
 @Transactional(propagation = Propagation.NOT_SUPPORTED)

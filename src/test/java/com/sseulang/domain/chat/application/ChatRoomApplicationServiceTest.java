@@ -34,7 +34,7 @@ class ChatRoomApplicationServiceTest {
         roomRepo = new InMemoryFakeChatRoomRepository();
         itemRepo = new InMemoryFakeItemRepository();
         CategoryApplicationService catSvc = new CategoryApplicationService(new InMemoryFakeCategoryRepository());
-        ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class), new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(), new com.sseulang.domain.item.application.NoOpWishlistView());
+        ItemApplicationService itemSvc = new ItemApplicationService(itemRepo, catSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class), new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(), new com.sseulang.domain.item.application.NoOpWishlistView(), new com.sseulang.domain.item.application.NoOpItemReportView());
         service = new ChatRoomApplicationService(roomRepo, new com.sseulang.domain.chat.application.InMemoryFakeChatRoomCardRepository(), itemSvc, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class), new com.sseulang.domain.chat.application.NoOpUserView(), new com.sseulang.domain.chat.application.NoOpItemView(), new com.sseulang.domain.chat.application.NoOpTransactionView(), new com.sseulang.domain.chat.application.NoOpEscrowApplicationView());
 
         Item item = itemRepo.save(Item.create(

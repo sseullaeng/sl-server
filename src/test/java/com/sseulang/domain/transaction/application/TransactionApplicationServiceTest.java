@@ -66,7 +66,8 @@ class TransactionApplicationServiceTest {
         itemSvc = new ItemApplicationService(
                 itemRepo, catSvc, userSvc,
                 new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(),
-                new com.sseulang.domain.item.application.NoOpWishlistView());
+                new com.sseulang.domain.item.application.NoOpWishlistView(),
+                new com.sseulang.domain.item.application.NoOpItemReportView());
         PointApplicationService pointSvc = new PointApplicationService(userSvc, pointHistoryRepo);
         chatRoomRepo = new com.sseulang.domain.chat.application.InMemoryFakeChatRoomRepository();
         com.sseulang.domain.chat.application.ChatRoomApplicationService chatSvc =

@@ -55,6 +55,15 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
     }
 
     @Override
+    public java.util.List<Transaction> findByItemIdOrderByIdDesc(Long itemId) {
+        if (itemId == null) return java.util.List.of();
+        return store.values().stream()
+                .filter(t -> itemId.equals(t.getItemId()))
+                .sorted(java.util.Comparator.comparing(Transaction::getId).reversed())
+                .toList();
+    }
+
+    @Override
     public java.util.Optional<Transaction> findByEscrowApplicationId(Long escrowApplicationId) {
         if (escrowApplicationId == null) return java.util.Optional.empty();
         return store.values().stream()
