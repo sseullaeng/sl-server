@@ -36,7 +36,15 @@ public enum Weight {
 
     @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
     public static Weight fromCode(String code) {
-        for (Weight w : values()) if (w.code.equals(code)) return w;
-        throw new IllegalArgumentException("Unknown Weight: " + code);
+        if (code == null) throw new IllegalArgumentException("Weight code 는 필수입니다");
+        String c = code.trim().toLowerCase(java.util.Locale.ROOT);
+        // 정식 코드 우선 매칭
+        for (Weight w : values()) if (w.code.equals(c)) return w;
+        // 프론트 친숙한 alias 호환 (under1/over10 등)
+        return switch (c) {
+            case "under1" -> LT1;
+            case "over10" -> GT10;
+            default -> throw new IllegalArgumentException("Unknown Weight: " + code);
+        };
     }
 }
