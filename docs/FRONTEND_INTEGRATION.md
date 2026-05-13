@@ -250,7 +250,7 @@ export const parseKst = (iso) => dayjs.tz(iso, 'Asia/Seoul');
 | `ITEM_NOT_FOUND` | 404 | 물품 없음 또는 삭제됨 |
 | `ITEM_FORBIDDEN` | 403 | 본인 물품 아님 |
 | `ITEM_INVALID_STATE` | 400 | 비공개/예약 등 현재 상태 불가 |
-| `ITEM_IMAGE_LIMIT_EXCEEDED` | 400 | 이미지 5장 초과 |
+| `ITEM_IMAGE_LIMIT_EXCEEDED` | 400 | 이미지 10장 초과 |
 | `ITEM_IMAGE_NOT_FOUND` | 404 | 이미지 부분 제거 시 미존재 url |
 | `ITEM_IMAGE_ORDER_MISMATCH` | 400 | 순서 변경 입력이 기존 set 과 불일치 |
 | `TRANSACTION_NOT_FOUND` | 404 | 거래 없음 |
@@ -606,7 +606,7 @@ GET    /api/v1/items/{id}                      — 단건 (공개, viewCount +1)
 PATCH  /api/v1/items/{id}                      — 본인 수정 (전체 교체 패턴)
 DELETE /api/v1/items/{id}                      — 본인 soft delete
 
-POST   /api/v1/items/{id}/images               — 이미지 부분 추가 (5장 한도)
+POST   /api/v1/items/{id}/images               — 이미지 부분 추가 (10장 한도)
 DELETE /api/v1/items/{id}/images?imageUrl=...  — 이미지 단건 제거
 PATCH  /api/v1/items/{id}/images/order         — 순서 변경 (set 일치 검증)
 
@@ -626,7 +626,7 @@ GET    /api/v1/users/me/items?status=&page=&size=
   "deposit": null,                        // 대여만 필수, 그 외 null
   "rentalUnit": null,                     // 대여만 필수 ("시간"|"일"|"주"|"월")
   "region": "서울 강남구",                // optional ≤100
-  "imageUrls": ["https://..."],           // optional, 최대 5장
+  "imageUrls": ["https://..."],           // optional, 최대 10장
   "hashtags": ["아이폰"]                  // optional
 }
 ```

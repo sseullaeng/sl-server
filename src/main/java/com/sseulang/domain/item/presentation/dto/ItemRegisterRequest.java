@@ -59,7 +59,7 @@ public record ItemRegisterRequest(
         @Schema(description = "지역", example = "서울 강남구", maxLength = 100, nullable = true)
         @Size(max = 100) String region,
 
-        @Schema(description = "이미지 URL 목록 (최대 5장, S3 presigned URL 업로드 후 키)",
+        @Schema(description = "이미지 URL 목록 (최대 10장, S3 presigned URL 업로드 후 키)",
                 example = "[\"https://cdn.sseulang.test/items/abc.jpg\"]", nullable = true)
         List<String> imageUrls,
 

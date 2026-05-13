@@ -133,24 +133,24 @@ class ItemTest {
     }
 
     @Test
-    @DisplayName("addImage 1~5장 정상")
-    void addImage_5장_정상() {
+    @DisplayName("addImage 1~10장 정상")
+    void addImage_10장_정상() {
         Item item = saleItem();
-        for (int i = 1; i <= 5; i++) {
+        for (int i = 1; i <= 10; i++) {
             item.addImage("https://img/" + i, i, i == 1);
         }
-        assertThat(item.getImages()).hasSize(5);
+        assertThat(item.getImages()).hasSize(10);
         assertThat(item.getImages().get(0).isThumbnail()).isTrue();
     }
 
     @Test
-    @DisplayName("addImage 6번째_ITEM_IMAGE_LIMIT_EXCEEDED")
-    void addImage_6장_거부() {
+    @DisplayName("addImage 11번째_ITEM_IMAGE_LIMIT_EXCEEDED")
+    void addImage_11장_거부() {
         Item item = saleItem();
-        for (int i = 1; i <= 5; i++) {
+        for (int i = 1; i <= 10; i++) {
             item.addImage("https://img/" + i, i, false);
         }
-        assertThatThrownBy(() -> item.addImage("https://img/6", 6, false))
+        assertThatThrownBy(() -> item.addImage("https://img/11", 11, false))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.ITEM_IMAGE_LIMIT_EXCEEDED);

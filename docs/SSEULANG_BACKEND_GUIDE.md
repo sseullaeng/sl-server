@@ -127,7 +127,7 @@ com.sseulang
   ```
   sseulang-bucket/
   ├── profiles/{userId}/{uuid}.jpg
-  ├── items/{itemId}/{uuid}.jpg          (최대 5장)
+  ├── items/{itemId}/{uuid}.jpg          (최대 10장)
   ├── messages/{roomId}/{uuid}.jpg
   ├── notices/{noticeId}/{uuid}.jpg
   └── banners/{bannerId}/{uuid}.jpg

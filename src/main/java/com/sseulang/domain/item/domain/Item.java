@@ -32,7 +32,7 @@ import java.util.Set;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Item extends BaseEntity {
 
-    private static final int MAX_IMAGES = 5;
+    private static final int MAX_IMAGES = 10;
     private static final int TITLE_MAX_LENGTH = 200;
     private static final int REGION_MAX_LENGTH = 100;
 

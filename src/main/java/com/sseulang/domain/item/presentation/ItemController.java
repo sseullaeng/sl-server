@@ -118,7 +118,7 @@ public class ItemController {
     }
 
     @Operation(summary = "물품 이미지 부분 추가",
-            description = "본인 + 이메일 인증 필수. 합산 5장 한도. 임시 폴더(items/{userId}/) 자동 promote. "
+            description = "본인 + 이메일 인증 필수. 합산 10장 한도. 임시 폴더(items/{userId}/) 자동 promote. "
                     + "기존이 비었으면 첫 번째 새 url 이 썸네일. PATCH 전체교체보다 효율적.")
     @PostMapping("/{id}/images")
     public ApiResponse<ItemImagesResponse> appendImages(
