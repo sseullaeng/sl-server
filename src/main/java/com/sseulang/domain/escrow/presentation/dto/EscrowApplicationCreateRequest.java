@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
@@ -36,7 +37,9 @@ public record EscrowApplicationCreateRequest(
         @PositiveOrZero long commissionFee,
         @PositiveOrZero long totalFee,
         @NotNull BigDecimal distanceKm,
-        
+
+        @NotEmpty(message = "사진은 1장 이상 필수입니다")
+        @Size(min = 1, max = 10)
         List<@Size(max = 500) String> imageUrls
 ) {
     public EscrowApplicationCreateCommand toCommand(Long receiverId) {

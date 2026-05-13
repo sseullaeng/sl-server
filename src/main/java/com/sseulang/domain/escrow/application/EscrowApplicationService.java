@@ -292,6 +292,12 @@ public class EscrowApplicationService {
     @Transactional
     public EscrowLinkResult createLink(EscrowLinkCreateCommand cmd) {
         userApplicationService.requireVerified(cmd.initiatorId());
+        // 발급자가 seller 영역(pickup) 을 채웠다면 사진 1장 이상 필수.
+        if (cmd.initiatorRole() == InitiatorRole.seller && cmd.initiatorPickupAddress() != null) {
+            if (cmd.initiatorImageUrls() == null || cmd.initiatorImageUrls().isEmpty()) {
+                throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+            }
+        }
         boolean hasInitiatorInfo =
                 cmd.initiatorPickupAddress() != null || cmd.initiatorDeliveryAddress() != null
                         || cmd.initiatorItemPrice() != null || cmd.initiatorReceiverPhone() != null;
@@ -478,6 +484,10 @@ public class EscrowApplicationService {
             if (cmd.pickupAddress() == null || cmd.pickupLat() == null || cmd.pickupLng() == null
                     || cmd.itemPrice() == null || cmd.itemDescription() == null
                     || cmd.weight() == null || cmd.volume() == null || cmd.fragility() == null) {
+                throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+            }
+            // 외부 판매 신청 — 수신자(seller) 가 사진 1장 이상 첨부 필수.
+            if (cmd.imageUrls() == null || cmd.imageUrls().isEmpty()) {
                 throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
             }
             pickupAddress = cmd.pickupAddress();
