@@ -179,6 +179,10 @@ public class Transaction extends BaseEntity {
     
 
     public void markReceived(LocalDateTime now) {
+        // 대여는 인계완료 → 반납요청 → 회신확인 강제. markReceived 직접 호출로 우회 차단.
+        if (this.tradeType == TradeType.대여) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
+        }
         if (!status.canReceive()) {
             throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
         }
@@ -228,7 +232,11 @@ public class Transaction extends BaseEntity {
 
     // 라운드 12 — 직거래 단순 완료. 사이트 포인트 거래 없음(외부 결제).
     // 채팅중/예약/인계완료 어떤 상태에서든 거래완료로 전이. 판매자 호출 가정.
+    // 대여는 반납요청 → 회신확인(seller) 강제 — completeBySeller 우회 차단.
     public void completeBySeller(LocalDateTime now) {
+        if (this.tradeType == TradeType.대여) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
+        }
         if (status == TransactionStatus.거래완료 || status == TransactionStatus.취소) {
             throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
         }

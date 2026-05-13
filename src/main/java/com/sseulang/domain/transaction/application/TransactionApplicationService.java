@@ -156,6 +156,10 @@ public class TransactionApplicationService {
         if (!tx.isBuyer(requesterId)) {
             throw new BusinessException(ErrorCode.TRANSACTION_RECEIVE_NOT_ALLOWED);
         }
+        // 대여는 인계완료 → 반납요청 → 회신확인 강제 — markReceived 우회 차단 (Item 전이 전 가드).
+        if (tx.getTradeType() == com.sseulang.domain.item.domain.TradeType.대여) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
+        }
         if (tx.getStatus() == TransactionStatus.거래완료) {
             return;
         }
@@ -189,6 +193,10 @@ public class TransactionApplicationService {
         Transaction tx = findOrThrowForUpdate(transactionId);
         if (!tx.isSeller(requesterId)) {
             throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
+        }
+        // 대여는 반납요청 → 회신확인 강제 — completeBySeller 우회 차단 (Item 전이 전 가드).
+        if (tx.getTradeType() == com.sseulang.domain.item.domain.TradeType.대여) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
         }
         if (tx.getStatus() == TransactionStatus.거래완료) {
             return;
@@ -339,6 +347,8 @@ public class TransactionApplicationService {
     }
 
     // B-2: buyer 가 직접 대여 신청. status=채팅중 으로 Transaction 생성 — seller 가 [예약] 으로 수락.
+    // 동시성 — findActiveForTransaction 이 내부에서 PESSIMISTIC_WRITE 락 잡아 같은 item 의 동시 신청 직렬화.
+    // 기간 겹침 race 차단 (이후 transactions 조회/INSERT 가 같은 tx 안에서 일관 보장).
     @Transactional
     public Long createRentalRequest(
             Long buyerId, Long itemId, LocalDateTime rentalStart, LocalDateTime rentalEnd, Long chatRoomId
@@ -356,7 +366,19 @@ public class TransactionApplicationService {
             throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
         }
 
-        // 기존 활성 대여 거래와 기간 겹침 검사 — [start, end) 반열림 가정.
+        // chatRoomId 가 들어오면 기존 create() 와 동일 정책 — 참가자/Item 매핑 검증 + chatRoom 활성 거래 차단.
+        if (chatRoomId != null) {
+            ChatRoomApplicationService.ChatRoomMeta meta =
+                    chatRoomApplicationService.findMetaForParticipant(chatRoomId, buyerId);
+            if (!meta.itemId().equals(itemId)) {
+                throw new BusinessException(ErrorCode.TX_CHATROOM_ITEM_MISMATCH);
+            }
+            if (transactionRepository.existsActiveByChatRoomId(chatRoomId)) {
+                throw new BusinessException(ErrorCode.TX_ALREADY_ACTIVE_IN_ROOM);
+            }
+        }
+
+        // 기존 활성 대여 거래와 기간 겹침 검사 — [start, end) 반열림. 위 lock 으로 동시 접근 차단.
         boolean overlap = transactionRepository.findActiveRentalsByItemId(itemId).stream()
                 .anyMatch(t -> rentalStart.isBefore(t.getRentalEnd()) && t.getRentalStart().isBefore(rentalEnd));
         if (overlap) {
@@ -396,18 +418,23 @@ public class TransactionApplicationService {
         tx.confirmReturn(sellerId, LocalDateTime.now(clock));
     }
 
-    // B-6: 7일 자동 완료 스케줄러 호출. 반납요청 + returnRequestedAt < threshold 인 거래 일괄 처리.
-    @Transactional
-    public int autoCompleteOverdueReturns(java.time.Duration overdueAfter) {
+    // B-6: 자동완료 후보 ID 만 readonly 로 조회. 스케줄러가 각 row 별 새 tx 로 처리해 부분 실패 격리.
+    public java.util.List<Long> findOverdueReturnIds(java.time.Duration overdueAfter) {
         LocalDateTime threshold = LocalDateTime.now(clock).minus(overdueAfter);
-        java.util.List<Transaction> overdue = transactionRepository.findReturnRequestedBefore(threshold);
-        for (Transaction tx : overdue) {
-            tx.autoCompleteFromReturnRequest(LocalDateTime.now(clock));
-            eventPublisher.publishEvent(new com.sseulang.domain.transaction.domain.event.TransactionAutoCompletedEvent(
-                    tx.getId(), tx.getBuyerId(), tx.getSellerId()
-            ));
-        }
-        return overdue.size();
+        return transactionRepository.findReturnRequestedBefore(threshold).stream()
+                .map(Transaction::getId)
+                .toList();
+    }
+
+    // B-6: 단일 row 자동 거래완료. 새 트랜잭션 — 한 건 실패가 다른 건에 영향 X.
+    // 이미 seller 회신 등으로 상태가 변경됐다면 도메인 가드(canConfirmReturn) 가 BusinessException 던짐 — 정상.
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void autoCompleteSingleReturn(Long transactionId) {
+        Transaction tx = findOrThrowForUpdate(transactionId);
+        tx.autoCompleteFromReturnRequest(LocalDateTime.now(clock));
+        eventPublisher.publishEvent(new com.sseulang.domain.transaction.domain.event.TransactionAutoCompletedEvent(
+                tx.getId(), tx.getBuyerId(), tx.getSellerId()
+        ));
     }
 
     public Page<PendingReviewableResult> findPendingReviewable(Long userId, Pageable pageable) {

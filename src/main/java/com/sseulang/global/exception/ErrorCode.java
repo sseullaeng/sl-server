@@ -130,6 +130,7 @@ public enum ErrorCode {
     ESCROW_FORBIDDEN(HttpStatus.FORBIDDEN, "거래대행 신청에 대한 권한이 없습니다."),
     ESCROW_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서 수행할 수 없는 동작입니다."),
     ESCROW_FORM_INVALID(HttpStatus.BAD_REQUEST, "거래대행 신청 입력값이 올바르지 않습니다."),
+    ESCROW_DELIVERY_NOTES_TOO_LONG(HttpStatus.BAD_REQUEST, "발급자/수신자 메모 합산이 500자를 초과합니다. 줄여서 다시 보내주세요."),
     ESCROW_FEE_MISMATCH(HttpStatus.BAD_REQUEST, "수수료 정책이 변경되었습니다. 새 금액 확인 후 다시 시도해주세요."),
     ESCROW_CHATROOM_REQUIRED(HttpStatus.BAD_REQUEST, "거래대행 신청은 채팅방 안에서만 가능합니다 (chatRoomId 필수)."),
     ESCROW_TX_CHATROOM_MISMATCH(HttpStatus.BAD_REQUEST, "쓸랭 거래의 채팅방과 거래대행 신청 채팅방이 다릅니다."),

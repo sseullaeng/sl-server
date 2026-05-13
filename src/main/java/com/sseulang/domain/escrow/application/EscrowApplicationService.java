@@ -897,12 +897,16 @@ public class EscrowApplicationService {
 
     
     // by-link 흐름 — 발급자/수신자 메모를 양쪽 모두 라이더가 볼 수 있도록 머지.
+    // 결합 결과 500자 초과 시 silent truncate 가 아니라 ESCROW_FORM_INVALID 로 명시 거부 — 배송 지시 누락 방지.
     static String mergeDeliveryNotes(String initiatorNotes, String receiverNotes) {
         boolean hasA = initiatorNotes != null && !initiatorNotes.isBlank();
         boolean hasB = receiverNotes != null && !receiverNotes.isBlank();
         if (hasA && hasB) {
             String merged = initiatorNotes.strip() + "\n\n" + receiverNotes.strip();
-            return merged.length() > 500 ? merged.substring(0, 500) : merged;
+            if (merged.length() > 500) {
+                throw new BusinessException(ErrorCode.ESCROW_DELIVERY_NOTES_TOO_LONG);
+            }
+            return merged;
         }
         if (hasA) return initiatorNotes;
         if (hasB) return receiverNotes;

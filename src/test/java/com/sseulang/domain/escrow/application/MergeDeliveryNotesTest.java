@@ -1,9 +1,12 @@
 package com.sseulang.domain.escrow.application;
 
+import com.sseulang.global.exception.BusinessException;
+import com.sseulang.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class MergeDeliveryNotesTest {
 
@@ -38,12 +41,22 @@ class MergeDeliveryNotesTest {
     }
 
     @Test
-    @DisplayName("머지 결과 500자 초과_500자로 컷")
-    void 길이제한() {
+    @DisplayName("머지 결과 500자 초과_ESCROW_DELIVERY_NOTES_TOO_LONG (silent truncate 차단)")
+    void 길이제한_거부() {
         String a = "a".repeat(300);
         String b = "b".repeat(300);
+        assertThatThrownBy(() -> EscrowApplicationService.mergeDeliveryNotes(a, b))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.ESCROW_DELIVERY_NOTES_TOO_LONG);
+    }
+
+    @Test
+    @DisplayName("머지 결과 정확히 500자_허용")
+    void 길이_경계() {
+        String a = "a".repeat(249);
+        String b = "b".repeat(249);
+        // 249 + "\n\n"(2) + 249 = 500
         String r = EscrowApplicationService.mergeDeliveryNotes(a, b);
         assertThat(r).hasSize(500);
-        assertThat(r).startsWith(a);
     }
 }

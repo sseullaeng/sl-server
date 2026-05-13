@@ -138,7 +138,7 @@ class TransactionApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("autoCompleteOverdueReturns — 7일 경과 반납요청 모두 거래완료")
+    @DisplayName("findOverdueReturnIds + autoCompleteSingleReturn — 7일 경과 반납요청만 자동 완료, 신규는 보존")
     void autoCompleteOverdueReturns_정상() {
         Long fresh = persistRentalInHandover();
         service.requestReturn(fresh, BUYER);
@@ -150,11 +150,32 @@ class TransactionApplicationServiceTest {
         org.springframework.test.util.ReflectionTestUtils.setField(oldTx, "returnRequestedAt",
                 java.time.LocalDateTime.now().minusDays(8));
 
-        int affected = service.autoCompleteOverdueReturns(java.time.Duration.ofDays(7));
+        java.util.List<Long> candidates = service.findOverdueReturnIds(java.time.Duration.ofDays(7));
+        assertThat(candidates).containsExactly(old);
 
-        assertThat(affected).isEqualTo(1);
+        for (Long id : candidates) service.autoCompleteSingleReturn(id);
+
         assertThat(service.getById(old, BUYER).status()).isEqualTo(TransactionStatus.거래완료);
         assertThat(service.getById(fresh, BUYER).status()).isEqualTo(TransactionStatus.반납요청);
+    }
+
+    @Test
+    @DisplayName("대여 거래 markReceived 직접 호출_TRANSACTION_INVALID_STATE (반납요청 흐름 강제)")
+    void 대여_markReceived_차단() {
+        Long txId = persistRentalInHandover();
+        // 대여 거래는 markReceived 직접 호출 X — 반납요청 → 회신확인 흐름 강제.
+        assertThatThrownBy(() -> service.markReceived(txId, BUYER))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.TRANSACTION_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("대여 거래 completeBySeller 직접 호출_TRANSACTION_INVALID_STATE")
+    void 대여_completeBySeller_차단() {
+        Long txId = persistRentalInHandover();
+        assertThatThrownBy(() -> service.completeBySeller(txId, SELLER))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.TRANSACTION_INVALID_STATE);
     }
 
     private Long persistRentalInHandover() {
@@ -245,6 +266,76 @@ class TransactionApplicationServiceTest {
                 service.createRentalRequest(BUYER, rental.getId(), same, same, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.TRANSACTION_RENTAL_INVALID_PERIOD);
+    }
+
+    @Test
+    @DisplayName("createRentalRequest chatRoomId 비참여자_TX_CHATROOM 가드")
+    void createRentalRequest_chatRoom_비참여자() {
+        Item rental = itemRepo.save(Item.createMulti(
+                SELLER, null, "대여물건", "설명", java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 10_000L, DepositType.AMOUNT, RentalUnit.일, "서울"
+        ));
+        // BUYER ↔ SELLER 가 아닌 다른 참가자 채팅방
+        com.sseulang.domain.chat.domain.ChatRoom otherRoom =
+                com.sseulang.domain.chat.domain.ChatRoom.openFor(rental.getId(), OUTSIDER, SELLER, TradeType.대여);
+        Long otherRoomId = chatRoomRepo.save(otherRoom).getId();
+
+        assertThatThrownBy(() ->
+                service.createRentalRequest(BUYER, rental.getId(),
+                        java.time.LocalDateTime.now().plusDays(1),
+                        java.time.LocalDateTime.now().plusDays(2),
+                        otherRoomId))
+                .isInstanceOf(BusinessException.class);  // chatRoom 참가자 아님 → CHAT_ROOM_FORBIDDEN
+    }
+
+    @Test
+    @DisplayName("createRentalRequest chatRoomId 활성거래 존재_TX_ALREADY_ACTIVE_IN_ROOM")
+    void createRentalRequest_chatRoom_활성존재() {
+        Item rental = itemRepo.save(Item.createMulti(
+                SELLER, null, "대여물건", "설명", java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 10_000L, DepositType.AMOUNT, RentalUnit.일, "서울"
+        ));
+        com.sseulang.domain.chat.domain.ChatRoom room =
+                com.sseulang.domain.chat.domain.ChatRoom.openFor(rental.getId(), BUYER, SELLER, TradeType.대여);
+        Long roomId = chatRoomRepo.save(room).getId();
+
+        // 첫 신청 OK
+        service.createRentalRequest(BUYER, rental.getId(),
+                java.time.LocalDateTime.now().plusDays(1),
+                java.time.LocalDateTime.now().plusDays(3), roomId);
+
+        // 같은 chatRoom 으로 두 번째 신청 → 차단
+        assertThatThrownBy(() ->
+                service.createRentalRequest(BUYER, rental.getId(),
+                        java.time.LocalDateTime.now().plusDays(10),
+                        java.time.LocalDateTime.now().plusDays(12), roomId))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.TX_ALREADY_ACTIVE_IN_ROOM);
+    }
+
+    @Test
+    @DisplayName("createRentalRequest chatRoom itemId 불일치_TX_CHATROOM_ITEM_MISMATCH")
+    void createRentalRequest_chatRoom_item불일치() {
+        Item rentalA = itemRepo.save(Item.createMulti(
+                SELLER, null, "대여A", "설명", java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 10_000L, DepositType.AMOUNT, RentalUnit.일, "서울"
+        ));
+        Item rentalB = itemRepo.save(Item.createMulti(
+                SELLER, null, "대여B", "설명", java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 10_000L, DepositType.AMOUNT, RentalUnit.일, "서울"
+        ));
+        // BUYER ↔ SELLER 채팅방인데 itemId 는 rentalB
+        com.sseulang.domain.chat.domain.ChatRoom room =
+                com.sseulang.domain.chat.domain.ChatRoom.openFor(rentalB.getId(), BUYER, SELLER, TradeType.대여);
+        Long roomId = chatRoomRepo.save(room).getId();
+
+        // rentalA 로 신청하면서 rentalB chatRoom 첨부 → mismatch
+        assertThatThrownBy(() ->
+                service.createRentalRequest(BUYER, rentalA.getId(),
+                        java.time.LocalDateTime.now().plusDays(1),
+                        java.time.LocalDateTime.now().plusDays(2), roomId))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.TX_CHATROOM_ITEM_MISMATCH);
     }
 
     @Test
