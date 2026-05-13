@@ -146,6 +146,16 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
     @Override
     public Page<Transaction> findMyTransactions(
             Long userId, TransactionRole role, TransactionStatus status, Pageable pageable) {
+        return findMyTransactions(userId, role,
+                status == null ? java.util.List.of() : java.util.List.of(status), pageable);
+    }
+
+    @Override
+    public Page<Transaction> findMyTransactions(
+            Long userId, TransactionRole role,
+            java.util.Collection<TransactionStatus> statuses, Pageable pageable) {
+        boolean noFilter = statuses == null || statuses.isEmpty();
+        java.util.Set<TransactionStatus> set = noFilter ? java.util.Set.of() : new java.util.HashSet<>(statuses);
         List<Transaction> filtered = store.values().stream()
                 .filter(t -> {
                     if (role == null) {
@@ -156,7 +166,7 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
                     }
                     return userId.equals(t.getSellerId());
                 })
-                .filter(t -> status == null || t.getStatus() == status)
+                .filter(t -> noFilter || set.contains(t.getStatus()))
                 .sorted(Comparator.comparingLong(Transaction::getId).reversed())
                 .toList();
         int start = Math.min((int) pageable.getOffset(), filtered.size());

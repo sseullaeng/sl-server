@@ -171,18 +171,30 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     @Override
     public Page<Transaction> findMyTransactions(
             Long userId, TransactionRole role, TransactionStatus status, Pageable pageable) {
+        return findMyTransactions(userId, role,
+                status == null ? java.util.List.of() : java.util.List.of(status), pageable);
+    }
+
+    @Override
+    public Page<Transaction> findMyTransactions(
+            Long userId, TransactionRole role,
+            java.util.Collection<TransactionStatus> statuses, Pageable pageable) {
+        boolean noFilter = statuses == null || statuses.isEmpty();
+        boolean single = !noFilter && statuses.size() == 1;
+        TransactionStatus only = single ? statuses.iterator().next() : null;
+
         if (role == null) {
-            return (status == null)
-                    ? jpa.findByParticipant(userId, pageable)
-                    : jpa.findByParticipantAndStatus(userId, status, pageable);
+            if (noFilter) return jpa.findByParticipant(userId, pageable);
+            if (single) return jpa.findByParticipantAndStatus(userId, only, pageable);
+            return jpa.findByParticipantAndStatusIn(userId, statuses, pageable);
         }
         if (role == TransactionRole.BUYER) {
-            return (status == null)
-                    ? jpa.findByBuyer(userId, pageable)
-                    : jpa.findByBuyerAndStatus(userId, status, pageable);
+            if (noFilter) return jpa.findByBuyer(userId, pageable);
+            if (single) return jpa.findByBuyerAndStatus(userId, only, pageable);
+            return jpa.findByBuyerAndStatusIn(userId, statuses, pageable);
         }
-        return (status == null)
-                ? jpa.findBySeller(userId, pageable)
-                : jpa.findBySellerAndStatus(userId, status, pageable);
+        if (noFilter) return jpa.findBySeller(userId, pageable);
+        if (single) return jpa.findBySellerAndStatus(userId, only, pageable);
+        return jpa.findBySellerAndStatusIn(userId, statuses, pageable);
     }
 }

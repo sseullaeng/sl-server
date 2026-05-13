@@ -324,6 +324,13 @@ public class TransactionApplicationService {
                 .map(TransactionResult::from);
     }
 
+    public Page<TransactionResult> findMyTransactions(
+            Long userId, TransactionRole role,
+            java.util.Collection<TransactionStatus> statuses, Pageable pageable) {
+        return transactionRepository.findMyTransactions(userId, role, statuses, pageable)
+                .map(TransactionResult::from);
+    }
+
     public Page<PendingReviewableResult> findPendingReviewable(Long userId, Pageable pageable) {
         LocalDateTime since = LocalDateTime.now(clock).minusDays(7);
         return transactionRepository.findPendingReviewable(userId, since, pageable)

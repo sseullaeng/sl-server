@@ -236,4 +236,31 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
     Page<Transaction> findBySellerAndStatus(@Param("userId") Long userId,
                                              @Param("status") TransactionStatus status,
                                              Pageable pageable);
+
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE (t.sellerId = :userId OR t.buyerId = :userId) AND t.status IN :statuses
+             ORDER BY t.createdAt DESC, t.id DESC
+            """)
+    Page<Transaction> findByParticipantAndStatusIn(@Param("userId") Long userId,
+                                                    @Param("statuses") java.util.Collection<TransactionStatus> statuses,
+                                                    Pageable pageable);
+
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE t.buyerId = :userId AND t.status IN :statuses
+             ORDER BY t.createdAt DESC, t.id DESC
+            """)
+    Page<Transaction> findByBuyerAndStatusIn(@Param("userId") Long userId,
+                                              @Param("statuses") java.util.Collection<TransactionStatus> statuses,
+                                              Pageable pageable);
+
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE t.sellerId = :userId AND t.status IN :statuses
+             ORDER BY t.createdAt DESC, t.id DESC
+            """)
+    Page<Transaction> findBySellerAndStatusIn(@Param("userId") Long userId,
+                                               @Param("statuses") java.util.Collection<TransactionStatus> statuses,
+                                               Pageable pageable);
 }

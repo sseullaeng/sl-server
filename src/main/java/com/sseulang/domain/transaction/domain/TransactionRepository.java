@@ -81,4 +81,9 @@ public interface TransactionRepository {
 
     Page<Transaction> findMyTransactions(
             Long userId, TransactionRole role, TransactionStatus status, Pageable pageable);
+
+    // multi-status — null/empty = 전체. 거래 많은 사용자가 여러 상태(예: 채팅중,예약,인계완료) 조회.
+    Page<Transaction> findMyTransactions(
+            Long userId, TransactionRole role,
+            java.util.Collection<TransactionStatus> statuses, Pageable pageable);
 }
