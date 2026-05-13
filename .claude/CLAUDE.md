@@ -130,8 +130,8 @@ domain/{도메인}/
 
 ## 4. 보안 / 인증 핵심 룰
 
-- **Access Token**: 30분, JWT, payload = `userId + role + jti`
-- **Refresh Token**: 7일, Redis 저장, **Rotation 적용**
+- **Access Token**: 1시간, JWT, payload = `userId + role + jti`
+- **Refresh Token**: 14일, Redis 저장, **Rotation 적용**
 - **저장**: HttpOnly + Secure + SameSite=Strict 쿠키
 - **CSRF**: 쿠키 사용이므로 X-XSRF-TOKEN 헤더로 검증
 - **SecurityFilterChain 분리**: USER / ADMIN / PUBLIC 3개

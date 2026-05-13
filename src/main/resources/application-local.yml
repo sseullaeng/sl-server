@@ -56,8 +56,8 @@ spring:
 app:
   jwt:
     secret: ${JWT_SECRET:local-dev-secret-please-override-with-64-char-random-string-1234567890}
-    access-token-validity-seconds: 1800
-    refresh-token-validity-seconds: 604800
+    access-token-validity-seconds: 3600
+    refresh-token-validity-seconds: 1209600
   cookie:
     domain: localhost
     secure: false
