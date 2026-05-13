@@ -30,19 +30,22 @@ public class DeliveryApplicationService {
     private final PointApplicationService pointApplicationService;
     private final DeliveryLocationCache locationCache;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private final com.sseulang.domain.escrow.domain.EscrowApplicationRepository escrowApplicationRepository;
 
     public DeliveryApplicationService(
             DeliveryRepository deliveryRepository,
             UserApplicationService userApplicationService,
             PointApplicationService pointApplicationService,
             DeliveryLocationCache locationCache,
-            org.springframework.context.ApplicationEventPublisher eventPublisher
+            org.springframework.context.ApplicationEventPublisher eventPublisher,
+            com.sseulang.domain.escrow.domain.EscrowApplicationRepository escrowApplicationRepository
     ) {
         this.deliveryRepository = deliveryRepository;
         this.userApplicationService = userApplicationService;
         this.pointApplicationService = pointApplicationService;
         this.locationCache = locationCache;
         this.eventPublisher = eventPublisher;
+        this.escrowApplicationRepository = escrowApplicationRepository;
     }
 
     
@@ -168,11 +171,16 @@ public class DeliveryApplicationService {
 
     public DeliveryResult getById(Long deliveryId, Long requesterId) {
         DeliveryRequest d = findOrThrow(deliveryId);
-        
-        if (!d.getStatus().canAccept() && !d.isParticipant(requesterId)) {
-            throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
+        if (d.getStatus().canAccept() || d.isParticipant(requesterId)) {
+            return DeliveryResult.from(d);
         }
-        return DeliveryResult.from(d);
+        if (d.getEscrowApplicationId() != null && requesterId != null
+                && escrowApplicationRepository.findById(d.getEscrowApplicationId())
+                    .map(a -> requesterId.equals(a.getBuyerId()) || requesterId.equals(a.getSellerId()))
+                    .orElse(false)) {
+            return DeliveryResult.from(d);
+        }
+        throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
     }
 
     public Page<DeliveryResult> listOpen(Pageable pageable) {

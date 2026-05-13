@@ -34,6 +34,7 @@ class DeliveryApplicationServiceTest {
     private InMemoryFakeDeliveryRepository repo;
     private UserApplicationService userService;
     private PointApplicationService pointService;
+    private com.sseulang.domain.escrow.domain.EscrowApplicationRepository escrowApplicationRepository;
     private DeliveryApplicationService service;
 
     @BeforeEach
@@ -43,7 +44,8 @@ class DeliveryApplicationServiceTest {
         pointService = mock(PointApplicationService.class);
         com.sseulang.domain.delivery.domain.DeliveryLocationCache locationCache =
                 mock(com.sseulang.domain.delivery.domain.DeliveryLocationCache.class);
-        service = new DeliveryApplicationService(repo, userService, pointService, locationCache, e -> {});
+        escrowApplicationRepository = mock(com.sseulang.domain.escrow.domain.EscrowApplicationRepository.class);
+        service = new DeliveryApplicationService(repo, userService, pointService, locationCache, e -> {}, escrowApplicationRepository);
     }
 
     @Test
@@ -268,6 +270,33 @@ class DeliveryApplicationServiceTest {
         // 요청자/라이더는 통과
         assertThat(service.getById(created.id(), REQUESTER).id()).isEqualTo(created.id());
         assertThat(service.getById(created.id(), RIDER).id()).isEqualTo(created.id());
+    }
+
+    @Test
+    @DisplayName("getById 수락 이후_연결된 escrow buyer/seller 도 조회 가능")
+    void getById_수락이후_escrow참여자_허용() {
+        long escrowId = 7000L;
+        long sellerId = 555L;
+        long buyerId = REQUESTER;
+        com.sseulang.domain.delivery.domain.DeliveryRequest seed =
+                com.sseulang.domain.delivery.domain.DeliveryRequest.createFromEscrow(
+                        REQUESTER, escrowId, "픽업", "배송", "물품", 5000L, LocalDateTime.now());
+        repo.save(seed);
+        service.accept(seed.getId(), RIDER);
+
+        com.sseulang.domain.escrow.domain.EscrowApplication app =
+                mock(com.sseulang.domain.escrow.domain.EscrowApplication.class);
+        org.mockito.Mockito.when(app.getBuyerId()).thenReturn(buyerId);
+        org.mockito.Mockito.when(app.getSellerId()).thenReturn(sellerId);
+        org.mockito.Mockito.when(escrowApplicationRepository.findById(escrowId))
+                .thenReturn(java.util.Optional.of(app));
+
+        assertThat(service.getById(seed.getId(), sellerId).id()).isEqualTo(seed.getId());
+
+        assertThatThrownBy(() -> service.getById(seed.getId(), 999L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.DELIVERY_FORBIDDEN);
     }
 
     @Test
