@@ -56,8 +56,9 @@ public record ItemUpdateRequest(
         @Schema(description = "이미지 URL 목록", nullable = true)
         List<String> imageUrls,
 
-        @Schema(description = "해시태그", nullable = true)
-        List<String> hashtags
+        @Schema(description = "해시태그 (최대 10개, 태그당 50자)", nullable = true)
+        @Size(max = 10, message = "해시태그는 최대 10개까지 등록할 수 있습니다")
+        List<@Size(max = 50, message = "태그는 50자 이하여야 합니다") String> hashtags
 ) {
     public ItemUpdateCommand toCommand() {
         Set<TradeType> resolvedTypes = resolveTradeTypes();

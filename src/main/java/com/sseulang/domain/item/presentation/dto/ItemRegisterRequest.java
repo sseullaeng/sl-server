@@ -63,8 +63,9 @@ public record ItemRegisterRequest(
                 example = "[\"https://cdn.sseulang.test/items/abc.jpg\"]", nullable = true)
         List<String> imageUrls,
 
-        @Schema(description = "해시태그 (선택)", example = "[\"애플\",\"중고폰\"]", nullable = true)
-        List<String> hashtags
+        @Schema(description = "해시태그 (선택, 최대 10개, 태그당 50자)", example = "[\"애플\",\"중고폰\"]", nullable = true)
+        @Size(max = 10, message = "해시태그는 최대 10개까지 등록할 수 있습니다")
+        List<@Size(max = 50, message = "태그는 50자 이하여야 합니다") String> hashtags
 ) {
     public ItemRegisterCommand toCommand(Long sellerId) {
         Set<TradeType> resolvedTypes = resolveTradeTypes();
