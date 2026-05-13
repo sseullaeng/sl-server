@@ -39,4 +39,9 @@ public class InMemoryFakeReviewRepository implements ReviewRepository {
         int end = Math.min(start + pageable.getPageSize(), filtered.size());
         return new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
     }
+
+    @Override
+    public java.util.Optional<Review> findById(Long id) {
+        return java.util.Optional.ofNullable(store.get(id));
+    }
 }

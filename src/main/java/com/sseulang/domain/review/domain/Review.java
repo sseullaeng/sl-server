@@ -47,6 +47,9 @@ public class Review {
     @Column(name = "comment", length = COMMENT_MAX_LENGTH)
     private String comment;
 
+    @Column(name = "content_visible", nullable = false)
+    private boolean contentVisible = true;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -76,6 +79,15 @@ public class Review {
         r.revieweeId = revieweeId;
         r.rating = rating;
         r.comment = comment;
+        r.contentVisible = true;
         return r;
+    }
+
+    // 대상자(reviewee) 만 토글 가능. 그 외 호출 시 예외 — service 단에서 가드.
+    public void setContentVisible(Long requesterId, boolean visible) {
+        if (requesterId == null || !requesterId.equals(this.revieweeId)) {
+            throw new IllegalStateException("리뷰 대상자만 공개여부를 변경할 수 있습니다");
+        }
+        this.contentVisible = visible;
     }
 }

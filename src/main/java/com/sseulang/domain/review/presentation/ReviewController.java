@@ -4,6 +4,7 @@ import com.sseulang.domain.review.application.ReviewApplicationService;
 import com.sseulang.domain.review.presentation.dto.PendingReviewResponse;
 import com.sseulang.domain.review.presentation.dto.ReviewIdResponse;
 import com.sseulang.domain.review.presentation.dto.ReviewResponse;
+import com.sseulang.domain.review.presentation.dto.ReviewVisibilityRequest;
 import com.sseulang.domain.review.presentation.dto.ReviewWriteRequest;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
@@ -17,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -64,6 +66,20 @@ public class ReviewController {
         Page<ReviewResponse> result = reviewService.listReceived(userId, requesterId, pageable)
                 .map(ReviewResponse::from);
         return ApiResponse.ok(PageResponse.from(result));
+    }
+
+    @Operation(summary = "리뷰 한줄평 공개여부 토글",
+            description = "리뷰 대상자(reviewee) 만 호출 가능. 별점은 항상 공개 — 한줄평(comment) 만 마스킹. "
+                    + "false 시 제3자 응답에서 comment=null. 본인은 자기 페이지에서 항상 원본 + flag 함께 받음.")
+    @PatchMapping("/api/v1/reviews/{id}/visibility")
+    public ApiResponse<ReviewResponse> setVisibility(
+            @AuthenticationPrincipal Long requesterId,
+            @PathVariable("id") Long reviewId,
+            @Valid @RequestBody ReviewVisibilityRequest request
+    ) {
+        return ApiResponse.ok(ReviewResponse.from(
+                reviewService.setVisibility(reviewId, requesterId, request.contentVisible())
+        ));
     }
 
     @Operation(summary = "리뷰 작성 대기 목록",

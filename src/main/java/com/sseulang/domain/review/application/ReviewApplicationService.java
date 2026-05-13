@@ -78,6 +78,17 @@ public class ReviewApplicationService {
                 .map(r -> r.masked(requesterId));
     }
 
+    @Transactional
+    public ReviewResult setVisibility(Long reviewId, Long requesterId, boolean contentVisible) {
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.REVIEW_NOT_FOUND));
+        if (requesterId == null || !requesterId.equals(review.getRevieweeId())) {
+            throw new BusinessException(ErrorCode.REVIEW_FORBIDDEN);
+        }
+        review.setContentVisible(requesterId, contentVisible);
+        return ReviewResult.from(review);
+    }
+
     
 
     public Page<PendingReviewableResult> listPending(Long requesterId, Pageable pageable) {

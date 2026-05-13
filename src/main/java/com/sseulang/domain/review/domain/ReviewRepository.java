@@ -7,6 +7,8 @@ public interface ReviewRepository {
 
     Review save(Review review);
 
-    
+
     Page<Review> findByRevieweeId(Long revieweeId, Pageable pageable);
+
+    java.util.Optional<Review> findById(Long id);
 }

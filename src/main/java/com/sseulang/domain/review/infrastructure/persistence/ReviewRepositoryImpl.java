@@ -24,4 +24,9 @@ public class ReviewRepositoryImpl implements ReviewRepository {
     public Page<Review> findByRevieweeId(Long revieweeId, Pageable pageable) {
         return jpa.findByRevieweeIdOrderByCreatedAtDesc(revieweeId, pageable);
     }
+
+    @Override
+    public java.util.Optional<Review> findById(Long id) {
+        return jpa.findById(id);
+    }
 }

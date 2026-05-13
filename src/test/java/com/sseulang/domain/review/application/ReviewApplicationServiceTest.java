@@ -181,6 +181,66 @@ class ReviewApplicationServiceTest {
         assertThat(r.deadline()).isEqualTo(r.completedAt().plusDays(7));
     }
 
+    @Test
+    @DisplayName("setVisibility 대상자_정상 토글")
+    void setVisibility_대상자_정상() {
+        Long reviewId = service.write(new ReviewWriteCommand(completedTxId, BUYER, 5, "친절"));
+
+        var r1 = service.setVisibility(reviewId, SELLER, false);
+        assertThat(r1.contentVisible()).isFalse();
+
+        var r2 = service.setVisibility(reviewId, SELLER, true);
+        assertThat(r2.contentVisible()).isTrue();
+    }
+
+    @Test
+    @DisplayName("setVisibility 작성자(reviewer)_REVIEW_FORBIDDEN")
+    void setVisibility_작성자_거부() {
+        Long reviewId = service.write(new ReviewWriteCommand(completedTxId, BUYER, 5, "친절"));
+
+        assertThatThrownBy(() -> service.setVisibility(reviewId, BUYER, false))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.REVIEW_FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("setVisibility 외부인_REVIEW_FORBIDDEN")
+    void setVisibility_외부인_거부() {
+        Long reviewId = service.write(new ReviewWriteCommand(completedTxId, BUYER, 5, "친절"));
+
+        assertThatThrownBy(() -> service.setVisibility(reviewId, OUTSIDER, false))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.REVIEW_FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("setVisibility 미존재 review_REVIEW_NOT_FOUND")
+    void setVisibility_미존재() {
+        assertThatThrownBy(() -> service.setVisibility(999L, SELLER, false))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.REVIEW_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("listReceived contentVisible=false_제3자에게 comment null 마스킹")
+    void listReceived_비공개_마스킹() {
+        Long reviewId = service.write(new ReviewWriteCommand(completedTxId, BUYER, 5, "친절"));
+        service.setVisibility(reviewId, SELLER, false);
+
+        // 제3자 view
+        var thirdParty = service.listReceived(SELLER, OUTSIDER, org.springframework.data.domain.PageRequest.of(0, 10));
+        assertThat(thirdParty.getContent().get(0).comment()).isNull();
+        assertThat(thirdParty.getContent().get(0).contentVisible()).isFalse();
+
+        // 작성자(reviewer) view — 항상 원본
+        var reviewer = service.listReceived(SELLER, BUYER, org.springframework.data.domain.PageRequest.of(0, 10));
+        assertThat(reviewer.getContent().get(0).comment()).isEqualTo("친절");
+
+        // 대상자(reviewee) view — 항상 원본
+        var reviewee = service.listReceived(SELLER, SELLER, org.springframework.data.domain.PageRequest.of(0, 10));
+        assertThat(reviewee.getContent().get(0).comment()).isEqualTo("친절");
+    }
+
     private Long persistCompletedTransaction(Long itemId, LocalDateTime completedAt) {
         return persistTransaction(itemId, TransactionStatus.거래완료, completedAt);
     }

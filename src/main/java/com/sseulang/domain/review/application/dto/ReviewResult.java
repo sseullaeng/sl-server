@@ -11,6 +11,7 @@ public record ReviewResult(
         Long revieweeId,
         int rating,
         String comment,
+        boolean contentVisible,
         LocalDateTime createdAt
 ) {
     public static ReviewResult from(Review r) {
@@ -18,15 +19,18 @@ public record ReviewResult(
                 r.getId(), r.getTransactionId(),
                 r.getReviewerId(), r.getRevieweeId(),
                 r.getRating(), r.getComment(),
+                r.isContentVisible(),
                 r.getCreatedAt()
         );
     }
 
-    
+    // 작성자/대상자 본인 → comment 원본. 그 외 → contentVisible=false 면 null 마스킹, true 면 원본.
     public ReviewResult masked(Long requesterId) {
-        if (reviewerId.equals(requesterId)) {
+        boolean isParty = requesterId != null
+                && (reviewerId.equals(requesterId) || revieweeId.equals(requesterId));
+        if (isParty || contentVisible) {
             return this;
         }
-        return new ReviewResult(id, transactionId, reviewerId, revieweeId, rating, null, createdAt);
+        return new ReviewResult(id, transactionId, reviewerId, revieweeId, rating, null, contentVisible, createdAt);
     }
 }
