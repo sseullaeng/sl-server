@@ -26,6 +26,10 @@ public enum ErrorCode {
     AUTH_VERIFICATION_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "유효하지 않은 인증 토큰입니다."),
     AUTH_VERIFICATION_TOKEN_EXPIRED(HttpStatus.BAD_REQUEST, "만료된 인증 토큰입니다."),
     AUTH_EMAIL_ALREADY_LINKED_TO_DIFFERENT_PROVIDER(HttpStatus.CONFLICT, "이미 다른 SNS 로 가입된 이메일입니다."),
+    AUTH_OAUTH_LINK_REQUIRED(HttpStatus.CONFLICT, "동일 이메일의 일반 계정이 이미 존재합니다. 로그인 후 [계정 연결] 을 진행해 주세요."),
+    AUTH_OAUTH_LINK_EMAIL_MISMATCH(HttpStatus.BAD_REQUEST, "현재 로그인한 계정과 소셜 계정의 이메일이 일치하지 않습니다."),
+    AUTH_OAUTH_LINK_KEY_INVALID(HttpStatus.BAD_REQUEST, "연결 키가 만료되었거나 유효하지 않습니다."),
+    AUTH_OAUTH_LINK_NOT_LOCAL(HttpStatus.CONFLICT, "이 계정은 이미 소셜 계정과 연결되어 있습니다."),
     AUTH_VERIFICATION_RESEND_TOO_SOON(HttpStatus.TOO_MANY_REQUESTS, "인증 메일 재발송은 잠시 후 다시 시도해 주세요."),
 
     // 사용자

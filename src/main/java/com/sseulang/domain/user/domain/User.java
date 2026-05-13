@@ -193,17 +193,31 @@ public class User extends BaseEntity {
     
 
     public void linkSocial(SocialProvider provider, String socialId) {
+        validateSocialLinkInput(provider, socialId);
+        this.socialProvider = provider;
+        this.socialId = socialId;
+        // takeover — 미인증 LOCAL 점유 squatting 방어. password 무효화로 squat 한 공격자 차단.
+        this.password = null;
+        this.emailVerified = true;
+    }
+
+    // 사용자 명시 연결 — LOCAL 비밀번호 유지. 이후 LOCAL 로그인과 OAuth 로그인 모두 가능.
+    public void addSocialLink(SocialProvider provider, String socialId) {
+        validateSocialLinkInput(provider, socialId);
+        if (this.socialProvider != null && this.socialProvider != SocialProvider.LOCAL) {
+            throw new IllegalStateException("이미 소셜 계정과 연결된 사용자입니다");
+        }
+        this.socialProvider = provider;
+        this.socialId = socialId;
+    }
+
+    private static void validateSocialLinkInput(SocialProvider provider, String socialId) {
         if (provider == null || provider == SocialProvider.LOCAL) {
             throw new IllegalArgumentException("소셜 provider 는 LOCAL 외여야 합니다");
         }
         if (socialId == null || socialId.isBlank()) {
             throw new IllegalArgumentException("socialId 는 필수입니다");
         }
-        this.socialProvider = provider;
-        this.socialId = socialId;
-        
-        this.password = null;
-        this.emailVerified = true;
     }
 
     

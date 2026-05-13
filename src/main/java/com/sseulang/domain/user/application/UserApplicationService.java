@@ -71,11 +71,15 @@ public class UserApplicationService {
         if (sameEmail.isPresent()) {
             User existing = sameEmail.get();
             if (existing.getSocialProvider() == SocialProvider.LOCAL) {
-                
-                existing.linkSocial(provider, providerId);
-                return existing;
+                if (!existing.isEmailVerified()) {
+                    // 미인증 LOCAL — squatting 방어 takeover (password 무효화).
+                    existing.linkSocial(provider, providerId);
+                    return existing;
+                }
+                // 인증된 LOCAL — 사용자 명시 연결 필요.
+                throw new BusinessException(ErrorCode.AUTH_OAUTH_LINK_REQUIRED);
             }
-            
+
             throw new BusinessException(ErrorCode.AUTH_EMAIL_ALREADY_LINKED_TO_DIFFERENT_PROVIDER);
         }
         return create(provider, providerId, email, nickname, profileImage);
@@ -84,6 +88,24 @@ public class UserApplicationService {
     public User getById(Long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    @Transactional
+    public User addSocialLink(Long userId, SocialProvider provider, String providerId, String providerEmail) {
+        User user = getById(userId);
+        if (user.getSocialProvider() != null && user.getSocialProvider() != SocialProvider.LOCAL) {
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_LINK_NOT_LOCAL);
+        }
+        if (providerEmail == null || !providerEmail.equalsIgnoreCase(user.getEmail())) {
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_LINK_EMAIL_MISMATCH);
+        }
+        userRepository.findBySocial(provider, providerId).ifPresent(other -> {
+            if (!other.getId().equals(user.getId())) {
+                throw new BusinessException(ErrorCode.AUTH_EMAIL_ALREADY_LINKED_TO_DIFFERENT_PROVIDER);
+            }
+        });
+        user.addSocialLink(provider, providerId);
+        return user;
     }
 
     
@@ -376,12 +398,15 @@ public class UserApplicationService {
         if (sameEmail.isPresent()) {
             User existing = sameEmail.get();
             if (existing.getSocialProvider() == SocialProvider.LOCAL) {
-                existing.linkSocial(provider, providerId);
-                return existing;
+                if (!existing.isEmailVerified()) {
+                    existing.linkSocial(provider, providerId);
+                    return existing;
+                }
+                throw new BusinessException(ErrorCode.AUTH_OAUTH_LINK_REQUIRED);
             }
             throw new BusinessException(ErrorCode.AUTH_EMAIL_ALREADY_LINKED_TO_DIFFERENT_PROVIDER);
         }
-        
+
         throw race;
     }
 }

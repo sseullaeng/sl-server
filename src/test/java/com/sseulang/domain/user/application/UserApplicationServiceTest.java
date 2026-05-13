@@ -79,8 +79,8 @@ class UserApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("findOrCreateBySocial_email 같은 LOCAL user 발견_takeover (linkSocial + verified=true)")
-    void findOrCreateBySocial_LOCAL_takeover() {
+    @DisplayName("findOrCreateBySocial_email 같은 미인증 LOCAL_takeover (squatting 방어, password null)")
+    void findOrCreateBySocial_미인증_LOCAL_takeover() {
         // 공격자가 victim@email 로 LOCAL 가입 (verified=false). 진짜 owner 가 OAuth 가입 시도
         User local = User.createLocalUser(EMAIL, "$2a$10$attackerHash", "attacker");
         when(userRepository.findBySocial(SocialProvider.KAKAO, "k-1")).thenReturn(Optional.empty());
@@ -88,12 +88,85 @@ class UserApplicationServiceTest {
 
         User result = service.findOrCreateBySocial(SocialProvider.KAKAO, "k-1", EMAIL, "kakaoUser", null);
 
-        // takeover — 같은 user row 에 social 추가, password null, verified true
         assertThat(result).isSameAs(local);
         assertThat(result.getSocialProvider()).isEqualTo(SocialProvider.KAKAO);
         assertThat(result.getSocialId()).isEqualTo("k-1");
         assertThat(result.getPassword()).as("기존 LOCAL password 무효화 — 공격자 차단").isNull();
         assertThat(result.isEmailVerified()).isTrue();
+    }
+
+    @Test
+    @DisplayName("findOrCreateBySocial_email 같은 인증된 LOCAL_AUTH_OAUTH_LINK_REQUIRED")
+    void findOrCreateBySocial_인증된_LOCAL_거부() {
+        User local = User.createLocalUser(EMAIL, "$2a$10$hash", "owner");
+        local.markEmailVerified();
+        when(userRepository.findBySocial(SocialProvider.KAKAO, "k-1")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(local));
+
+        assertThatThrownBy(() ->
+                service.findOrCreateBySocial(SocialProvider.KAKAO, "k-1", EMAIL, "n", null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.AUTH_OAUTH_LINK_REQUIRED);
+
+        assertThat(local.getSocialProvider()).isEqualTo(SocialProvider.LOCAL);
+        assertThat(local.getSocialId()).isNull();
+        assertThat(local.getPassword()).as("password 보존").isNotNull();
+    }
+
+    @Test
+    @DisplayName("addSocialLink_정상_password 보존 + provider 세팅")
+    void addSocialLink_정상() {
+        User local = User.createLocalUser(EMAIL, "$2a$10$hash", "owner");
+        local.markEmailVerified();
+        when(userRepository.findById(7L)).thenReturn(Optional.of(local));
+        when(userRepository.findBySocial(SocialProvider.KAKAO, "k-1")).thenReturn(Optional.empty());
+
+        User result = service.addSocialLink(7L, SocialProvider.KAKAO, "k-1", EMAIL.value());
+
+        assertThat(result.getSocialProvider()).isEqualTo(SocialProvider.KAKAO);
+        assertThat(result.getSocialId()).isEqualTo("k-1");
+        assertThat(result.getPassword()).as("LOCAL password 유지 — 듀얼 로그인 가능").isNotNull();
+    }
+
+    @Test
+    @DisplayName("addSocialLink_email 불일치_AUTH_OAUTH_LINK_EMAIL_MISMATCH")
+    void addSocialLink_이메일불일치() {
+        User local = User.createLocalUser(EMAIL, "$2a$10$hash", "owner");
+        when(userRepository.findById(7L)).thenReturn(Optional.of(local));
+
+        assertThatThrownBy(() ->
+                service.addSocialLink(7L, SocialProvider.KAKAO, "k-1", "other@example.com"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.AUTH_OAUTH_LINK_EMAIL_MISMATCH);
+    }
+
+    @Test
+    @DisplayName("addSocialLink_이미 소셜 연결됨_AUTH_OAUTH_LINK_NOT_LOCAL")
+    void addSocialLink_이미연결() {
+        User social = User.createSocialUser(SocialProvider.GOOGLE, "g-1", EMAIL, "n", null);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(social));
+
+        assertThatThrownBy(() ->
+                service.addSocialLink(7L, SocialProvider.KAKAO, "k-1", EMAIL.value()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.AUTH_OAUTH_LINK_NOT_LOCAL);
+    }
+
+    @Test
+    @DisplayName("addSocialLink_socialId 가 다른 user 점유_AUTH_EMAIL_ALREADY_LINKED_TO_DIFFERENT_PROVIDER")
+    void addSocialLink_소셜아이디_타사용자점유() {
+        User local = User.createLocalUser(EMAIL, "$2a$10$hash", "owner");
+        local.markEmailVerified();
+        org.springframework.test.util.ReflectionTestUtils.setField(local, "id", 7L);
+        User other = User.createSocialUser(SocialProvider.KAKAO, "k-1", new Email("other@example.com"), "x", null);
+        org.springframework.test.util.ReflectionTestUtils.setField(other, "id", 9L);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(local));
+        when(userRepository.findBySocial(SocialProvider.KAKAO, "k-1")).thenReturn(Optional.of(other));
+
+        assertThatThrownBy(() ->
+                service.addSocialLink(7L, SocialProvider.KAKAO, "k-1", EMAIL.value()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.AUTH_EMAIL_ALREADY_LINKED_TO_DIFFERENT_PROVIDER);
     }
 
     @Test
