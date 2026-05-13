@@ -12,7 +12,11 @@ public record MeResponse(
         @Schema(example = "alice@sseulang.test") String email,
         @Schema(example = "쓸랭이") String nickname,
         @Schema(description = "프로필 이미지 URL (없으면 null)") String profileImage,
-        @Schema(description = "LOCAL / KAKAO / GOOGLE") SocialProvider socialProvider,
+        @Schema(description = "LOCAL / KAKAO / GOOGLE — 마지막 연결된 provider. LOCAL+OAuth 듀얼 로그인 가능 여부 판정에는 hasPassword 도 같이 사용.")
+        SocialProvider socialProvider,
+        @Schema(example = "true",
+                description = "LOCAL 비밀번호 보유 여부. true 면 이메일/비밀번호 로그인 가능. socialProvider 가 KAKAO/GOOGLE 이어도 hasPassword=true 면 양쪽 로그인 모두 가능 (명시 연결 후).")
+        boolean hasPassword,
         @Schema(example = "true", description = "이메일 인증 여부 — false 면 자금/거래 API 가 403") boolean emailVerified,
         @Schema(example = "50000", description = "즉시 사용 가능 포인트 (KRW). 라운드 11 부터 거래 hold 분 제외.") long pointBalance,
         @Schema(example = "10000", description = "거래 hold 잔액 (라운드 11). 헤더/카드에 작은 텍스트 안내용.") long pointHold,
@@ -24,7 +28,6 @@ public record MeResponse(
                 allowableValues = {"USER", "ADMIN"})
         String role
 ) {
-    
 
     public static MeResponse from(User u, String role) {
         return new MeResponse(
@@ -33,6 +36,7 @@ public record MeResponse(
                 u.getNickname(),
                 u.getProfileImage(),
                 u.getSocialProvider(),
+                u.hasPassword(),
                 u.isEmailVerified(),
                 u.getPointBalance(),
                 u.getPointHold(),
