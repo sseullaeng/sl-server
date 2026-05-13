@@ -171,16 +171,19 @@ public class DeliveryApplicationService {
 
     public DeliveryResult getById(Long deliveryId, Long requesterId) {
         DeliveryRequest d = findOrThrow(deliveryId);
-        if (d.getStatus().canAccept() || d.isParticipant(requesterId)) {
-            return DeliveryResult.from(d);
-        }
-        if (d.getEscrowApplicationId() != null && requesterId != null
-                && escrowApplicationRepository.findById(d.getEscrowApplicationId())
-                    .map(a -> requesterId.equals(a.getBuyerId()) || requesterId.equals(a.getSellerId()))
-                    .orElse(false)) {
+        if (d.getStatus().canAccept() || isViewableByEscrowParticipant(d, requesterId)) {
             return DeliveryResult.from(d);
         }
         throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
+    }
+
+    // delivery 직접 참여자(requester/rider) 또는 연결 escrow 의 buyer/seller 인지 확인.
+    private boolean isViewableByEscrowParticipant(DeliveryRequest d, Long userId) {
+        if (d.isParticipant(userId)) return true;
+        if (d.getEscrowApplicationId() == null || userId == null) return false;
+        return escrowApplicationRepository.findById(d.getEscrowApplicationId())
+                .map(a -> userId.equals(a.getBuyerId()) || userId.equals(a.getSellerId()))
+                .orElse(false);
     }
 
     public Page<DeliveryResult> listOpen(Pageable pageable) {
@@ -191,7 +194,7 @@ public class DeliveryApplicationService {
 
     public void requireParticipant(Long deliveryId, Long userId) {
         DeliveryRequest d = findOrThrow(deliveryId);
-        if (!d.isParticipant(userId)) {
+        if (!isViewableByEscrowParticipant(d, userId)) {
             throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
         }
     }
@@ -220,7 +223,7 @@ public class DeliveryApplicationService {
     
     public void requireParticipantTrackable(Long deliveryId, Long userId) {
         DeliveryRequest d = findOrThrow(deliveryId);
-        if (!d.isParticipant(userId)) {
+        if (!isViewableByEscrowParticipant(d, userId)) {
             throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
         }
         if (!d.getStatus().canTrackLocation()) {
