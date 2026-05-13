@@ -230,6 +230,23 @@ class EscrowFlowE2EIT {
         assertThat(balance(sellerId)).isEqualTo(itemPrice);
         // rider: deliveryFee 적립 (snapshot 값)
         assertThat(balance(riderId)).isEqualTo(finalApp.appliedDeliveryFee());
+
+        // B-5: settle 시 paired Transaction 자동 생성 검증 (commit 58f2d19).
+        // 어드민/리뷰가 직거래와 동일 모델로 접근 가능해야 함.
+        Number txCount = (Number) em.createNativeQuery(
+                "SELECT COUNT(*) FROM transactions WHERE escrow_application_id = :id"
+        ).setParameter("id", app.id()).getSingleResult();
+        assertThat(txCount.intValue()).as("paired Transaction 1건 자동 생성").isEqualTo(1);
+
+        Object[] txRow = (Object[]) em.createNativeQuery(
+                "SELECT status, seller_id, buyer_id, price, escrow_application_id "
+                        + "FROM transactions WHERE escrow_application_id = :id"
+        ).setParameter("id", app.id()).getSingleResult();
+        assertThat(txRow[0]).as("status=거래완료").isEqualTo("거래완료");
+        assertThat(((Number) txRow[1]).longValue()).isEqualTo(sellerId);
+        assertThat(((Number) txRow[2]).longValue()).isEqualTo(buyerId);
+        assertThat(((Number) txRow[3]).longValue()).isEqualTo(itemPrice);
+        assertThat(((Number) txRow[4]).longValue()).isEqualTo(app.id());
     }
 
     @Test
