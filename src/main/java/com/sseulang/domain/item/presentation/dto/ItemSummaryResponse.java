@@ -7,6 +7,7 @@ import com.sseulang.domain.item.domain.TradeType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 
 @Schema(description = "물품 목록 row — 검색·찜·내물품 응답 공통. V25 라운드 12 PR-D 잔여 — 판매/대여 가격 분리.")
@@ -39,6 +40,8 @@ public record ItemSummaryResponse(
         boolean isWishlisted,
         @Schema(example = "127", description = "조회 수 (라운드 12 PR-D)")
         int viewCount,
+        @Schema(description = "해시태그 (소문자 정규화 X — 등록한 그대로)", example = "[\"애플\",\"중고폰\"]")
+        List<String> hashtags,
         LocalDateTime createdAt
 ) {
     public static ItemSummaryResponse from(ItemSummaryResult r) {
@@ -51,6 +54,7 @@ public record ItemSummaryResponse(
                 r.status(), r.region(),
                 r.thumbnailUrl(), r.wishlistCount(), r.isWishlisted(),
                 r.viewCount(),
+                r.hashtags() == null ? List.of() : r.hashtags(),
                 r.createdAt()
         );
     }

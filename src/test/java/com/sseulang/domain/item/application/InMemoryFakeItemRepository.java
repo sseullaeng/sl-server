@@ -151,4 +151,19 @@ public class InMemoryFakeItemRepository implements ItemRepository {
         int end = Math.min(start + pageable.getPageSize(), filtered.size());
         return new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
     }
+
+    @Override
+    public java.util.Map<Long, java.util.List<String>> findHashtagsByItemIds(java.util.Collection<Long> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) return java.util.Collections.emptyMap();
+        java.util.Map<Long, java.util.List<String>> result = new java.util.LinkedHashMap<>();
+        for (Long id : itemIds) {
+            Item it = store.get(id);
+            if (it == null) continue;
+            java.util.List<String> tags = it.getHashtags().stream()
+                    .map(com.sseulang.domain.item.domain.ItemHashtag::getTag)
+                    .toList();
+            if (!tags.isEmpty()) result.put(id, tags);
+        }
+        return result;
+    }
 }

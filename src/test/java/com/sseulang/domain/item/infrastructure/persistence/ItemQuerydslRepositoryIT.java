@@ -208,6 +208,54 @@ class ItemQuerydslRepositoryIT {
         return item;
     }
 
+    private Item persistDualModeItem(String title) {
+        Item item = Item.createMulti(sellerId, null, title, "desc",
+                java.util.EnumSet.of(TradeType.판매, TradeType.대여),
+                100_000L, 5_000L, 10_000L, RentalUnit.일, null);
+        em.persist(item);
+        em.flush();
+        return item;
+    }
+
+    @Test
+    @DisplayName("search tradeType=대여_다중모드 item 도 매칭 (V25 FIND_IN_SET 회귀 차단)")
+    void search_tradeType_다중모드() {
+        persistItem("판매전용", TradeType.판매, 1_000L);
+        persistItem("나눔전용", TradeType.나눔, 0L);
+        Item dual = persistDualModeItem("판매+대여_혼합");
+
+        Page<Item> result = repository.search(
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(
+                        null, null, TradeType.대여, null, null, null, null,
+                        com.sseulang.domain.item.application.dto.ItemSort.LATEST),
+                PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Item::getId)
+                .containsExactly(dual.getId());
+    }
+
+    @Test
+    @DisplayName("search COMPLETED_LAST_거래완료 항목이 페이지 후순위로")
+    void search_completed_last() {
+        Item active = persistItem("active", TradeType.판매, 100L);
+        Item sold = persistItem("sold", TradeType.판매, 100L);
+        sold.markAsReserved();
+        sold.markAsSold();
+        em.merge(sold);
+        em.flush();
+
+        Page<Item> result = repository.search(
+                new com.sseulang.domain.item.application.dto.ItemSearchCriteria(
+                        null, null, null, null, null, null, null,
+                        com.sseulang.domain.item.application.dto.ItemSort.COMPLETED_LAST),
+                PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Item::getId)
+                .containsExactly(active.getId(), sold.getId());
+    }
+
 
     private static void sleepMs(long ms) {
         try {

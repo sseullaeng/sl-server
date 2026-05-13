@@ -103,11 +103,16 @@ public class ItemApplicationService {
 
     private Page<ItemSummaryResult> enrich(Page<Item> page, Long viewerId) {
         if (page.isEmpty()) {
-            return page.map(item -> ItemSummaryResult.from(item, false));
+            return page.map(item -> ItemSummaryResult.from(item, false, java.util.List.of()));
         }
         List<Long> ids = page.getContent().stream().map(Item::getId).toList();
         Set<Long> wishlisted = wishlistView.findWishlistedItemIds(viewerId, ids);
-        return page.map(item -> ItemSummaryResult.from(item, wishlisted.contains(item.getId())));
+        java.util.Map<Long, java.util.List<String>> tagsByItem = itemRepository.findHashtagsByItemIds(ids);
+        return page.map(item -> ItemSummaryResult.from(
+                item,
+                wishlisted.contains(item.getId()),
+                tagsByItem.getOrDefault(item.getId(), java.util.List.of())
+        ));
     }
 
     @Transactional

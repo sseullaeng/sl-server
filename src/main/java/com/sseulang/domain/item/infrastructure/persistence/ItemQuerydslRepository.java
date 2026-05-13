@@ -58,7 +58,12 @@ public class ItemQuerydslRepository {
             where.and(item.categoryId.eq(criteria.categoryId()));
         }
         if (criteria.tradeType() != null) {
-            where.and(item.tradeType.eq(criteria.tradeType()));
+            // V25 다중모드 — trade_types CSV 컬럼에 FIND_IN_SET. 단일 trade_type 컬럼은 deprecated.
+            where.and(Expressions.booleanTemplate(
+                    "function('find_in_set', {0}, {1}) > 0",
+                    criteria.tradeType().name(),
+                    item.tradeTypes
+            ));
         }
         if (criteria.minPrice() != null) {
             where.and(item.price.goe(criteria.minPrice()));
@@ -81,7 +86,7 @@ public class ItemQuerydslRepository {
         List<Item> content = queryFactory
                 .selectFrom(item)
                 .where(where)
-                .orderBy(orderBy(criteria.sort(), item))
+                .orderBy(orderBy(criteria.sorts(), item))
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
                 .fetch();
@@ -97,17 +102,54 @@ public class ItemQuerydslRepository {
 
     
 
-    private static OrderSpecifier<?>[] orderBy(ItemSort sort, QItem item) {
+    private static OrderSpecifier<?>[] orderBy(List<ItemSort> sorts, QItem item) {
+        java.util.LinkedHashMap<String, OrderSpecifier<?>> dedup = new java.util.LinkedHashMap<>();
+        for (ItemSort s : sorts) {
+            for (OrderSpecifier<?> o : keyOrderSpecs(s, item)) {
+                dedup.putIfAbsent(o.toString(), o);
+            }
+        }
+        // 마지막 tiebreak — id desc 가 없으면 자동 부착(unique 보장).
+        OrderSpecifier<?> idDesc = item.id.desc();
+        dedup.putIfAbsent(idDesc.toString(), idDesc);
+        return dedup.values().toArray(new OrderSpecifier<?>[0]);
+    }
+
+    private static OrderSpecifier<?>[] keyOrderSpecs(ItemSort sort, QItem item) {
         return switch (sort) {
-            case PRICE_ASC -> new OrderSpecifier<?>[]{ item.price.asc(), item.id.desc() };
-            case PRICE_DESC -> new OrderSpecifier<?>[]{ item.price.desc(), item.id.desc() };
-            case VIEW_DESC -> new OrderSpecifier<?>[]{ item.viewCount.desc(), item.createdAt.desc(), item.id.desc() };
-            case WISHLIST_DESC -> new OrderSpecifier<?>[]{ item.wishlistCount.desc(), item.createdAt.desc(), item.id.desc() };
-            case LATEST -> new OrderSpecifier<?>[]{ item.createdAt.desc(), item.id.desc() };
+            case PRICE_ASC -> new OrderSpecifier<?>[]{ item.price.asc() };
+            case PRICE_DESC -> new OrderSpecifier<?>[]{ item.price.desc() };
+            case VIEW_DESC -> new OrderSpecifier<?>[]{ item.viewCount.desc(), item.createdAt.desc() };
+            case WISHLIST_DESC -> new OrderSpecifier<?>[]{ item.wishlistCount.desc(), item.createdAt.desc() };
+            case COMPLETED_LAST -> new OrderSpecifier<?>[]{
+                    new OrderSpecifier<>(com.querydsl.core.types.Order.ASC,
+                            new com.querydsl.core.types.dsl.CaseBuilder()
+                                    .when(item.status.eq(ItemStatus.거래완료)).then(1)
+                                    .otherwise(0))
+            };
+            case LATEST -> new OrderSpecifier<?>[]{ item.createdAt.desc() };
         };
     }
 
     
+
+    public java.util.Map<Long, java.util.List<String>> findHashtagsByItemIds(java.util.Collection<Long> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) return java.util.Collections.emptyMap();
+        QItemHashtag h = QItemHashtag.itemHashtag;
+        QItem item = QItem.item;
+        java.util.List<com.querydsl.core.Tuple> rows = queryFactory
+                .select(h.item.id, h.tag)
+                .from(h)
+                .where(h.item.id.in(itemIds))
+                .orderBy(h.id.asc())
+                .fetch();
+        java.util.Map<Long, java.util.List<String>> result = new java.util.LinkedHashMap<>();
+        for (var row : rows) {
+            result.computeIfAbsent(row.get(h.item.id), k -> new java.util.ArrayList<>())
+                    .add(row.get(h.tag));
+        }
+        return result;
+    }
 
     static String toBooleanModeQuery(String input) {
         if (input == null) return "";
@@ -136,7 +178,13 @@ public class ItemQuerydslRepository {
             where.and(kw);
         }
         if (criteria.status() != null) where.and(item.status.eq(criteria.status()));
-        if (criteria.tradeType() != null) where.and(item.tradeType.eq(criteria.tradeType()));
+        if (criteria.tradeType() != null) {
+            where.and(Expressions.booleanTemplate(
+                    "function('find_in_set', {0}, {1}) > 0",
+                    criteria.tradeType().name(),
+                    item.tradeTypes
+            ));
+        }
         if (criteria.categoryId() != null) where.and(item.categoryId.eq(criteria.categoryId()));
         if (criteria.createdAfter() != null) where.and(item.createdAt.goe(criteria.createdAfter()));
         if (criteria.createdBefore() != null) where.and(item.createdAt.lt(criteria.createdBefore()));

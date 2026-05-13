@@ -1,11 +1,13 @@
 package com.sseulang.domain.item.application.dto;
 
 import com.sseulang.domain.item.domain.Item;
+import com.sseulang.domain.item.domain.ItemHashtag;
 import com.sseulang.domain.item.domain.ItemStatus;
 import com.sseulang.domain.item.domain.DepositType;
 import com.sseulang.domain.item.domain.TradeType;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 
 public record ItemSummaryResult(
@@ -25,14 +27,22 @@ public record ItemSummaryResult(
         int wishlistCount,
         boolean isWishlisted,
         int viewCount,
+        List<String> hashtags,
         LocalDateTime createdAt
 ) {
-    
+
     public static ItemSummaryResult from(Item item) {
-        return from(item, false);
+        return from(item, false, null);
     }
 
     public static ItemSummaryResult from(Item item, boolean isWishlisted) {
+        return from(item, isWishlisted, null);
+    }
+
+    public static ItemSummaryResult from(Item item, boolean isWishlisted, List<String> hashtagsOverride) {
+        List<String> tags = hashtagsOverride != null
+                ? hashtagsOverride
+                : item.getHashtags().stream().map(ItemHashtag::getTag).toList();
         return new ItemSummaryResult(
                 item.getId(),
                 item.getSellerId(),
@@ -50,6 +60,7 @@ public record ItemSummaryResult(
                 item.getWishlistCount(),
                 isWishlisted,
                 item.getViewCount(),
+                tags,
                 item.getCreatedAt()
         );
     }

@@ -45,4 +45,7 @@ public interface ItemRepository {
     
 
     Optional<Integer> getWishlistCount(Long itemId);
+
+    // 목록 응답 hashtags 배치 조회 — N+1 회피.
+    java.util.Map<Long, java.util.List<String>> findHashtagsByItemIds(java.util.Collection<Long> itemIds);
 }

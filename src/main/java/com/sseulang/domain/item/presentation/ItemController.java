@@ -59,7 +59,8 @@ public class ItemController {
 
     @Operation(summary = "물품 검색·페이징 (공개)",
             description = "FULLTEXT(ngram) 검색. q 1글자는 LIKE 폴백. categoryId/tradeType/minPrice/maxPrice/tag 조합 필터. "
-                    + "sort 옵션: latest(default) / price_asc / price_desc / view_desc / wishlist_desc. 인증 불필요.")
+                    + "sort 옵션: latest(default) / price_asc / price_desc / view_desc / wishlist_desc / completed_last. "
+                    + "CSV 다중 정렬 지원 — 예: sort=wishlist_desc,view_desc,latest. id desc tiebreak 자동. 인증 불필요.")
     @GetMapping
     public ApiResponse<PageResponse<ItemSummaryResponse>> list(
             @AuthenticationPrincipal(errorOnInvalidType = false) Long viewerId,
@@ -79,7 +80,7 @@ public class ItemController {
         Pageable pageable = PageRequest.of(safePage, safeSize);
         ItemSearchCriteria criteria = new ItemSearchCriteria(
                 q, categoryId, tradeType, minPrice, maxPrice, tag, sellerId,
-                com.sseulang.domain.item.application.dto.ItemSort.parse(sort));
+                com.sseulang.domain.item.application.dto.ItemSort.parseList(sort));
 
         
         Page<ItemSummaryResponse> result = itemService.search(criteria, pageable, viewerId)

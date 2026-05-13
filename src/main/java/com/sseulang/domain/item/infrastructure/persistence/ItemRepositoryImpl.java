@@ -82,4 +82,9 @@ public class ItemRepositoryImpl implements ItemRepository {
     public Optional<Integer> getWishlistCount(Long itemId) {
         return jpa.getWishlistCount(itemId);
     }
+
+    @Override
+    public java.util.Map<Long, java.util.List<String>> findHashtagsByItemIds(java.util.Collection<Long> itemIds) {
+        return querydsl.findHashtagsByItemIds(itemIds);
+    }
 }
