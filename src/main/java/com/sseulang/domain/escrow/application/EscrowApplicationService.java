@@ -464,7 +464,7 @@ public class EscrowApplicationService {
             weight = link.getInitiatorWeight();
             volume = link.getInitiatorVolume();
             fragility = link.getInitiatorFragility();
-            deliveryNotes = link.getInitiatorDeliveryNotes();
+            deliveryNotes = mergeDeliveryNotes(link.getInitiatorDeliveryNotes(), cmd.deliveryNotes());
             imageUrlsJson = link.getInitiatorImageUrls();
             deliveryAddress = cmd.deliveryAddress();
             deliveryLat = cmd.deliveryLat();
@@ -488,7 +488,7 @@ public class EscrowApplicationService {
             weight = cmd.weight();
             volume = cmd.volume();
             fragility = cmd.fragility();
-            deliveryNotes = cmd.deliveryNotes();
+            deliveryNotes = mergeDeliveryNotes(link.getInitiatorDeliveryNotes(), cmd.deliveryNotes());
             imageUrlsJson = serializeImageUrls(cmd.imageUrls());
             deliveryAddress = link.getInitiatorDeliveryAddress();
             deliveryLat = link.getInitiatorDeliveryLat();
@@ -871,6 +871,19 @@ public class EscrowApplicationService {
     }
 
     
+    // by-link 흐름 — 발급자/수신자 메모를 양쪽 모두 라이더가 볼 수 있도록 머지.
+    static String mergeDeliveryNotes(String initiatorNotes, String receiverNotes) {
+        boolean hasA = initiatorNotes != null && !initiatorNotes.isBlank();
+        boolean hasB = receiverNotes != null && !receiverNotes.isBlank();
+        if (hasA && hasB) {
+            String merged = initiatorNotes.strip() + "\n\n" + receiverNotes.strip();
+            return merged.length() > 500 ? merged.substring(0, 500) : merged;
+        }
+        if (hasA) return initiatorNotes;
+        if (hasB) return receiverNotes;
+        return null;
+    }
+
     private String serializeImageUrls(List<String> urls) {
         if (urls == null || urls.isEmpty()) return null;
         try {

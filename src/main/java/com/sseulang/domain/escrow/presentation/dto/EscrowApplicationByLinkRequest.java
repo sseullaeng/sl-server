@@ -36,6 +36,7 @@ public record EscrowApplicationByLinkRequest(
         Weight weight,
         Volume volume,
         Fragility fragility,
+        @Schema(description = "수신자 측 라이더 요청사항(선택). 발급자가 link 에 적은 메모와 \\n\\n 로 합쳐 저장 (총 500자 제한).")
         @Size(max = 500) String deliveryNotes,
         List<@Size(max = 500) String> imageUrls,
 
