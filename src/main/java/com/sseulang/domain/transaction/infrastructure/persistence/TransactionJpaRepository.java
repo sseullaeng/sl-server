@@ -276,4 +276,13 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
              ORDER BY t.rentalStart ASC
             """)
     java.util.List<Transaction> findActiveRentalsByItemIdJpql(@Param("itemId") Long itemId);
+
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE t.status = com.sseulang.domain.transaction.domain.TransactionStatus.반납요청
+               AND t.returnRequestedAt IS NOT NULL
+               AND t.returnRequestedAt < :threshold
+             ORDER BY t.returnRequestedAt ASC
+            """)
+    java.util.List<Transaction> findReturnRequestedBeforeJpql(@Param("threshold") LocalDateTime threshold);
 }

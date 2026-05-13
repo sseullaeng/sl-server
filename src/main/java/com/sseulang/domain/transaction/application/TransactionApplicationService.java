@@ -379,6 +379,37 @@ public class TransactionApplicationService {
 
     public record RentalBlock(LocalDateTime start, LocalDateTime end) { }
 
+    // B-6: buyer 가 [반납] 요청. 인계완료 → 반납요청. seller 알림 발송.
+    @Transactional
+    public void requestReturn(Long transactionId, Long buyerId) {
+        Transaction tx = findOrThrowForUpdate(transactionId);
+        tx.requestReturn(buyerId, LocalDateTime.now(clock));
+        eventPublisher.publishEvent(new com.sseulang.domain.transaction.domain.event.TransactionReturnRequestedEvent(
+                tx.getId(), tx.getBuyerId(), tx.getSellerId()
+        ));
+    }
+
+    // B-6: seller 가 회신 = 거래완료. 반납요청 → 거래완료.
+    @Transactional
+    public void confirmReturn(Long transactionId, Long sellerId) {
+        Transaction tx = findOrThrowForUpdate(transactionId);
+        tx.confirmReturn(sellerId, LocalDateTime.now(clock));
+    }
+
+    // B-6: 7일 자동 완료 스케줄러 호출. 반납요청 + returnRequestedAt < threshold 인 거래 일괄 처리.
+    @Transactional
+    public int autoCompleteOverdueReturns(java.time.Duration overdueAfter) {
+        LocalDateTime threshold = LocalDateTime.now(clock).minus(overdueAfter);
+        java.util.List<Transaction> overdue = transactionRepository.findReturnRequestedBefore(threshold);
+        for (Transaction tx : overdue) {
+            tx.autoCompleteFromReturnRequest(LocalDateTime.now(clock));
+            eventPublisher.publishEvent(new com.sseulang.domain.transaction.domain.event.TransactionAutoCompletedEvent(
+                    tx.getId(), tx.getBuyerId(), tx.getSellerId()
+            ));
+        }
+        return overdue.size();
+    }
+
     public Page<PendingReviewableResult> findPendingReviewable(Long userId, Pageable pageable) {
         LocalDateTime since = LocalDateTime.now(clock).minusDays(7);
         return transactionRepository.findPendingReviewable(userId, since, pageable)

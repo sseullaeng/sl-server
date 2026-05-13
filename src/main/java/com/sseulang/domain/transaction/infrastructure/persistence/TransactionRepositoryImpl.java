@@ -181,6 +181,11 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public java.util.List<Transaction> findReturnRequestedBefore(LocalDateTime threshold) {
+        return jpa.findReturnRequestedBeforeJpql(threshold);
+    }
+
+    @Override
     public Page<Transaction> findMyTransactions(
             Long userId, TransactionRole role,
             java.util.Collection<TransactionStatus> statuses, Pageable pageable) {

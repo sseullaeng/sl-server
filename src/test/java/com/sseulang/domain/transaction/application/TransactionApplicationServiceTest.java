@@ -19,6 +19,7 @@ import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.point.domain.PointHistoryType;
 import com.sseulang.domain.transaction.application.dto.TransactionCreateCommand;
 import com.sseulang.domain.transaction.application.dto.TransactionResult;
+import com.sseulang.domain.transaction.domain.Transaction;
 import com.sseulang.domain.transaction.domain.TransactionStatus;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;
@@ -97,6 +98,79 @@ class TransactionApplicationServiceTest {
         com.sseulang.domain.chat.domain.ChatRoom room =
                 com.sseulang.domain.chat.domain.ChatRoom.openFor(itemId, BUYER, SELLER);
         chatRoomId = chatRoomRepo.save(room).getId();
+    }
+
+    // ───────── B-6 대여 반납 흐름 ─────────
+
+    @Test
+    @DisplayName("requestReturn 정상 — buyer 호출, 인계완료→반납요청 + 시각 기록")
+    void requestReturn_정상() {
+        Long txId = persistRentalInHandover();
+
+        service.requestReturn(txId, BUYER);
+
+        TransactionResult r = service.getById(txId, BUYER);
+        assertThat(r.status()).isEqualTo(TransactionStatus.반납요청);
+        assertThat(r.returnRequestedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("requestReturn seller 호출_TRANSACTION_FORBIDDEN")
+    void requestReturn_seller_거부() {
+        Long txId = persistRentalInHandover();
+
+        assertThatThrownBy(() -> service.requestReturn(txId, SELLER))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.TRANSACTION_FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("confirmReturn 정상 — seller 회신, 반납요청→거래완료")
+    void confirmReturn_정상() {
+        Long txId = persistRentalInHandover();
+        service.requestReturn(txId, BUYER);
+
+        service.confirmReturn(txId, SELLER);
+
+        TransactionResult r = service.getById(txId, BUYER);
+        assertThat(r.status()).isEqualTo(TransactionStatus.거래완료);
+        assertThat(r.completedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("autoCompleteOverdueReturns — 7일 경과 반납요청 모두 거래완료")
+    void autoCompleteOverdueReturns_정상() {
+        Long fresh = persistRentalInHandover();
+        service.requestReturn(fresh, BUYER);
+
+        Long old = persistRentalInHandover();
+        service.requestReturn(old, BUYER);
+        // 7일 이전으로 시간 강제 (8일 전)
+        Transaction oldTx = txRepo.findById(old).orElseThrow();
+        org.springframework.test.util.ReflectionTestUtils.setField(oldTx, "returnRequestedAt",
+                java.time.LocalDateTime.now().minusDays(8));
+
+        int affected = service.autoCompleteOverdueReturns(java.time.Duration.ofDays(7));
+
+        assertThat(affected).isEqualTo(1);
+        assertThat(service.getById(old, BUYER).status()).isEqualTo(TransactionStatus.거래완료);
+        assertThat(service.getById(fresh, BUYER).status()).isEqualTo(TransactionStatus.반납요청);
+    }
+
+    private Long persistRentalInHandover() {
+        Item rental = itemRepo.save(Item.createMulti(
+                SELLER, null, "대여물건" + System.nanoTime(), "설명",
+                java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 10_000L, DepositType.AMOUNT, RentalUnit.일, "서울"
+        ));
+        Long txId = service.createRentalRequest(BUYER, rental.getId(),
+                java.time.LocalDateTime.now().plusDays(1),
+                java.time.LocalDateTime.now().plusDays(3), null);
+        // 채팅중 → 예약 → 인계완료
+        Transaction tx = txRepo.findById(txId).orElseThrow();
+        tx.markAsReserved(java.time.LocalDateTime.now());
+        tx.markHandover(java.time.LocalDateTime.now());
+        return txId;
     }
 
     // ───────── B-2 rental-request / rental-blocks ─────────

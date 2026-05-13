@@ -24,6 +24,7 @@ public record TransactionResult(
         LocalDateTime canceledAt,
         String cancelReason,
         long escrowHoldAmount,
+        LocalDateTime returnRequestedAt,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
@@ -38,6 +39,7 @@ public record TransactionResult(
                 t.getCompletedAt(), t.getCanceledAt(),
                 t.getCancelReason(),
                 t.getEscrowHoldAmount(),
+                t.getReturnRequestedAt(),
                 t.getCreatedAt(), t.getUpdatedAt()
         );
     }

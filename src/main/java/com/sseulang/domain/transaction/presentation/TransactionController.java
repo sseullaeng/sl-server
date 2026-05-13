@@ -80,6 +80,10 @@ public class TransactionController {
             transactionService.completeBySeller(id, requesterId);
         } else if (request.isCancel()) {
             transactionService.cancel(id, requesterId, request.cancelReason());
+        } else if (request.isReturnRequest()) {
+            transactionService.requestReturn(id, requesterId);
+        } else if (request.isReturnConfirm()) {
+            transactionService.confirmReturn(id, requesterId);
         } else {
             throw new BusinessException(ErrorCode.INVALID_REQUEST);
         }

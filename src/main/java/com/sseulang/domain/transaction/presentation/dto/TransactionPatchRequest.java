@@ -32,4 +32,12 @@ public record TransactionPatchRequest(
     public boolean isCancel() {
         return action == TransactionPatchAction.취소;
     }
+
+    public boolean isReturnRequest() {
+        return action == TransactionPatchAction.반납요청;
+    }
+
+    public boolean isReturnConfirm() {
+        return action == TransactionPatchAction.회신확인;
+    }
 }

@@ -151,6 +151,15 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
     }
 
     @Override
+    public java.util.List<Transaction> findReturnRequestedBefore(java.time.LocalDateTime threshold) {
+        return store.values().stream()
+                .filter(t -> t.getStatus() == TransactionStatus.반납요청)
+                .filter(t -> t.getReturnRequestedAt() != null && t.getReturnRequestedAt().isBefore(threshold))
+                .sorted(Comparator.comparing(Transaction::getReturnRequestedAt))
+                .toList();
+    }
+
+    @Override
     public java.util.List<Transaction> findActiveRentalsByItemId(Long itemId) {
         return store.values().stream()
                 .filter(t -> itemId.equals(t.getItemId()))

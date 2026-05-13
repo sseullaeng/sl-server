@@ -2,10 +2,12 @@ package com.sseulang.domain.transaction.application;
 
 import com.sseulang.domain.notification.application.NotificationApplicationService;
 import com.sseulang.domain.notification.domain.NotificationType;
+import com.sseulang.domain.transaction.domain.event.TransactionAutoCompletedEvent;
 import com.sseulang.domain.transaction.domain.event.TransactionCanceledEvent;
 import com.sseulang.domain.transaction.domain.event.TransactionHandoverConfirmedEvent;
 import com.sseulang.domain.transaction.domain.event.TransactionReceiveConfirmedEvent;
 import com.sseulang.domain.transaction.domain.event.TransactionReservedEvent;
+import com.sseulang.domain.transaction.domain.event.TransactionReturnRequestedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -109,6 +111,47 @@ public class TransactionNotificationListener {
                 );
             } catch (RuntimeException ex) {
                 log.error("[tx-notify] canceled seller 알림 발송 실패 — txId={} sellerId={}", e.transactionId(), e.sellerId(), ex);
+            }
+        }
+    }
+
+    // B-6: buyer 가 [반납] 요청 → seller 알림.
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void onReturnRequested(TransactionReturnRequestedEvent e) {
+        try {
+            notificationService.notify(
+                    e.sellerId(), NotificationType.거래,
+                    "반납 요청이 도착했어요",
+                    "거래 #" + e.transactionId() + " — 빌린 분이 반납했어요. 회신해 주세요.",
+                    LINK_TYPE, e.transactionId()
+            );
+        } catch (RuntimeException ex) {
+            log.error("[tx-notify] return-request 알림 발송 실패 — txId={} sellerId={}", e.transactionId(), e.sellerId(), ex);
+        }
+    }
+
+    // B-6: 7일 무회신 자동 거래완료 → 양측 알림.
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void onAutoCompleted(TransactionAutoCompletedEvent e) {
+        String body = "거래 #" + e.transactionId() + " 가 7일 무회신으로 자동 완료 처리됐어요.";
+        try {
+            notificationService.notify(
+                    e.buyerId(), NotificationType.거래,
+                    "대여 거래가 자동 완료됐어요", body, LINK_TYPE, e.transactionId()
+            );
+        } catch (RuntimeException ex) {
+            log.error("[tx-notify] auto-complete buyer 알림 실패 — txId={}", e.transactionId(), ex);
+        }
+        if (!e.buyerId().equals(e.sellerId())) {
+            try {
+                notificationService.notify(
+                        e.sellerId(), NotificationType.거래,
+                        "대여 거래가 자동 완료됐어요", body, LINK_TYPE, e.transactionId()
+                );
+            } catch (RuntimeException ex) {
+                log.error("[tx-notify] auto-complete seller 알림 실패 — txId={}", e.transactionId(), ex);
             }
         }
     }

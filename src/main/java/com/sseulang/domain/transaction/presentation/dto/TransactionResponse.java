@@ -28,6 +28,8 @@ public record TransactionResponse(
         @Schema(example = "1200000",
                 description = "예약 시 buyer point_balance 에서 hold 한 금액 (라운드 11). 0 = 나눔 또는 옛 거래.")
         long escrowHoldAmount,
+        @Schema(description = "대여 한정 — buyer 가 [반납] 누른 시각. 7일 후 자동 거래완료 카운트다운 기준.")
+        LocalDateTime returnRequestedAt,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
@@ -42,6 +44,7 @@ public record TransactionResponse(
                 r.completedAt(), r.canceledAt(),
                 r.cancelReason(),
                 r.escrowHoldAmount(),
+                r.returnRequestedAt(),
                 r.createdAt(), r.updatedAt()
         );
     }

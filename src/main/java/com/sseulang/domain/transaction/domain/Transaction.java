@@ -83,6 +83,9 @@ public class Transaction extends BaseEntity {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "return_requested_at")
+    private LocalDateTime returnRequestedAt;
+
     @Column(name = "canceled_at")
     private LocalDateTime canceledAt;
 
@@ -181,6 +184,45 @@ public class Transaction extends BaseEntity {
         }
         this.status = TransactionStatus.거래완료;
         this.receiveConfirmedAt = now;
+        this.completedAt = now;
+    }
+
+    // B-6: buyer(빌린 사람) 가 반납 요청. 대여 한정. 인계완료 → 반납요청.
+    public void requestReturn(Long buyerId, LocalDateTime now) {
+        if (this.tradeType != TradeType.대여) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
+        }
+        if (!isBuyer(buyerId)) {
+            throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
+        }
+        if (!status.canRequestReturn()) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
+        }
+        this.status = TransactionStatus.반납요청;
+        this.returnRequestedAt = now;
+    }
+
+    // B-6: seller(빌려준 사람) 가 회신 = 거래완료. 대여 한정. 반납요청 → 거래완료.
+    public void confirmReturn(Long sellerId, LocalDateTime now) {
+        if (this.tradeType != TradeType.대여) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
+        }
+        if (!isSeller(sellerId)) {
+            throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
+        }
+        if (!status.canConfirmReturn()) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
+        }
+        this.status = TransactionStatus.거래완료;
+        this.completedAt = now;
+    }
+
+    // B-6: 7일 자동 거래완료 — 스케줄러 호출용. 권한 가드 없음(시스템).
+    public void autoCompleteFromReturnRequest(LocalDateTime now) {
+        if (this.tradeType != TradeType.대여 || !status.canConfirmReturn()) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
+        }
+        this.status = TransactionStatus.거래완료;
         this.completedAt = now;
     }
 
