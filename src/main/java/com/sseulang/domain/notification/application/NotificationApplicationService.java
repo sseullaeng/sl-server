@@ -66,6 +66,10 @@ public class NotificationApplicationService {
         return notificationRepository.markAllAsReadByUserId(userId);
     }
 
+    public long countUnread(Long userId) {
+        return notificationRepository.countUnreadByUserId(userId);
+    }
+
     
 
     public BroadcastResult broadcast(String title, String content, String idempotencyKey) {

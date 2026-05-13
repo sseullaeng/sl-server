@@ -66,5 +66,15 @@ public class NotificationController {
         return ApiResponse.ok(new MarkAllResponse(updated));
     }
 
+    @Operation(summary = "내 unread 알림 개수",
+            description = "전체 unread 알림 개수만 단일 count 쿼리로 반환. 첫 페이지 derive 보다 정확 — 21번째 이후도 카운트.")
+    @GetMapping("/unread-count")
+    public ApiResponse<UnreadCountResponse> unreadCount(@AuthenticationPrincipal Long userId) {
+        long count = notificationService.countUnread(userId);
+        return ApiResponse.ok(new UnreadCountResponse(count));
+    }
+
     public record MarkAllResponse(long updated) { }
+
+    public record UnreadCountResponse(long unread) { }
 }

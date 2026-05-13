@@ -46,6 +46,12 @@ public class NotificationRepositoryImpl implements NotificationRepository {
     }
 
     @Override
+    public long countUnreadByUserId(Long userId) {
+        Query q = new Query(Criteria.where("userId").is(userId).and("read").is(false));
+        return mongoTemplate.count(q, Notification.class);
+    }
+
+    @Override
     public int saveAllIgnoreDuplicates(java.util.List<Notification> notifications) {
         if (notifications == null || notifications.isEmpty()) return 0;
         

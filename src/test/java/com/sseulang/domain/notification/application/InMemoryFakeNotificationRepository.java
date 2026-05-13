@@ -48,6 +48,13 @@ public class InMemoryFakeNotificationRepository implements NotificationRepositor
     }
 
     @Override
+    public long countUnreadByUserId(Long userId) {
+        return store.values().stream()
+                .filter(n -> n.getUserId().equals(userId) && !n.isRead())
+                .count();
+    }
+
+    @Override
     public long markAllAsReadByUserId(Long userId) {
         long count = 0;
         for (Notification n : store.values()) {

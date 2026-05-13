@@ -18,7 +18,9 @@ public interface NotificationRepository {
 
     long markAllAsReadByUserId(Long userId);
 
-    
+    long countUnreadByUserId(Long userId);
+
+
 
     int saveAllIgnoreDuplicates(java.util.List<Notification> notifications);
 }
