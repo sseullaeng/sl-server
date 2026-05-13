@@ -99,6 +99,99 @@ class TransactionApplicationServiceTest {
         chatRoomId = chatRoomRepo.save(room).getId();
     }
 
+    // ───────── B-2 rental-request / rental-blocks ─────────
+
+    @Test
+    @DisplayName("createRentalRequest 정상 — buyer 호출, status=채팅중, rentalStart/End 저장")
+    void createRentalRequest_정상() {
+        Item rental = itemRepo.save(Item.createMulti(
+                SELLER, null, "대여물건", "설명", java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 10_000L, DepositType.AMOUNT, RentalUnit.일, "서울"
+        ));
+        java.time.LocalDateTime start = java.time.LocalDateTime.now().plusDays(1);
+        java.time.LocalDateTime end = java.time.LocalDateTime.now().plusDays(3);
+
+        Long txId = service.createRentalRequest(BUYER, rental.getId(), start, end, null);
+
+        TransactionResult r = service.getById(txId, BUYER);
+        assertThat(r.status()).isEqualTo(TransactionStatus.채팅중);
+        assertThat(r.tradeType()).isEqualTo(TradeType.대여);
+        assertThat(r.sellerId()).isEqualTo(SELLER);
+        assertThat(r.buyerId()).isEqualTo(BUYER);
+    }
+
+    @Test
+    @DisplayName("createRentalRequest 기존 활성 대여와 기간 겹침_TRANSACTION_RENTAL_OVERLAP")
+    void createRentalRequest_겹침() {
+        Item rental = itemRepo.save(Item.createMulti(
+                SELLER, null, "대여물건", "설명", java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 10_000L, DepositType.AMOUNT, RentalUnit.일, "서울"
+        ));
+        java.time.LocalDateTime start = java.time.LocalDateTime.now().plusDays(5);
+        java.time.LocalDateTime end = java.time.LocalDateTime.now().plusDays(10);
+        service.createRentalRequest(BUYER, rental.getId(), start, end, null);
+
+        Long OUTSIDER2 = userRepo.save(User.createSocialUser(
+                com.sseulang.domain.user.domain.SocialProvider.KAKAO, "k-out2",
+                new com.sseulang.domain.user.domain.Email("out2@x.com"), "out2", null)).getId();
+
+        // 두 번째 buyer 가 같은 기간 신청 시도
+        assertThatThrownBy(() ->
+                service.createRentalRequest(OUTSIDER2, rental.getId(),
+                        java.time.LocalDateTime.now().plusDays(7),
+                        java.time.LocalDateTime.now().plusDays(8), null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.TRANSACTION_RENTAL_OVERLAP);
+    }
+
+    @Test
+    @DisplayName("createRentalRequest seller 본인 신청_TRANSACTION_FORBIDDEN")
+    void createRentalRequest_본인() {
+        Item rental = itemRepo.save(Item.createMulti(
+                SELLER, null, "대여물건", "설명", java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 10_000L, DepositType.AMOUNT, RentalUnit.일, "서울"
+        ));
+        assertThatThrownBy(() ->
+                service.createRentalRequest(SELLER, rental.getId(),
+                        java.time.LocalDateTime.now().plusDays(1),
+                        java.time.LocalDateTime.now().plusDays(2), null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.TRANSACTION_FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("createRentalRequest start>=end 거부_TRANSACTION_RENTAL_INVALID_PERIOD")
+    void createRentalRequest_역기간() {
+        Item rental = itemRepo.save(Item.createMulti(
+                SELLER, null, "대여물건", "설명", java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 10_000L, DepositType.AMOUNT, RentalUnit.일, "서울"
+        ));
+        java.time.LocalDateTime same = java.time.LocalDateTime.now().plusDays(2);
+        assertThatThrownBy(() ->
+                service.createRentalRequest(BUYER, rental.getId(), same, same, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.TRANSACTION_RENTAL_INVALID_PERIOD);
+    }
+
+    @Test
+    @DisplayName("findRentalBlocks 활성 거래만 (취소/완료 제외)")
+    void findRentalBlocks_활성만() {
+        Item rental = itemRepo.save(Item.createMulti(
+                SELLER, null, "대여물건", "설명", java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 10_000L, DepositType.AMOUNT, RentalUnit.일, "서울"
+        ));
+        Long txId = service.createRentalRequest(BUYER, rental.getId(),
+                java.time.LocalDateTime.now().plusDays(1),
+                java.time.LocalDateTime.now().plusDays(3), null);
+
+        var blocks = service.findRentalBlocks(rental.getId());
+        assertThat(blocks).hasSize(1);
+
+        // 취소 후 → blocks 에서 제외
+        service.cancel(txId, BUYER, "변심");
+        assertThat(service.findRentalBlocks(rental.getId())).isEmpty();
+    }
+
     // ───────── create ─────────
 
     @Test

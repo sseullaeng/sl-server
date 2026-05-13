@@ -176,6 +176,11 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public java.util.List<Transaction> findActiveRentalsByItemId(Long itemId) {
+        return jpa.findActiveRentalsByItemIdJpql(itemId);
+    }
+
+    @Override
     public Page<Transaction> findMyTransactions(
             Long userId, TransactionRole role,
             java.util.Collection<TransactionStatus> statuses, Pageable pageable) {

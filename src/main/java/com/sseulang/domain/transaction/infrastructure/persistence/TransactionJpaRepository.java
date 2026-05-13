@@ -263,4 +263,17 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
     Page<Transaction> findBySellerAndStatusIn(@Param("userId") Long userId,
                                                @Param("statuses") java.util.Collection<TransactionStatus> statuses,
                                                Pageable pageable);
+
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE t.itemId = :itemId
+               AND t.tradeType = com.sseulang.domain.item.domain.TradeType.대여
+               AND t.status NOT IN (
+                   com.sseulang.domain.transaction.domain.TransactionStatus.취소,
+                   com.sseulang.domain.transaction.domain.TransactionStatus.거래완료
+               )
+               AND t.rentalStart IS NOT NULL AND t.rentalEnd IS NOT NULL
+             ORDER BY t.rentalStart ASC
+            """)
+    java.util.List<Transaction> findActiveRentalsByItemIdJpql(@Param("itemId") Long itemId);
 }

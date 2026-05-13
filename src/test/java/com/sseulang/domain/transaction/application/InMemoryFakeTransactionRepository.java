@@ -151,6 +151,18 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
     }
 
     @Override
+    public java.util.List<Transaction> findActiveRentalsByItemId(Long itemId) {
+        return store.values().stream()
+                .filter(t -> itemId.equals(t.getItemId()))
+                .filter(t -> t.getTradeType() == com.sseulang.domain.item.domain.TradeType.대여)
+                .filter(t -> t.getStatus() != TransactionStatus.취소
+                        && t.getStatus() != TransactionStatus.거래완료)
+                .filter(t -> t.getRentalStart() != null && t.getRentalEnd() != null)
+                .sorted(Comparator.comparing(Transaction::getRentalStart))
+                .toList();
+    }
+
+    @Override
     public Page<Transaction> findMyTransactions(
             Long userId, TransactionRole role,
             java.util.Collection<TransactionStatus> statuses, Pageable pageable) {

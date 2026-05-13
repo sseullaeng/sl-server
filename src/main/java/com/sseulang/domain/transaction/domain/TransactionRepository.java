@@ -86,4 +86,7 @@ public interface TransactionRepository {
     Page<Transaction> findMyTransactions(
             Long userId, TransactionRole role,
             java.util.Collection<TransactionStatus> statuses, Pageable pageable);
+
+    // B-2: 대여 달력 — 활성(취소/거래완료 제외) 대여 거래의 rentalStart/End 페어. 같은 item 의 예약 충돌 검사용.
+    List<Transaction> findActiveRentalsByItemId(Long itemId);
 }

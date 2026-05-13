@@ -331,6 +331,54 @@ public class TransactionApplicationService {
                 .map(TransactionResult::from);
     }
 
+    // B-2: 같은 item 의 활성 대여 거래(취소/거래완료 제외) start/end 페어. 비로그인 공개.
+    public java.util.List<RentalBlock> findRentalBlocks(Long itemId) {
+        return transactionRepository.findActiveRentalsByItemId(itemId).stream()
+                .map(t -> new RentalBlock(t.getRentalStart(), t.getRentalEnd()))
+                .toList();
+    }
+
+    // B-2: buyer 가 직접 대여 신청. status=채팅중 으로 Transaction 생성 — seller 가 [예약] 으로 수락.
+    @Transactional
+    public Long createRentalRequest(
+            Long buyerId, Long itemId, LocalDateTime rentalStart, LocalDateTime rentalEnd, Long chatRoomId
+    ) {
+        userApplicationService.requireVerified(buyerId);
+        if (rentalStart == null || rentalEnd == null || !rentalStart.isBefore(rentalEnd)) {
+            throw new BusinessException(ErrorCode.TRANSACTION_RENTAL_INVALID_PERIOD);
+        }
+        ItemForTransactionResult info = itemApplicationService.findActiveForTransaction(itemId);
+        if (info.sellerId().equals(buyerId)) {
+            throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
+        }
+        Long rentalPrice = info.priceFor(com.sseulang.domain.item.domain.TradeType.대여);
+        if (rentalPrice == null) {
+            throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
+        }
+
+        // 기존 활성 대여 거래와 기간 겹침 검사 — [start, end) 반열림 가정.
+        boolean overlap = transactionRepository.findActiveRentalsByItemId(itemId).stream()
+                .anyMatch(t -> rentalStart.isBefore(t.getRentalEnd()) && t.getRentalStart().isBefore(rentalEnd));
+        if (overlap) {
+            throw new BusinessException(ErrorCode.TRANSACTION_RENTAL_OVERLAP);
+        }
+
+        Transaction tx = Transaction.create(
+                info.itemId(),
+                info.sellerId(),
+                buyerId,
+                com.sseulang.domain.item.domain.TradeType.대여,
+                rentalPrice,
+                info.deposit(),
+                rentalStart,
+                rentalEnd,
+                chatRoomId
+        );
+        return transactionRepository.save(tx).getId();
+    }
+
+    public record RentalBlock(LocalDateTime start, LocalDateTime end) { }
+
     public Page<PendingReviewableResult> findPendingReviewable(Long userId, Pageable pageable) {
         LocalDateTime since = LocalDateTime.now(clock).minusDays(7);
         return transactionRepository.findPendingReviewable(userId, since, pageable)
