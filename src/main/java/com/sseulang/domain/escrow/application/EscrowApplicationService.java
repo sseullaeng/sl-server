@@ -60,6 +60,7 @@ public class EscrowApplicationService {
     private final com.sseulang.domain.chat.application.ChatRoomApplicationService chatRoomApplicationService;
     private final com.sseulang.domain.item.application.ItemApplicationService itemApplicationService;
     private final com.sseulang.domain.transaction.application.TransactionApplicationService transactionApplicationService;
+    private final com.sseulang.domain.notification.application.NotificationApplicationService notificationApplicationService;
     private final int linkExpiryHours;
 
     public EscrowApplicationService(
@@ -73,6 +74,7 @@ public class EscrowApplicationService {
             com.sseulang.domain.chat.application.ChatRoomApplicationService chatRoomApplicationService,
             com.sseulang.domain.item.application.ItemApplicationService itemApplicationService,
             com.sseulang.domain.transaction.application.TransactionApplicationService transactionApplicationService,
+            com.sseulang.domain.notification.application.NotificationApplicationService notificationApplicationService,
             @Value("${app.escrow.link.expiry-hours:24}") int linkExpiryHours
     ) {
         this.linkRepository = linkRepository;
@@ -85,6 +87,7 @@ public class EscrowApplicationService {
         this.chatRoomApplicationService = chatRoomApplicationService;
         this.itemApplicationService = itemApplicationService;
         this.transactionApplicationService = transactionApplicationService;
+        this.notificationApplicationService = notificationApplicationService;
         this.linkExpiryHours = linkExpiryHours;
     }
 
@@ -223,6 +226,18 @@ public class EscrowApplicationService {
                 serializeImageUrls(cmd.imageUrls())
         );
         EscrowApplication saved = applicationRepository.save(app);
+
+        // buyer 에게 수령지 입력 요청 알림. linkType=ESCROW + linkId=app.id 로 프론트가
+        // /escrow/{id}/buyer-info 화면으로 분기.
+        String sellerNickname = userApplicationService.getById(cmd.requesterId()).getNickname();
+        notificationApplicationService.notify(
+                buyerId,
+                com.sseulang.domain.notification.domain.NotificationType.거래,
+                "거래대행 신청이 도착했어요",
+                sellerNickname + "님이 거래대행을 신청했어요. 수령지를 입력해 주세요.",
+                "ESCROW",
+                saved.getId()
+        );
         return EscrowApplicationResult.from(saved, parseImageUrls(saved.getImageUrls()));
     }
 
