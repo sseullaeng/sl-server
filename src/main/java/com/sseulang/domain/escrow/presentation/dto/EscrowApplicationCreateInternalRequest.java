@@ -33,9 +33,9 @@ public record EscrowApplicationCreateInternalRequest(
         @NotBlank @Size(max = 255) String deliveryAddress,
         @NotNull BigDecimal deliveryLat,
         @NotNull BigDecimal deliveryLng,
-        @Schema(description = "대여 시작 예정 시각, 대여 거래대행만 필수. rentalEndAt 보다 이전이어야 함.")
+        @Schema(description = "대여 시작 예정 시각. 대여 한정. chatRoom 에 buyer 사전 신청 있으면 자동 채움 — 누락 가능.")
         LocalDateTime rentalStartAt,
-        @Schema(description = "대여 종료 예정 시각, 대여 거래대행만 필수")
+        @Schema(description = "대여 종료 예정 시각. 대여 한정. chatRoom 에 buyer 사전 신청 있으면 자동 채움 — 누락 가능.")
         LocalDateTime rentalEndAt,
 
         @NotNull Weight weight,

@@ -368,6 +368,19 @@ public class TransactionApplicationService {
                 .toList();
     }
 
+    // V43 — chat 방의 가장 최근 비취소 대여 Transaction 의 rentalStart/End. 거래대행 신청 시 FE 가
+    // 입력 안 해도 buyer 의 사전 신청 기간을 그대로 재사용. 비대여 또는 없으면 empty.
+    public java.util.Optional<RentalPeriod> findActiveRentalPeriodByChatRoom(Long chatRoomId) {
+        if (chatRoomId == null) return java.util.Optional.empty();
+        return transactionRepository.findLatestNonCanceledByChatRoomIdIn(java.util.List.of(chatRoomId)).stream()
+                .filter(t -> t.getTradeType() == com.sseulang.domain.item.domain.TradeType.대여)
+                .filter(t -> t.getRentalStart() != null && t.getRentalEnd() != null)
+                .map(t -> new RentalPeriod(t.getRentalStart(), t.getRentalEnd()))
+                .findFirst();
+    }
+
+    public record RentalPeriod(LocalDateTime start, LocalDateTime end) { }
+
     // B-2: buyer 가 직접 대여 신청. status=채팅중 으로 Transaction 생성 — seller 가 [예약] 으로 수락.
     // 동시성 — findActiveForTransaction 이 내부에서 PESSIMISTIC_WRITE 락 잡아 같은 item 의 동시 신청 직렬화.
     // 기간 겹침 race 차단 (이후 transactions 조회/INSERT 가 같은 tx 안에서 일관 보장).

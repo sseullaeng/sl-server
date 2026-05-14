@@ -207,10 +207,16 @@ public class EscrowApplicationService {
         // PR2 — item.tradeType=대여 면 escrow 도 대여 lifecycle (사용중/반납중) 진입.
         if (itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
             app.markAsRental();
-            app.markRentalStart(cmd.rentalStartAt());
-            app.markRentalEnd(cmd.rentalEndAt());
+            // V43 — chatRoom 의 활성 대여 Transaction (buyer 가 /rental-request 로 사전 입력) 이 있으면
+            // 그 기간을 우선 사용. seller 는 다시 입력할 필요 없음. 없으면 cmd 값 사용.
+            java.util.Optional<com.sseulang.domain.transaction.application.TransactionApplicationService.RentalPeriod> existing =
+                    transactionApplicationService.findActiveRentalPeriodByChatRoom(cmd.chatRoomId());
+            java.time.LocalDateTime resolvedStart = existing.map(p -> p.start()).orElse(cmd.rentalStartAt());
+            java.time.LocalDateTime resolvedEnd = existing.map(p -> p.end()).orElse(cmd.rentalEndAt());
+            app.markRentalStart(resolvedStart);
+            app.markRentalEnd(resolvedEnd);
             // V43 — itemPrice 위변조 차단. 백엔드가 item.rentalPrice × duration 으로 산정해 검증.
-            verifyRentalItemPrice(itemInfo, cmd.rentalStartAt(), cmd.rentalEndAt(), cmd.itemPrice());
+            verifyRentalItemPrice(itemInfo, resolvedStart, resolvedEnd, cmd.itemPrice());
             // PR8 — 보증금 snapshot 저장. 결제 시 hold 대상.
             if (itemInfo.deposit() != null) {
                 app.setRentalDeposit(itemInfo.deposit(), itemInfo.depositOriginalPercent());
@@ -261,10 +267,16 @@ public class EscrowApplicationService {
         // PR2 — item.tradeType=대여 면 escrow 도 대여 lifecycle (사용중/반납중) 진입.
         if (itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
             app.markAsRental();
-            app.markRentalStart(cmd.rentalStartAt());
-            app.markRentalEnd(cmd.rentalEndAt());
+            // V43 — chatRoom 의 활성 대여 Transaction (buyer 가 /rental-request 로 사전 입력) 이 있으면
+            // 그 기간을 우선 사용. seller 는 다시 입력할 필요 없음. 없으면 cmd 값 사용.
+            java.util.Optional<com.sseulang.domain.transaction.application.TransactionApplicationService.RentalPeriod> existing =
+                    transactionApplicationService.findActiveRentalPeriodByChatRoom(cmd.chatRoomId());
+            java.time.LocalDateTime resolvedStart = existing.map(p -> p.start()).orElse(cmd.rentalStartAt());
+            java.time.LocalDateTime resolvedEnd = existing.map(p -> p.end()).orElse(cmd.rentalEndAt());
+            app.markRentalStart(resolvedStart);
+            app.markRentalEnd(resolvedEnd);
             // V43 — itemPrice 위변조 차단. 백엔드가 item.rentalPrice × duration 으로 산정해 검증.
-            verifyRentalItemPrice(itemInfo, cmd.rentalStartAt(), cmd.rentalEndAt(), cmd.itemPrice());
+            verifyRentalItemPrice(itemInfo, resolvedStart, resolvedEnd, cmd.itemPrice());
             // PR8 — 보증금 snapshot 저장. 결제 시 hold 대상.
             if (itemInfo.deposit() != null) {
                 app.setRentalDeposit(itemInfo.deposit(), itemInfo.depositOriginalPercent());
