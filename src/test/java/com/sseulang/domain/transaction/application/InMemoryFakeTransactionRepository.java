@@ -160,6 +160,18 @@ public class InMemoryFakeTransactionRepository implements TransactionRepository 
     }
 
     @Override
+    public java.util.List<Transaction> findActiveDirectByChatRoomId(Long chatRoomId) {
+        if (chatRoomId == null) return java.util.List.of();
+        return store.values().stream()
+                .filter(t -> chatRoomId.equals(t.getChatRoomId()))
+                .filter(t -> t.getEscrowApplicationId() == null)
+                .filter(t -> t.getStatus() == TransactionStatus.채팅중
+                        || t.getStatus() == TransactionStatus.예약
+                        || t.getStatus() == TransactionStatus.인계완료)
+                .toList();
+    }
+
+    @Override
     public java.util.List<Transaction> findActiveRentalsByItemId(Long itemId) {
         return store.values().stream()
                 .filter(t -> itemId.equals(t.getItemId()))

@@ -230,6 +230,25 @@ public class Transaction extends BaseEntity {
         this.completedAt = now;
     }
 
+    // B-5 cascade: 같은 chatRoom 의 escrow 가 종료되면 직거래도 자동 완료. 시스템 호출.
+    // 대여(반납 흐름 보존) / paired tx(escrowApplicationId NOT NULL) / 종료 상태(거래완료/취소) 거부.
+    public void cascadeCompleteByEscrow(LocalDateTime now) {
+        if (this.escrowApplicationId != null) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);  // paired tx 자체엔 cascade X
+        }
+        if (this.tradeType == TradeType.대여) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);  // 대여는 반납 흐름 보존
+        }
+        if (status == TransactionStatus.거래완료 || status == TransactionStatus.취소) {
+            throw new BusinessException(ErrorCode.TRANSACTION_INVALID_STATE);
+        }
+        if (this.reservedAt == null) this.reservedAt = now;
+        if (this.handoverConfirmedAt == null) this.handoverConfirmedAt = now;
+        this.receiveConfirmedAt = now;
+        this.completedAt = now;
+        this.status = TransactionStatus.거래완료;
+    }
+
     // 라운드 12 — 직거래 단순 완료. 사이트 포인트 거래 없음(외부 결제).
     // 채팅중/예약/인계완료 어떤 상태에서든 거래완료로 전이. 판매자 호출 가정.
     // 대여는 반납요청 → 회신확인(seller) 강제 — completeBySeller 우회 차단.

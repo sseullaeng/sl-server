@@ -437,6 +437,39 @@ public class TransactionApplicationService {
         ));
     }
 
+    // B-5: escrow 종료 시 같은 chatRoom 의 직거래(non-paired) 활성 tx 일괄 거래완료.
+    // 정책: 대여 제외(반납 흐름), buyer/seller 일치 필수, row 단위 try-catch (한 건 실패 격리).
+    // 알림: 조용히 cascade — escrow 알림이 이미 갔으므로 중복 회피.
+    public CascadeResult cascadeCompleteByChatRoom(Long chatRoomId, Long escrowBuyerId, Long escrowSellerId) {
+        if (chatRoomId == null) return new CascadeResult(0, 0);
+        java.util.List<Long> candidateIds = transactionRepository.findActiveDirectByChatRoomId(chatRoomId)
+                .stream().map(Transaction::getId).toList();
+        int success = 0;
+        int skipped = 0;
+        for (Long txId : candidateIds) {
+            try {
+                cascadeCompleteSingle(txId, escrowBuyerId, escrowSellerId);
+                success++;
+            } catch (Exception e) {
+                skipped++;
+            }
+        }
+        return new CascadeResult(success, skipped);
+    }
+
+    // B-5: 단일 row cascade. 새 tx — escrow settle 롤백 차단.
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void cascadeCompleteSingle(Long transactionId, Long escrowBuyerId, Long escrowSellerId) {
+        Transaction tx = findOrThrowForUpdate(transactionId);
+        // buyer/seller 불일치는 cascade 제외 — 데이터 정합성 보호.
+        if (!tx.isBuyer(escrowBuyerId) || !tx.isSeller(escrowSellerId)) {
+            throw new BusinessException(ErrorCode.TRANSACTION_FORBIDDEN);
+        }
+        tx.cascadeCompleteByEscrow(LocalDateTime.now(clock));
+    }
+
+    public record CascadeResult(int completed, int skipped) { }
+
     public Page<PendingReviewableResult> findPendingReviewable(Long userId, Pageable pageable) {
         LocalDateTime since = LocalDateTime.now(clock).minusDays(7);
         return transactionRepository.findPendingReviewable(userId, since, pageable)

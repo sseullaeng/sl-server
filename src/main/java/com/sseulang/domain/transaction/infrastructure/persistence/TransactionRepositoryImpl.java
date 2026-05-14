@@ -186,6 +186,12 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public java.util.List<Transaction> findActiveDirectByChatRoomId(Long chatRoomId) {
+        if (chatRoomId == null) return java.util.List.of();
+        return jpa.findActiveDirectByChatRoomIdJpql(chatRoomId);
+    }
+
+    @Override
     public Page<Transaction> findMyTransactions(
             Long userId, TransactionRole role,
             java.util.Collection<TransactionStatus> statuses, Pageable pageable) {

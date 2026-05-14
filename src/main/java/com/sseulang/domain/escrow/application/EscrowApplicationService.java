@@ -826,6 +826,12 @@ public class EscrowApplicationService {
                 app.getChatRoomId(),
                 app.getSettledAt() != null ? app.getSettledAt() : java.time.LocalDateTime.now()
         );
+        // B-5: 같은 chatRoom 의 직거래(non-paired) 활성 tx 일괄 거래완료. zombie 제거.
+        // 대여 / buyer-seller 불일치 / 종료 상태는 도메인 가드로 자동 스킵. row 단위 try-catch (한 건 실패가 settle 롤백 안 시킴).
+        if (app.getChatRoomId() != null) {
+            transactionApplicationService.cascadeCompleteByChatRoom(
+                    app.getChatRoomId(), app.getBuyerId(), app.getSellerId());
+        }
     }
 
     

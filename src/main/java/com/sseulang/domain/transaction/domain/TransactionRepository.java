@@ -92,4 +92,7 @@ public interface TransactionRepository {
 
     // B-6: 7일 자동 완료 스케줄러 — 반납요청 상태 + returnRequestedAt < threshold.
     List<Transaction> findReturnRequestedBefore(LocalDateTime threshold);
+
+    // B-5: escrow 종료 시 cascade 후보 — 같은 chatRoom 의 직거래(non-paired) 활성 tx.
+    List<Transaction> findActiveDirectByChatRoomId(Long chatRoomId);
 }

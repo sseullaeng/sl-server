@@ -285,4 +285,18 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
              ORDER BY t.returnRequestedAt ASC
             """)
     java.util.List<Transaction> findReturnRequestedBeforeJpql(@Param("threshold") LocalDateTime threshold);
+
+    // B-5: escrow 종료 시 cascade 대상 — 같은 chatRoom 의 직거래(escrowApplicationId IS NULL) 활성 tx.
+    // 취소/거래완료 제외, 반납요청 도 제외(대여 흐름 보존).
+    @Query("""
+            SELECT t FROM Transaction t
+             WHERE t.chatRoomId = :chatRoomId
+               AND t.escrowApplicationId IS NULL
+               AND t.status IN (
+                   com.sseulang.domain.transaction.domain.TransactionStatus.채팅중,
+                   com.sseulang.domain.transaction.domain.TransactionStatus.예약,
+                   com.sseulang.domain.transaction.domain.TransactionStatus.인계완료
+               )
+            """)
+    java.util.List<Transaction> findActiveDirectByChatRoomIdJpql(@Param("chatRoomId") Long chatRoomId);
 }
