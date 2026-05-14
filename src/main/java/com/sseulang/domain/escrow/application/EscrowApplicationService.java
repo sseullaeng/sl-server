@@ -879,18 +879,38 @@ public class EscrowApplicationService {
     }
 
     // PR7 — 다른 참여자가 [취소 동의] → 취소 확정.
+    // PR10 — 정산 처리: 보증금 환불 + forward 라이더 보상 (B1 + B2) + cascade (B3).
     @Transactional
     public void confirmCancelDuringUsing(Long applicationId, Long requesterId) {
         EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
         app.confirmCancelDuringUsing(requesterId);
 
+        // PR10 (B1) — 보증금 환불 (point_hold → point_balance).
+        if (app.getDepositAmount() != null && app.getDepositAmount() > 0) {
+            userApplicationService.refundHold(app.getBuyerId(), app.getDepositAmount());
+        }
+
+        // PR10 (B2) — forward 라이더 보상 (이미 일했으므로 cancel 사유 무관 항상 보상).
+        long deliveryFee = app.getAppliedDeliveryFee() == null ? 0L : app.getAppliedDeliveryFee();
+        if (deliveryFee > 0) {
+            deliveryRepository.findByEscrowApplicationIdAndDirection(
+                    app.getId(), com.sseulang.domain.delivery.domain.DeliveryDirection.FORWARD
+            ).map(d -> d.getRiderId()).filter(java.util.Objects::nonNull).ifPresent(forwardRiderId ->
+                    pointApplicationService.credit(
+                            forwardRiderId, deliveryFee,
+                            PointHistoryType.배달정산, PointReferenceType.ESCROW, app.getId(),
+                            "거래대행 정산 — 라이더 보상 (forward, 사용중 취소)"
+                    )
+            );
+        }
+
         // 양쪽 알림 — 취소 확정.
         notificationApplicationService.notify(
                 app.getBuyerId(),
                 com.sseulang.domain.notification.domain.NotificationType.거래,
                 "거래대행이 취소되었어요",
-                "거래대행 #" + app.getId() + " 가 양쪽 합의로 취소 처리됐어요.",
+                "거래대행 #" + app.getId() + " 가 양쪽 합의로 취소 처리됐어요. 보증금은 환불됐어요.",
                 "ESCROW", app.getId()
         );
         if (!app.getBuyerId().equals(app.getSellerId())) {
@@ -901,6 +921,12 @@ public class EscrowApplicationService {
                     "거래대행 #" + app.getId() + " 가 양쪽 합의로 취소 처리됐어요.",
                     "ESCROW", app.getId()
             );
+        }
+
+        // PR10 (B3) — cascade: 같은 chatRoom 의 활성 직거래 정리. 대여 직거래는 도메인 가드로 자동 스킵.
+        if (app.getChatRoomId() != null) {
+            transactionCascadeService.cascadeCompleteByChatRoom(
+                    app.getChatRoomId(), app.getBuyerId(), app.getSellerId());
         }
     }
 
