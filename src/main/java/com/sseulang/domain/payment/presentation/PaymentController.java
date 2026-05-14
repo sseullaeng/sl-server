@@ -61,13 +61,15 @@ public class PaymentController {
 
     @Operation(summary = "토스 결제 webhook (외부)",
             description = "토스에서 호출. 인증/CSRF 면제. transmission-id 로 멱등성 보장. "
-                    + "위변조 방지는 토스 lookup API 재조회로 검증. 프론트는 호출하지 않음.")
+                    + "시그니처 검증 후 토스 lookup API 재조회로 위변조를 방지. 프론트는 호출하지 않음.")
     @PostMapping("/webhook/toss")
     public ApiResponse<Void> tossWebhook(
             @RequestBody String rawPayload,
-            @RequestHeader(value = "tosspayments-webhook-transmission-id", required = false) String transmissionId
+            @RequestHeader(value = "tosspayments-webhook-transmission-id", required = false) String transmissionId,
+            @RequestHeader(value = "tosspayments-webhook-signature", required = false) String signature,
+            @RequestHeader(value = "tosspayments-webhook-timestamp", required = false) String timestamp
     ) {
-        paymentService.handleWebhook(rawPayload, transmissionId);
+        paymentService.handleWebhook(rawPayload, transmissionId, signature, timestamp);
         return ApiResponse.ok();
     }
 

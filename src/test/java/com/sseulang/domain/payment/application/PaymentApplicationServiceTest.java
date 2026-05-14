@@ -21,6 +21,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.util.HexFormat;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -33,6 +38,8 @@ class PaymentApplicationServiceTest {
     private InMemoryFakeUserRepository userRepo;
     private InMemoryFakePointHistoryRepository pointHistoryRepo;
     private UserApplicationService userService;
+    private PointApplicationService pointSvc;
+    private InMemoryFakeWebhookEventRepository webhookEventRepo;
     private PaymentApplicationService service;
     private Long userId;
     private Long otherUserId;
@@ -44,12 +51,13 @@ class PaymentApplicationServiceTest {
         userRepo = new InMemoryFakeUserRepository();
         pointHistoryRepo = new InMemoryFakePointHistoryRepository();
         userService = new UserApplicationService(userRepo, new com.sseulang.domain.transaction.application.InMemoryFakeTransactionRepository(), new com.sseulang.domain.report.application.InMemoryFakeUserReportRepository(), new com.sseulang.domain.auth.application.NoOpRefreshTokenStore(), new com.sseulang.domain.auth.application.NoOpEmailSender(), java.time.Clock.systemDefaultZone());
-        PointApplicationService pointSvc = new PointApplicationService(userService, pointHistoryRepo);
+        pointSvc = new PointApplicationService(userService, pointHistoryRepo);
+        webhookEventRepo = new InMemoryFakeWebhookEventRepository();
         TossProperties tossProps = new TossProperties(CLIENT_KEY, "test_sk_secret", null, null, null, null);
         service = new PaymentApplicationService(
                 paymentRepo, gateway, pointSvc, userService,
                 tossProps,
-                new InMemoryFakeWebhookEventRepository(),
+                webhookEventRepo,
                 new TossWebhookSignatureVerifier(tossProps),
                 new ObjectMapper(),
                 new WebhookPendingRateLimiter(),
@@ -221,6 +229,40 @@ class PaymentApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("handleWebhook 시그니처 불일치_PAYMENT_WEBHOOK_SIGNATURE_INVALID")
+    void handleWebhook_signature_불일치() {
+        PaymentApplicationService signedService = signedWebhookService();
+        String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\",\"data\":{}}";
+
+        assertThatThrownBy(() -> signedService.handleWebhook(payload, "tx-sig-bad", "bad-signature", "123"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_WEBHOOK_SIGNATURE_INVALID);
+        assertThat(gateway.lookupCalls).isZero();
+    }
+
+    @Test
+    @DisplayName("handleWebhook 시그니처 정상_처리")
+    void handleWebhook_signature_정상() {
+        PaymentApplicationService signedService = signedWebhookService();
+        long amount = 8_000L;
+        ChargeStartResult started = signedService.startCharge(new ChargeStartCommand(userId, amount));
+        gateway.lookupAmountOverride = amount;
+        gateway.lookupOrderIdOverride = started.merchantUid();
+
+        String payload = "{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +
+                "\"data\":{\"paymentKey\":\"pk-signed\",\"orderId\":\"" + started.merchantUid() + "\"}}";
+        String timestamp = "123";
+        String signature = hmacHex("test_webhook_secret", timestamp + "." + payload);
+
+        signedService.handleWebhook(payload, "tx-signed-ok", signature, timestamp);
+
+        assertThat(paymentRepo.findById(started.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.완료);
+        assertThat(userRepo.findPointBalance(userId)).isEqualTo(amount);
+    }
+
+    @Test
     @DisplayName("handleWebhook 동일 transmission-id 두 번_두번째는 멱등 (예외 X, lookup 한 번만)")
     void handleWebhook_멱등() {
         long amount = 5_000L;
@@ -336,6 +378,9 @@ class PaymentApplicationServiceTest {
         // 예외 없이 200 응답 — 토스 재시도 시 다시 시도 가능 (transmission-id 다르면)
         service.handleWebhook(payload, "tx-lookup-fail");
         assertThat(userRepo.findPointBalance(userId)).isZero();
+        assertThat(webhookEventRepo.findBySourceAndEventId(
+                com.sseulang.domain.payment.domain.WebhookEventSource.TOSS, "tx-lookup-fail"
+        ).orElseThrow().getProcessedAt()).isNull();
     }
 
     @Test
@@ -652,5 +697,30 @@ class PaymentApplicationServiceTest {
 
         assertThat(gateway.lookupCalls).isZero();
         assertThat(userRepo.findById(userId).orElseThrow().getPointBalance()).isZero();
+    }
+
+    private PaymentApplicationService signedWebhookService() {
+        TossProperties signedProps = new TossProperties(
+                CLIENT_KEY, "test_sk_secret", null, "test_webhook_secret", 0L, null
+        );
+        return new PaymentApplicationService(
+                paymentRepo, gateway, pointSvc, userService,
+                signedProps,
+                webhookEventRepo,
+                new TossWebhookSignatureVerifier(signedProps),
+                new ObjectMapper(),
+                new WebhookPendingRateLimiter(),
+                null
+        );
+    }
+
+    private static String hmacHex(String secret, String payload) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            return HexFormat.of().formatHex(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }

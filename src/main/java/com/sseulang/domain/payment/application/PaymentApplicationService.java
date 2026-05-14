@@ -225,10 +225,17 @@ public class PaymentApplicationService {
     
 
     @Transactional
-    public void handleWebhook(String rawPayload, String transmissionId) {
+    void handleWebhook(String rawPayload, String transmissionId) {
+        handleWebhook(rawPayload, transmissionId, null, null);
+    }
+
+    @Transactional
+    public void handleWebhook(String rawPayload, String transmissionId, String signature, String timestamp) {
         if (transmissionId == null || transmissionId.isBlank()) {
             throw new BusinessException(ErrorCode.PAYMENT_WEBHOOK_PAYLOAD_INVALID);
         }
+        webhookVerifier.verify(rawPayload, signature, timestamp);
+
         JsonNode root = parseOrThrow(rawPayload);
         String eventType = textOrThrow(root, "eventType");
 
@@ -280,11 +287,13 @@ public class PaymentApplicationService {
 
         
         boolean settled = syncPaidByWebhook(paymentKey, orderId);
-        saved.markProcessed(LocalDateTime.now());
-        
-        if (settled) {
-            pendingRateLimiter.release(orderId);
+        if (!settled) {
+            log.debug("[toss-webhook] orderId={} 아직 처리 완료 아님 — processed_at 기록 보류", orderId);
+            return;
         }
+
+        saved.markProcessed(LocalDateTime.now());
+        pendingRateLimiter.release(orderId);
     }
 
     
