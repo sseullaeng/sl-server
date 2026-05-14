@@ -54,8 +54,10 @@ public class WishlistApplicationService {
     
 
     public Page<ItemSummaryResult> listMyWishlistedItems(Long userId, Pageable pageable) {
-        return wishlistRepository.findWishlistedItemsByUserId(userId, pageable)
-                .map(item -> ItemSummaryResult.from(item, true));
+        Page<com.sseulang.domain.item.domain.Item> page = wishlistRepository.findWishlistedItemsByUserId(userId, pageable);
+        java.util.List<Long> itemIds = page.getContent().stream().map(com.sseulang.domain.item.domain.Item::getId).toList();
+        java.util.Set<Long> rentalActiveIds = itemApplicationService.findActiveRentalItemIds(itemIds);
+        return page.map(item -> ItemSummaryResult.from(item, true, rentalActiveIds.contains(item.getId())));
     }
 
     

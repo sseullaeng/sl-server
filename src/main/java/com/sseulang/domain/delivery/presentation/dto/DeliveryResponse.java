@@ -10,7 +10,9 @@ import java.time.LocalDateTime;
 public record DeliveryResponse(
         @Schema(example = "55") Long id,
         @Schema(example = "100") Long requesterId,
+        @Schema(description = "요청자 닉네임", example = "요청자홍길동") String requesterNickname,
         @Schema(description = "수락 후 채워짐", example = "200") Long riderId,
+        @Schema(description = "수락 후 채워짐", example = "더미 라이더") String riderNickname,
         @Schema(example = "서울 강남구 테헤란로 123") String pickupAddress,
         @Schema(example = "서울 송파구 올림픽로 456") String dropoffAddress,
         @Schema(example = "A4 서류 봉투 1개") String itemDescription,
@@ -28,7 +30,7 @@ public record DeliveryResponse(
 ) {
     public static DeliveryResponse from(DeliveryResult r) {
         return new DeliveryResponse(
-                r.id(), r.requesterId(), r.riderId(),
+                r.id(), r.requesterId(), r.requesterNickname(), r.riderId(), r.riderNickname(),
                 r.pickupAddress(), r.dropoffAddress(), r.itemDescription(),
                 r.fee(), r.requestedDeadline(), r.memo(),
                 r.status(), r.requestedAt(), r.acceptedAt(),

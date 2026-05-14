@@ -181,6 +181,15 @@ public class TransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public java.util.Set<Long> findActiveRentalItemIds(java.util.Collection<Long> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) {
+            return java.util.Collections.emptySet();
+        }
+        java.util.List<Long> rows = jpa.findActiveRentalItemIdsJpql(itemIds);
+        return new java.util.LinkedHashSet<>(rows == null ? java.util.List.of() : rows);
+    }
+
+    @Override
     public java.util.List<Transaction> findReturnRequestedBefore(LocalDateTime threshold) {
         return jpa.findReturnRequestedBeforeJpql(threshold);
     }

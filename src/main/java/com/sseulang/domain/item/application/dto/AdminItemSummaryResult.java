@@ -14,6 +14,7 @@ public record AdminItemSummaryResult(
         String sellerNickname,
         String title,
         String thumbnailUrl,
+        boolean rentalActive,
         Set<TradeType> tradeTypes,
         Long salePrice,
         Long rentalPrice,
@@ -28,12 +29,17 @@ public record AdminItemSummaryResult(
         LocalDateTime createdAt
 ) {
     public static AdminItemSummaryResult from(Item item, String sellerNickname, long reportCount) {
+        return from(item, sellerNickname, reportCount, false);
+    }
+
+    public static AdminItemSummaryResult from(Item item, String sellerNickname, long reportCount, boolean rentalActive) {
         return new AdminItemSummaryResult(
                 item.getId(),
                 item.getSellerId(),
                 sellerNickname,
                 item.getTitle(),
                 item.getThumbnailUrl(),
+                rentalActive,
                 item.getTradeTypes(),
                 item.getSalePrice(),
                 item.getRentalPrice(),

@@ -585,6 +585,7 @@ Body: {
   "status": "판매중",                    // 판매중 | 예약 | 거래완료 | 비공개 | 삭제
   "region": "서울 강남구",
   "thumbnailUrl": "https://cdn.../items/42/abc.jpg",  // null 가능
+  "rentalActive": false,                 // 현재 대여 진행 중이면 true. true 면 프론트에서 "대여중" 태그 표시
   "wishlistCount": 8,
   "isWishlisted": false,                 // 본인 찜 여부. 비로그인 항상 false
   "createdAt": "2026-05-03T10:00:00"
@@ -599,6 +600,7 @@ Summary + 추가 필드:
   "description": "박스 미개봉, 색상 딥퍼플",
   "deposit": 100000,                    // 대여만, 그 외 null
   "rentalUnit": "일",                    // 대여만 ("시간"|"일"|"주"|"월"), 그 외 null
+  "rentalActive": false,                // 현재 대여 진행 중이면 true
   "viewCount": 127,
   "images": [
     { "imageUrl": "...", "sortOrder": 1, "thumbnail": true }
@@ -643,6 +645,7 @@ GET    /api/v1/users/me/items?status=&page=&size=
 }
 ```
 - **PATCH 의 imageUrls non-null = 전체 교체** (4장 유지하려면 4장 다시 보내야 함). 부분 편집은 분리 endpoint 사용.
+- `tradeTypes` 는 상품의 지원 모드이고, `rentalActive` 는 현재 대여 진행 여부입니다. 프론트의 `대여중` 배지는 `rentalActive=true` 일 때만 표시해야 합니다.
 
 ### 10.2 Wishlist
 
@@ -1091,6 +1094,9 @@ POST /api/v1/deliveries
 | PATCH | `/api/v1/deliveries/{id}/deliver` | 수락 rider | 배송중 → 배송완료 | |
 | PATCH | `/api/v1/deliveries/{id}/complete` | requester | 배송완료 → 정산완료 | requester 차감 → rider 적립 (id-asc 락). 잔액 부족 → 400 INSUFFICIENT_POINT + 전체 롤백 |
 | PATCH | `/api/v1/deliveries/{id}/cancel` | requester | 모집중 → 취소 | body `{ reason? }`. 수락 이후 취소 시 400 |
+
+배달 응답(`GET /api/v1/deliveries/{id}`, `GET /api/v1/deliveries`, `GET /api/v1/deliveries/me`) 에는 `requesterNickname` 과 `riderNickname` 이 포함됩니다. 프론트는 시연용 더미 라이더를 한글 닉네임으로 그대로 표시할 수 있습니다.
+운영 환경에서 `app.delivery.auto-accept-rider-id` 를 설정하면 거래대행 결제 완료 후 배달이 자동 생성되고, 더미 라이더가 즉시 수락되어 `수락` 상태부터 위치 추적이 가능합니다.
 
 #### 실시간 위치 추적 — STOMP + REST fallback (closed #51)
 

@@ -18,8 +18,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @Transactional(readOnly = true)
@@ -63,7 +66,7 @@ public class DeliveryApplicationService {
                 cmd.memo(),
                 LocalDateTime.now()
         );
-        return DeliveryResult.from(deliveryRepository.save(d));
+        return toResult(deliveryRepository.save(d));
     }
 
     
@@ -92,7 +95,7 @@ public class DeliveryApplicationService {
             findOrThrow(deliveryId);
             throw new BusinessException(ErrorCode.DELIVERY_ALREADY_ACCEPTED);
         }
-        return DeliveryResult.from(findOrThrow(deliveryId));
+        return toResult(findOrThrow(deliveryId));
     }
 
     
@@ -103,7 +106,7 @@ public class DeliveryApplicationService {
             throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
         }
         d.markPickedUp(LocalDateTime.now());
-        return DeliveryResult.from(d);
+        return toResult(d);
     }
 
     
@@ -118,7 +121,7 @@ public class DeliveryApplicationService {
         eventPublisher.publishEvent(new com.sseulang.domain.delivery.domain.event.DeliveryDeliveredEvent(
                 d.getId(), d.getEscrowApplicationId()
         ));
-        return DeliveryResult.from(d);
+        return toResult(d);
     }
 
     
@@ -143,7 +146,7 @@ public class DeliveryApplicationService {
         d.markSettled(LocalDateTime.now());
         
         locationCache.evict(deliveryId);
-        return DeliveryResult.from(d);
+        return toResult(d);
     }
 
     
@@ -166,13 +169,13 @@ public class DeliveryApplicationService {
         }
         
         locationCache.evict(deliveryId);
-        return DeliveryResult.from(findOrThrow(deliveryId));
+        return toResult(findOrThrow(deliveryId));
     }
 
     public DeliveryResult getById(Long deliveryId, Long requesterId) {
         DeliveryRequest d = findOrThrow(deliveryId);
         if (d.getStatus().canAccept() || isViewableByEscrowParticipant(d, requesterId)) {
-            return DeliveryResult.from(d);
+            return toResult(d);
         }
         throw new BusinessException(ErrorCode.DELIVERY_FORBIDDEN);
     }
@@ -187,7 +190,7 @@ public class DeliveryApplicationService {
     }
 
     public Page<DeliveryResult> listOpen(Pageable pageable) {
-        return deliveryRepository.findOpenList(pageable).map(DeliveryResult::from);
+        return enrichPage(deliveryRepository.findOpenList(pageable));
     }
 
     
@@ -232,12 +235,62 @@ public class DeliveryApplicationService {
     }
 
     public Page<DeliveryResult> listMine(Long userId, Pageable pageable) {
-        return deliveryRepository.findByParticipant(userId, pageable).map(DeliveryResult::from);
+        return enrichPage(deliveryRepository.findByParticipant(userId, pageable));
     }
 
     private DeliveryRequest findOrThrow(Long deliveryId) {
         return deliveryRepository.findById(deliveryId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DELIVERY_NOT_FOUND));
+    }
+
+    private DeliveryResult toResult(DeliveryRequest delivery) {
+        return toResult(delivery, resolveUserMap(java.util.List.of(delivery)));
+    }
+
+    private DeliveryResult toResult(DeliveryRequest delivery, java.util.Map<Long, UserApplicationService.UserProjection> userMap) {
+        return DeliveryResult.from(
+                delivery,
+                nicknameOf(userMap, delivery.getRequesterId()),
+                nicknameOf(userMap, delivery.getRiderId())
+        );
+    }
+
+    private Page<DeliveryResult> enrichPage(Page<DeliveryRequest> page) {
+        if (page.isEmpty()) {
+            return Page.empty(pageableOf(page));
+        }
+        java.util.Map<Long, UserApplicationService.UserProjection> userMap = resolveUserMap(page.getContent());
+        return page.map(d -> toResult(d, userMap));
+    }
+
+    private java.util.Map<Long, UserApplicationService.UserProjection> resolveUserMap(Collection<DeliveryRequest> deliveries) {
+        if (deliveries == null || deliveries.isEmpty()) {
+            return java.util.Map.of();
+        }
+        Set<Long> ids = new HashSet<>();
+        for (DeliveryRequest delivery : deliveries) {
+            if (delivery.getRequesterId() != null) {
+                ids.add(delivery.getRequesterId());
+            }
+            if (delivery.getRiderId() != null) {
+                ids.add(delivery.getRiderId());
+            }
+        }
+        java.util.Map<Long, UserApplicationService.UserProjection> userMap =
+                userApplicationService.findProjectionsByIds(ids);
+        return userMap == null ? java.util.Map.of() : userMap;
+    }
+
+    private String nicknameOf(java.util.Map<Long, UserApplicationService.UserProjection> userMap, Long userId) {
+        if (userMap == null || userId == null) {
+            return null;
+        }
+        UserApplicationService.UserProjection projection = userMap.get(userId);
+        return projection == null ? null : projection.nickname();
+    }
+
+    private org.springframework.data.domain.Pageable pageableOf(Page<DeliveryRequest> page) {
+        return page == null ? org.springframework.data.domain.Pageable.unpaged() : page.getPageable();
     }
 
     
@@ -251,19 +304,11 @@ public class DeliveryApplicationService {
         Page<DeliveryRequest> page = deliveryRepository.adminSearch(
                 status, riderId, requesterId, createdAfter, createdBefore, sort, pageable);
         if (page.isEmpty()) return org.springframework.data.domain.Page.empty(pageable);
-        java.util.Set<Long> userIds = new java.util.HashSet<>();
-        for (DeliveryRequest d : page.getContent()) {
-            userIds.add(d.getRequesterId());
-            if (d.getRiderId() != null) userIds.add(d.getRiderId());
-        }
-        java.util.Map<Long, UserApplicationService.UserProjection> userMap =
-                userApplicationService.findProjectionsByIds(userIds);
+        java.util.Map<Long, UserApplicationService.UserProjection> userMap = resolveUserMap(page.getContent());
         return page.map(d -> com.sseulang.domain.delivery.application.dto.AdminDeliveryResult.from(
                 d,
-                java.util.Optional.ofNullable(userMap.get(d.getRequesterId()))
-                        .map(UserApplicationService.UserProjection::nickname).orElse(null),
-                d.getRiderId() == null ? null : java.util.Optional.ofNullable(userMap.get(d.getRiderId()))
-                        .map(UserApplicationService.UserProjection::nickname).orElse(null)
+                nicknameOf(userMap, d.getRequesterId()),
+                nicknameOf(userMap, d.getRiderId())
         ));
     }
 

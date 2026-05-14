@@ -36,6 +36,9 @@ public interface EscrowApplicationRepository {
 
     List<EscrowApplication> findOverdueCandidates(LocalDateTime cutoff);
 
+    // 아이템 카드용 — 현재 대여 거래대행이 살아있는 item id 배치 조회.
+    java.util.Set<Long> findActiveRentalItemIds(java.util.Collection<Long> itemIds);
+
     
     long countInProgress();
 

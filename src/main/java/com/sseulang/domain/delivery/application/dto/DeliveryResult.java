@@ -8,7 +8,9 @@ import java.time.LocalDateTime;
 public record DeliveryResult(
         Long id,
         Long requesterId,
+        String requesterNickname,
         Long riderId,
+        String riderNickname,
         String pickupAddress,
         String dropoffAddress,
         String itemDescription,
@@ -25,8 +27,12 @@ public record DeliveryResult(
         String cancelReason
 ) {
     public static DeliveryResult from(DeliveryRequest d) {
+        return from(d, null, null);
+    }
+
+    public static DeliveryResult from(DeliveryRequest d, String requesterNickname, String riderNickname) {
         return new DeliveryResult(
-                d.getId(), d.getRequesterId(), d.getRiderId(),
+                d.getId(), d.getRequesterId(), requesterNickname, d.getRiderId(), riderNickname,
                 d.getPickupAddress(), d.getDropoffAddress(), d.getItemDescription(),
                 d.getFee(), d.getRequestedDeadline(), d.getMemo(),
                 d.getStatus(), d.getRequestedAt(), d.getAcceptedAt(),

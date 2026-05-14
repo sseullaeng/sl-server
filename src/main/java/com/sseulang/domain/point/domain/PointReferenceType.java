@@ -6,5 +6,6 @@ public enum PointReferenceType {
     WITHDRAWAL,
     DELIVERY,
     ESCROW,
-    OVERDUE
+    OVERDUE,
+    ADMIN
 }

@@ -33,6 +33,8 @@ public record ItemSummaryResponse(
         @Schema(example = "https://cdn.sseulang.com/items/42/abc.jpg",
                 description = "썸네일 1장 URL — 등록된 이미지가 없으면 null")
         String thumbnailUrl,
+        @Schema(example = "true", description = "현재 대여 진행 중 여부. true 면 프론트에서 '대여중' 태그 표시")
+        boolean rentalActive,
         @Schema(example = "8", description = "찜 누적 카운트")
         int wishlistCount,
         @Schema(example = "false",
@@ -52,7 +54,7 @@ public record ItemSummaryResponse(
                 r.depositType(),
                 r.tradeType(), r.tradeTypes(),
                 r.status(), r.region(),
-                r.thumbnailUrl(), r.wishlistCount(), r.isWishlisted(),
+                r.thumbnailUrl(), r.rentalActive(), r.wishlistCount(), r.isWishlisted(),
                 r.viewCount(),
                 r.hashtags() == null ? List.of() : r.hashtags(),
                 r.createdAt()

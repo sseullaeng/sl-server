@@ -97,6 +97,17 @@ public class InMemoryFakeEscrowApplicationRepository implements EscrowApplicatio
     }
 
     @Override
+    public java.util.Set<Long> findActiveRentalItemIds(java.util.Collection<Long> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) return java.util.Collections.emptySet();
+        return store.values().stream()
+                .filter(EscrowApplication::isRentalMode)
+                .filter(a -> a.getItemId() != null && itemIds.contains(a.getItemId()))
+                .filter(a -> a.getStatus() != EscrowApplicationStatus.완료 && a.getStatus() != EscrowApplicationStatus.취소)
+                .map(EscrowApplication::getItemId)
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    @Override
     public long countInProgress() {
         return store.values().stream()
                 .filter(a -> a.getStatus() != EscrowApplicationStatus.완료 && a.getStatus() != EscrowApplicationStatus.취소)

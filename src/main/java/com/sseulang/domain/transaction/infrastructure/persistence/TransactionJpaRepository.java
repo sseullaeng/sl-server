@@ -278,6 +278,17 @@ interface TransactionJpaRepository extends JpaRepository<Transaction, Long> {
     java.util.List<Transaction> findActiveRentalsByItemIdJpql(@Param("itemId") Long itemId);
 
     @Query("""
+            SELECT DISTINCT t.itemId FROM Transaction t
+             WHERE t.itemId IN :itemIds
+               AND t.tradeType = com.sseulang.domain.item.domain.TradeType.대여
+               AND t.status NOT IN (
+                   com.sseulang.domain.transaction.domain.TransactionStatus.취소,
+                   com.sseulang.domain.transaction.domain.TransactionStatus.거래완료
+               )
+            """)
+    java.util.List<Long> findActiveRentalItemIdsJpql(@Param("itemIds") java.util.Collection<Long> itemIds);
+
+    @Query("""
             SELECT t FROM Transaction t
              WHERE t.status = com.sseulang.domain.transaction.domain.TransactionStatus.반납요청
                AND t.returnRequestedAt IS NOT NULL

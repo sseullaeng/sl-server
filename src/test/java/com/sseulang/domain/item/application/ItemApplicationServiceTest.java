@@ -5,6 +5,7 @@ import com.sseulang.domain.category.application.InMemoryFakeCategoryRepository;
 import com.sseulang.domain.category.domain.Category;
 import com.sseulang.domain.item.application.dto.ItemDetailResult;
 import com.sseulang.domain.item.application.dto.ItemRegisterCommand;
+import com.sseulang.domain.item.application.dto.ItemSearchCriteria;
 import com.sseulang.domain.item.application.dto.ItemUpdateCommand;
 import com.sseulang.domain.item.domain.DepositType;
 import com.sseulang.domain.item.domain.ItemStatus;
@@ -29,6 +30,7 @@ class ItemApplicationServiceTest {
     private InMemoryFakeItemRepository itemRepo;
     private InMemoryFakeCategoryRepository categoryRepo;
     private ItemApplicationService service;
+    private ItemRentalActivityService rentalActivityService;
     private Long categoryId;
 
     @BeforeEach
@@ -36,8 +38,13 @@ class ItemApplicationServiceTest {
         itemRepo = new InMemoryFakeItemRepository();
         categoryRepo = new InMemoryFakeCategoryRepository();
         CategoryApplicationService categoryService = new CategoryApplicationService(categoryRepo);
+        rentalActivityService = org.mockito.Mockito.mock(ItemRentalActivityService.class);
+        org.mockito.Mockito.when(rentalActivityService.findActiveRentalItemIds(org.mockito.Mockito.anyCollection()))
+                .thenReturn(java.util.Set.of());
+        org.mockito.Mockito.when(rentalActivityService.isRentalActive(org.mockito.Mockito.anyLong()))
+                .thenReturn(false);
         // requireVerified 가드는 기본 통과 (mock void no-op) — 단위 테스트는 비즈니스 로직 검증.
-        service = new ItemApplicationService(itemRepo, categoryService, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class), new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(), new com.sseulang.domain.item.application.NoOpWishlistView(), new com.sseulang.domain.item.application.NoOpItemReportView());
+        service = new ItemApplicationService(itemRepo, categoryService, org.mockito.Mockito.mock(com.sseulang.domain.user.application.UserApplicationService.class), new com.sseulang.domain.file.application.NoOpPresignedUrlGenerator(), new com.sseulang.domain.item.application.NoOpWishlistView(), new com.sseulang.domain.item.application.NoOpItemReportView(), rentalActivityService);
         categoryId = categoryRepo.insert(Category.createRoot("디지털/가전", 1)).getId();
     }
 
@@ -91,6 +98,7 @@ class ItemApplicationServiceTest {
         ItemDetailResult result = service.getById(id);
 
         assertThat(result.viewCount()).isEqualTo(2);
+        assertThat(result.rentalActive()).isFalse();
     }
 
     @Test
@@ -217,6 +225,29 @@ class ItemApplicationServiceTest {
         ItemDetailResult r = service.getById(id);
         assertThat(r.deposit()).isEqualTo(20_000L);
         assertThat(r.rentalUnit()).isEqualTo(RentalUnit.주);
+    }
+
+    @Test
+    @DisplayName("search / detail 활성 대여 item 은 rentalActive=true")
+    void rental_active_tag_노출() {
+        Long id = registerSimple();
+        org.mockito.Mockito.when(rentalActivityService.isRentalActive(id)).thenReturn(true);
+
+        ItemDetailResult detail = service.getById(id);
+        assertThat(detail.rentalActive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("search 목록 응답에도 rentalActive=true 반영")
+    void search_대여중_태그_노출() {
+        Long id = registerSimple();
+        org.mockito.Mockito.when(rentalActivityService.findActiveRentalItemIds(org.mockito.Mockito.anyCollection()))
+                .thenReturn(java.util.Set.of(id));
+
+        var page = service.search(ItemSearchCriteria.empty(), org.springframework.data.domain.PageRequest.of(0, 10), null);
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().get(0).rentalActive()).isTrue();
     }
 
     @Test

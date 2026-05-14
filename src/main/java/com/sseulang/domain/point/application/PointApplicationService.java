@@ -46,6 +46,18 @@ public class PointApplicationService {
         ));
     }
 
+    @Transactional
+    public void adminCredit(Long userId, long amount, Long adminId, String reason) {
+        if (userId == null || userId <= 0) {
+            throw new IllegalArgumentException("userId 는 양수여야 합니다");
+        }
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount 는 양수여야 합니다");
+        }
+        String description = buildAdminCreditDescription(adminId, reason);
+        credit(userId, amount, PointHistoryType.충전, PointReferenceType.ADMIN, adminId, description);
+    }
+
     
 
     @Transactional
@@ -173,6 +185,13 @@ public class PointApplicationService {
 
     private long readBalance(Long userId) {
         return userApplicationService.getPointBalance(userId);
+    }
+
+    private static String buildAdminCreditDescription(Long adminId, String reason) {
+        String prefix = adminId == null ? "관리자 포인트 지급" : "관리자 포인트 지급(adminId=" + adminId + ")";
+        String detail = reason == null || reason.isBlank() ? "" : ": " + reason.trim();
+        String description = prefix + detail;
+        return description.length() <= 255 ? description : description.substring(0, 255);
     }
 
     

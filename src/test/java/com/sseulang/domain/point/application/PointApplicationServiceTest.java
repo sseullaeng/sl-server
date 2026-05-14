@@ -76,6 +76,24 @@ class PointApplicationServiceTest {
         assertThat(historyRepo.size()).isZero();
     }
 
+    @Test
+    @DisplayName("adminCredit 정상_잔액 증가 + history 적재 (충전 / refType=ADMIN)")
+    void adminCredit_정상() {
+        service.adminCredit(buyerId, 12_000L, 777L, "이벤트 보상");
+
+        assertThat(userRepo.findPointBalance(buyerId)).isEqualTo(12_000L);
+        assertThat(historyRepo.size()).isEqualTo(1);
+        PointHistory h = historyRepo.all().get(0);
+        assertThat(h.getUserId()).isEqualTo(buyerId);
+        assertThat(h.getPointType()).isEqualTo(PointHistoryType.충전);
+        assertThat(h.getAmount()).isEqualTo(12_000L);
+        assertThat(h.getBalanceAfter()).isEqualTo(12_000L);
+        assertThat(h.getReferenceType()).isEqualTo(PointReferenceType.ADMIN);
+        assertThat(h.getReferenceId()).isEqualTo(777L);
+        assertThat(h.getDescription()).contains("관리자 포인트 지급");
+        assertThat(h.getDescription()).contains("이벤트 보상");
+    }
+
     // ───────── deduct ─────────
 
     @Test

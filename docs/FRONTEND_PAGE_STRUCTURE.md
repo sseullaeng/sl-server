@@ -94,6 +94,7 @@ src/
 | `/mypage/wishes` | `WishListPage` | 찜 목록, 찜 해제 | `GET /api/v1/users/me/wishlist`, `DELETE /api/v1/items/{id}/wishlist` |
 
 물품 목록의 백엔드 query param은 현재 `q`, `categoryId`, `tradeType`, `minPrice`, `maxPrice`, `tag`, `sort`, `sellerId`, `page`, `size` 사용을 전제로 합니다.
+물품 카드의 `대여중` 배지는 `tradeTypes` 가 아니라 `rentalActive=true` 응답 필드를 기준으로 렌더링해야 합니다.
 
 ### 5.3 채팅 및 거래
 
@@ -130,6 +131,7 @@ src/
 | STOMP | `delivery/locationHooks.ts` | 라이더 위치 publish, 요청자 위치 subscribe | publish `/app/delivery/{id}/location`, subscribe `/topic/delivery/{id}/location` |
 
 주소 입력은 카카오 주소 검색 컴포넌트를 사용합니다. 백엔드는 주소 텍스트, 위도/경도, 연락처, 배송 상태, rider/requester 권한을 일관되게 내려줘야 합니다.
+배달이 `수락` 상태가 되면 위치 추적이 가능합니다. 운영 환경에서 `app.delivery.auto-accept-rider-id` 를 설정하면 거래대행 결제 완료 후 시연용 더미 라이더가 자동 수락해서 바로 추적 가능한 상태로 전환됩니다.
 
 ### 5.6 마이페이지, 사용자, 차단
 

@@ -13,6 +13,7 @@ public record AdminItemSummaryResponse(
         String sellerNickname,
         String title,
         String thumbnailUrl,
+        boolean rentalActive,
         Set<TradeType> tradeTypes,
         Long salePrice,
         Long rentalPrice,
@@ -29,7 +30,7 @@ public record AdminItemSummaryResponse(
     public static AdminItemSummaryResponse from(AdminItemSummaryResult r) {
         return new AdminItemSummaryResponse(
                 r.id(), r.sellerId(), r.sellerNickname(),
-                r.title(), r.thumbnailUrl(),
+                r.title(), r.thumbnailUrl(), r.rentalActive(),
                 r.tradeTypes(), r.salePrice(), r.rentalPrice(), r.tradeType(), r.price(),
                 r.categoryId(), r.status(), r.region(),
                 r.viewCount(), r.wishlistCount(), r.reportCount(),

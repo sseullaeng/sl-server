@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -297,6 +298,24 @@ class DeliveryApplicationServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.DELIVERY_FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("getById 닉네임 포함_요청자/라이더 이름이 응답에 노출")
+    void getById_닉네임_포함() {
+        DeliveryResult created = service.create(newCommand());
+        service.accept(created.id(), RIDER);
+
+        Map<Long, UserApplicationService.UserProjection> projections = Map.of(
+                REQUESTER, new UserApplicationService.UserProjection(REQUESTER, "요청자홍길동", null),
+                RIDER, new UserApplicationService.UserProjection(RIDER, "더미 라이더", null)
+        );
+        org.mockito.Mockito.when(userService.findProjectionsByIds(any())).thenReturn(projections);
+
+        DeliveryResult result = service.getById(created.id(), REQUESTER);
+
+        assertThat(result.requesterNickname()).isEqualTo("요청자홍길동");
+        assertThat(result.riderNickname()).isEqualTo("더미 라이더");
     }
 
     @Test

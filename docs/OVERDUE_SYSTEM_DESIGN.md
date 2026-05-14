@@ -546,7 +546,7 @@ GET /api/v1/users/me/overdue-debt
 | PR4 | Payment 채무 차감 hook + `AdminOverdueController` | PR3 |
 | PR5 | 사용자 본인 조회 endpoint + `AdminUserResponse` 필드 추가 | PR4 |
 | PR6 | 통합 테스트 IT + 약관/문서 | PR1~5 |
-
+관
 예상 작업량은 집중 기준 1.5~2일입니다.
 
 ## 14. 미정 영역

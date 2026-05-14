@@ -18,6 +18,7 @@ import com.sseulang.global.exception.ErrorCode;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
@@ -34,6 +35,7 @@ public class ItemApplicationService {
     private final PresignedUrlGenerator presignedUrlGenerator;
     private final WishlistView wishlistView;
     private final com.sseulang.domain.item.domain.ItemReportView itemReportView;
+    private final ItemRentalActivityService itemRentalActivityService;
 
     public ItemApplicationService(
             ItemRepository itemRepository,
@@ -43,12 +45,27 @@ public class ItemApplicationService {
             WishlistView wishlistView,
             com.sseulang.domain.item.domain.ItemReportView itemReportView
     ) {
+        this(itemRepository, categoryApplicationService, userApplicationService, presignedUrlGenerator, wishlistView, itemReportView,
+                new ItemRentalActivityService(null, null));
+    }
+
+    @Autowired
+    public ItemApplicationService(
+            ItemRepository itemRepository,
+            CategoryApplicationService categoryApplicationService,
+            UserApplicationService userApplicationService,
+            PresignedUrlGenerator presignedUrlGenerator,
+            WishlistView wishlistView,
+            com.sseulang.domain.item.domain.ItemReportView itemReportView,
+            ItemRentalActivityService itemRentalActivityService
+    ) {
         this.itemRepository = itemRepository;
         this.categoryApplicationService = categoryApplicationService;
         this.userApplicationService = userApplicationService;
         this.presignedUrlGenerator = presignedUrlGenerator;
         this.wishlistView = wishlistView;
         this.itemReportView = itemReportView;
+        this.itemRentalActivityService = itemRentalActivityService;
     }
 
     @Transactional
@@ -81,7 +98,7 @@ public class ItemApplicationService {
     public ItemDetailResult getById(Long id) {
         Item item = findOrThrow(id);
         item.incrementViewCount();
-        return ItemDetailResult.from(item);
+        return ItemDetailResult.from(item, itemRentalActivityService.isRentalActive(item.getId()));
     }
 
     public String findThumbnailUrl(Long itemId) {
@@ -112,15 +129,17 @@ public class ItemApplicationService {
 
     private Page<ItemSummaryResult> enrich(Page<Item> page, Long viewerId) {
         if (page.isEmpty()) {
-            return page.map(item -> ItemSummaryResult.from(item, false, java.util.List.of()));
+            return page.map(item -> ItemSummaryResult.from(item, false, java.util.List.of(), false));
         }
         List<Long> ids = page.getContent().stream().map(Item::getId).toList();
         Set<Long> wishlisted = wishlistView.findWishlistedItemIds(viewerId, ids);
         java.util.Map<Long, java.util.List<String>> tagsByItem = itemRepository.findHashtagsByItemIds(ids);
+        Set<Long> rentalActiveIds = itemRentalActivityService.findActiveRentalItemIds(ids);
         return page.map(item -> ItemSummaryResult.from(
                 item,
                 wishlisted.contains(item.getId()),
-                tagsByItem.getOrDefault(item.getId(), java.util.List.of())
+                tagsByItem.getOrDefault(item.getId(), java.util.List.of()),
+                rentalActiveIds.contains(item.getId())
         ));
     }
 
@@ -181,13 +200,15 @@ public class ItemApplicationService {
                 userApplicationService.findProjectionsByIds(sellerIds);
         java.util.List<Long> itemIds = page.getContent().stream().map(Item::getId).toList();
         java.util.Map<Long, Long> reportMap = itemReportView.countByItemIds(itemIds);
+        Set<Long> rentalActiveIds = itemRentalActivityService.findActiveRentalItemIds(itemIds);
 
         java.util.List<com.sseulang.domain.item.application.dto.AdminItemSummaryResult> rows = page.getContent().stream()
                 .map(it -> com.sseulang.domain.item.application.dto.AdminItemSummaryResult.from(
                         it,
                         java.util.Optional.ofNullable(userMap.get(it.getSellerId()))
                                 .map(com.sseulang.domain.user.application.UserApplicationService.UserProjection::nickname).orElse(null),
-                        reportMap.getOrDefault(it.getId(), 0L)
+                        reportMap.getOrDefault(it.getId(), 0L),
+                        rentalActiveIds.contains(it.getId())
                 ))
                 .toList();
 
@@ -199,6 +220,14 @@ public class ItemApplicationService {
         return new org.springframework.data.domain.PageImpl<>(rows, pageable, page.getTotalElements());
     }
 
+    public boolean isRentalActive(Long itemId) {
+        return itemRentalActivityService.isRentalActive(itemId);
+    }
+
+    public Set<Long> findActiveRentalItemIds(java.util.Collection<Long> itemIds) {
+        return itemRentalActivityService.findActiveRentalItemIds(itemIds);
+    }
+
     // 라운드 12 — admin item 상세.
     public com.sseulang.domain.item.application.dto.AdminItemDetailResult adminGetDetail(
             Long itemId,
@@ -207,7 +236,10 @@ public class ItemApplicationService {
     ) {
         Item item = findOrThrow(itemId);
         com.sseulang.domain.item.application.dto.ItemDetailResult detail =
-                com.sseulang.domain.item.application.dto.ItemDetailResult.from(item);
+                com.sseulang.domain.item.application.dto.ItemDetailResult.from(
+                        item,
+                        itemRentalActivityService.isRentalActive(item.getId())
+                );
 
         com.sseulang.domain.user.application.UserApplicationService.UserProjection seller =
                 userApplicationService.findProjectionsByIds(java.util.List.of(item.getSellerId()))

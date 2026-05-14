@@ -33,6 +33,8 @@ public record ItemDetailResponse(
         Set<TradeType> tradeTypes,
         ItemStatus status,
         @Schema(example = "서울 강남구") String region,
+        @Schema(example = "true", description = "현재 대여 진행 중 여부. true 면 프론트에서 '대여중' 태그 표시")
+        boolean rentalActive,
         @Schema(example = "127") int viewCount,
         @Schema(example = "8") int wishlistCount,
         List<ItemImageResponse> images,
@@ -47,7 +49,7 @@ public record ItemDetailResponse(
                 r.price(), r.salePrice(), r.rentalPrice(),
                 r.deposit(), r.depositType(), r.rentalUnit(),
                 r.tradeType(), r.tradeTypes(),
-                r.status(), r.region(),
+                r.status(), r.region(), r.rentalActive(),
                 r.viewCount(), r.wishlistCount(),
                 r.images().stream().map(ItemImageResponse::from).toList(),
                 r.hashtags(),

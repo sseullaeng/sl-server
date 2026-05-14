@@ -90,6 +90,9 @@ public interface TransactionRepository {
     // B-2: 대여 달력 — 활성(취소/거래완료 제외) 대여 거래의 rentalStart/End 페어. 같은 item 의 예약 충돌 검사용.
     List<Transaction> findActiveRentalsByItemId(Long itemId);
 
+    // 아이템 카드용 — 현재 대여 흐름이 살아있는 item id 배치 조회.
+    java.util.Set<Long> findActiveRentalItemIds(java.util.Collection<Long> itemIds);
+
     // B-6: 7일 자동 완료 스케줄러 — 반납요청 상태 + returnRequestedAt < threshold.
     List<Transaction> findReturnRequestedBefore(LocalDateTime threshold);
 

@@ -24,6 +24,7 @@ public record ItemSummaryResult(
         ItemStatus status,
         String region,
         String thumbnailUrl,
+        boolean rentalActive,
         int wishlistCount,
         boolean isWishlisted,
         int viewCount,
@@ -32,14 +33,27 @@ public record ItemSummaryResult(
 ) {
 
     public static ItemSummaryResult from(Item item) {
-        return from(item, false, null);
+        return from(item, false, null, false);
     }
 
     public static ItemSummaryResult from(Item item, boolean isWishlisted) {
-        return from(item, isWishlisted, null);
+        return from(item, isWishlisted, null, false);
     }
 
     public static ItemSummaryResult from(Item item, boolean isWishlisted, List<String> hashtagsOverride) {
+        return from(item, isWishlisted, hashtagsOverride, false);
+    }
+
+    public static ItemSummaryResult from(Item item, boolean isWishlisted, boolean rentalActive) {
+        return from(item, isWishlisted, null, rentalActive);
+    }
+
+    public static ItemSummaryResult from(
+            Item item,
+            boolean isWishlisted,
+            List<String> hashtagsOverride,
+            boolean rentalActive
+    ) {
         List<String> tags = hashtagsOverride != null
                 ? hashtagsOverride
                 : item.getHashtags().stream().map(ItemHashtag::getTag).toList();
@@ -57,6 +71,7 @@ public record ItemSummaryResult(
                 item.getStatus(),
                 item.getRegion(),
                 item.getThumbnailUrl(),
+                rentalActive,
                 item.getWishlistCount(),
                 isWishlisted,
                 item.getViewCount(),

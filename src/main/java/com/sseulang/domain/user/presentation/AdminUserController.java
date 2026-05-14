@@ -1,8 +1,10 @@
 package com.sseulang.domain.user.presentation;
 
+import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.domain.user.application.dto.AdminUserSearchCriteria;
 import com.sseulang.domain.user.domain.UserStatus;
+import com.sseulang.domain.user.presentation.dto.AdminUserPointCreditRequest;
 import com.sseulang.domain.user.presentation.dto.AdminUserResponse;
 import com.sseulang.domain.user.presentation.dto.UserBlockRequest;
 import com.sseulang.domain.user.presentation.dto.UserForceWithdrawRequest;
@@ -14,9 +16,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,9 +35,11 @@ import java.time.LocalDateTime;
 public class AdminUserController {
 
     private final UserApplicationService userService;
+    private final PointApplicationService pointService;
 
-    public AdminUserController(UserApplicationService userService) {
+    public AdminUserController(UserApplicationService userService, PointApplicationService pointService) {
         this.userService = userService;
+        this.pointService = pointService;
     }
 
     @Operation(summary = "[관리자] 회원 목록·검색",
@@ -99,5 +105,17 @@ public class AdminUserController {
     ) {
         userService.adminForceWithdraw(id, request == null ? null : request.reason());
         return ApiResponse.ok();
+    }
+
+    @Operation(summary = "[관리자] 회원 포인트 지급",
+            description = "관리자 권한으로 회원 포인트를 직접 충전한다. 포인트 히스토리는 충전/ADMIN 으로 남는다.")
+    @PostMapping("/{id}/points/credit")
+    public ApiResponse<AdminUserResponse> creditPoints(
+            @AuthenticationPrincipal Long adminId,
+            @PathVariable("id") Long id,
+            @Valid @RequestBody AdminUserPointCreditRequest request
+    ) {
+        pointService.adminCredit(id, request.amount(), adminId, request.reason());
+        return ApiResponse.ok(AdminUserResponse.from(userService.adminGetEnriched(id)));
     }
 }

@@ -27,6 +27,7 @@ public record ItemDetailResult(
         Set<TradeType> tradeTypes,
         ItemStatus status,
         String region,
+        boolean rentalActive,
         int viewCount,
         int wishlistCount,
         List<ItemImageResult> images,
@@ -35,6 +36,10 @@ public record ItemDetailResult(
         LocalDateTime updatedAt
 ) {
     public static ItemDetailResult from(Item item) {
+        return from(item, false);
+    }
+
+    public static ItemDetailResult from(Item item, boolean rentalActive) {
         return new ItemDetailResult(
                 item.getId(),
                 item.getSellerId(),
@@ -51,6 +56,7 @@ public record ItemDetailResult(
                 item.getTradeTypes(),
                 item.getStatus(),
                 item.getRegion(),
+                rentalActive,
                 item.getViewCount(),
                 item.getWishlistCount(),
                 item.getImages().stream().map(ItemImageResult::from).toList(),

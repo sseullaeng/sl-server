@@ -67,6 +67,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         ItemQuerydslRepository.class,
         ItemRepositoryImpl.class,
         ItemApplicationService.class,
+        com.sseulang.domain.item.application.ItemRentalActivityService.class,
         NoOpPresignedUrlGenerator.class,
         NoOpWishlistView.class,
         CategoryRepositoryImpl.class,
