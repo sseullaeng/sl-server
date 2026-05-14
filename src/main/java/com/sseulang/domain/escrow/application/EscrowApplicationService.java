@@ -815,11 +815,23 @@ public class EscrowApplicationService {
     }
 
     // PR3 라운드 14 — 대여 거래대행 buyer [반납요청]. 사용중 → 반납중 + return delivery 자동 생성.
+    // PR9 — buyer 가 return fee 자동 추가 결제 (forward 동액). 잔액 부족 시 INSUFFICIENT_POINT 차단.
     @Transactional
     public void requestReturn(Long applicationId, Long requesterId) {
         EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
         app.requestReturnByBuyer(requesterId);
+
+        // PR9 — return fee 자동 추가 결제. 잔액 부족 시 deduct 가 INSUFFICIENT_POINT 던짐.
+        long returnFee = app.getAppliedDeliveryFee() == null ? 0L : app.getAppliedDeliveryFee();
+        if (returnFee > 0) {
+            pointApplicationService.deduct(
+                    app.getBuyerId(), returnFee,
+                    PointHistoryType.결제, PointReferenceType.ESCROW, app.getId(),
+                    "거래대행 결제 — return 라이더 fee (반납 배달)"
+            );
+        }
+
         createReturnDelivery(app, LocalDateTime.now(clock));
         notifyReturnRequested(app,
                 "반납 요청이 도착했어요",
