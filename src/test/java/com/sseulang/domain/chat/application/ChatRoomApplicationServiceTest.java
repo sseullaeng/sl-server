@@ -82,6 +82,22 @@ class ChatRoomApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("reopenForParticipant 기존 roomId 로 나간 방 재진입")
+    void reopenForParticipant_나간방_재진입() {
+        Long roomId = service.openFor(BUYER, itemId, null).id();
+        service.leave(roomId, BUYER);
+
+        ChatRoomApplicationService.ChatRoomMeta meta = service.reopenForParticipant(roomId, BUYER);
+
+        assertThat(meta.chatRoomId()).isEqualTo(roomId);
+        assertThat(meta.iLeft()).isFalse();
+        assertThat(meta.opponentLeft()).isFalse();
+        assertThat(service.listMine(BUYER, PageRequest.of(0, 10)).getContent())
+                .extracting(ChatRoomResult::id)
+                .containsExactly(roomId);
+    }
+
+    @Test
     @DisplayName("openFor 동일 item/user라도 tradeMode가 다르면 별도 방")
     void openFor_동일상대_동일아이템_tradeMode별_분리() {
         Item dual = itemRepo.save(Item.createMulti(

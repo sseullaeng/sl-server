@@ -155,12 +155,9 @@ public class EscrowApplicationService {
 
         
         com.sseulang.domain.chat.application.ChatRoomApplicationService.ChatRoomMeta meta =
-                chatRoomApplicationService.findMetaForParticipant(cmd.chatRoomId(), cmd.requesterId());
+                chatRoomApplicationService.reopenForParticipant(cmd.chatRoomId(), cmd.requesterId());
         if (!meta.itemId().equals(cmd.itemId())) {
             throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
-        }
-        if (meta.iLeft() || meta.opponentLeft()) {
-            throw new BusinessException(ErrorCode.CHAT_ROOM_OPPONENT_LEFT);
         }
 
         
@@ -254,12 +251,9 @@ public class EscrowApplicationService {
         userApplicationService.requireVerified(cmd.requesterId());
 
         com.sseulang.domain.chat.application.ChatRoomApplicationService.ChatRoomMeta meta =
-                chatRoomApplicationService.findMetaForParticipant(cmd.chatRoomId(), cmd.requesterId());
+                chatRoomApplicationService.reopenForParticipant(cmd.chatRoomId(), cmd.requesterId());
         if (!meta.itemId().equals(cmd.itemId())) {
             throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
-        }
-        if (meta.iLeft() || meta.opponentLeft()) {
-            throw new BusinessException(ErrorCode.CHAT_ROOM_OPPONENT_LEFT);
         }
 
         

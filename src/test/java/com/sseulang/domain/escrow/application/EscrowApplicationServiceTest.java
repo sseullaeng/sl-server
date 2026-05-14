@@ -529,7 +529,7 @@ class EscrowApplicationServiceTest {
     @Test
     @DisplayName("createInternalDraft_dual_item_판매_chat은_대여기간_없이_일반거래대행")
     void createInternalDraft_dual_item_sale_chat_not_rental() {
-        when(chatRoomService.findMetaForParticipant(7L, 11L))
+        when(chatRoomService.reopenForParticipant(7L, 11L))
                 .thenReturn(new com.sseulang.domain.chat.application.ChatRoomApplicationService.ChatRoomMeta(
                         7L, 123L, com.sseulang.domain.item.domain.TradeType.판매, false, false));
         when(chatRoomService.findOpponent(7L, 11L)).thenReturn(20L);
@@ -561,6 +561,44 @@ class EscrowApplicationServiceTest {
         assertThat(saved.getRentalStartAt()).isNull();
         assertThat(saved.getRentalEndAt()).isNull();
         verify(txAppService, never()).findActiveRentalPeriodByChatRoom(anyLong());
+    }
+
+    @Test
+    @DisplayName("createInternalDraft_기존 채팅방을 재오픈하고_대여기간_반영")
+    void createInternalDraft_reopens_chat_room_and_sets_rental_period() {
+        LocalDateTime rentalStart = LocalDateTime.of(2026, 5, 14, 0, 0);
+        LocalDateTime rentalEnd = LocalDateTime.of(2026, 5, 21, 23, 59, 59);
+        when(chatRoomService.reopenForParticipant(33L, 11L))
+                .thenReturn(new com.sseulang.domain.chat.application.ChatRoomApplicationService.ChatRoomMeta(
+                        33L, 48L, com.sseulang.domain.item.domain.TradeType.대여, false, false));
+        when(chatRoomService.findOpponent(33L, 11L)).thenReturn(20L);
+        when(itemAppService.findActiveForTransaction(48L))
+                .thenReturn(new com.sseulang.domain.item.application.dto.ItemForTransactionResult(
+                        48L, 11L,
+                        java.util.EnumSet.of(com.sseulang.domain.item.domain.TradeType.대여),
+                        null, 5_000L,
+                        com.sseulang.domain.item.domain.DepositType.AMOUNT,
+                        30_000L, null,
+                        com.sseulang.domain.item.domain.RentalUnit.일
+                ));
+
+        EscrowApplicationResult result = service.createInternalDraft(
+                new com.sseulang.domain.escrow.application.dto.EscrowApplicationCreateInternalDraftCommand(
+                        11L, 33L, 48L,
+                        TradeMode.INTERNAL, FeePayer.both,
+                        5_000L, "애플워치 시리즈7 대여합니다.",
+                        "픽업주소", new BigDecimal("37.5"), new BigDecimal("127.0"),
+                        rentalStart, rentalEnd,
+                        Weight.LT1, Volume.S, Fragility.F1, "부서지기 쉬워요",
+                        List.of()
+                )
+        );
+
+        EscrowApplication saved = appRepo.findById(result.id()).orElseThrow();
+        assertThat(saved.isRentalMode()).isTrue();
+        assertThat(saved.getRentalStartAt()).isEqualTo(rentalStart);
+        assertThat(saved.getRentalEndAt()).isEqualTo(rentalEnd);
+        verify(chatRoomService).reopenForParticipant(33L, 11L);
     }
 
     // ------------------------------- PR6 auto return -------------------------------

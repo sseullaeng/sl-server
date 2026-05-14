@@ -161,6 +161,19 @@ public class ChatRoomApplicationService {
                 room.iLeft(userId), room.opponentLeft(userId));
     }
 
+    @Transactional
+    public ChatRoomMeta reopenForParticipant(Long chatRoomId, Long userId) {
+        ChatRoom room = chatRoomRepository.findById(chatRoomId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        if (!room.isParticipant(userId)) {
+            throw new BusinessException(ErrorCode.CHAT_FORBIDDEN);
+        }
+        room.reopen();
+        return new ChatRoomMeta(room.getId(), room.getItemId(),
+                room.getTradeMode(),
+                room.iLeft(userId), room.opponentLeft(userId));
+    }
+
     
 
     public record ChatRoomMeta(Long chatRoomId, Long itemId,
