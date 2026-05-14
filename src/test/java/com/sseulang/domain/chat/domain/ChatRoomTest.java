@@ -103,6 +103,22 @@ class ChatRoomTest {
     }
 
     @Test
+    @DisplayName("reopen 나간 상태 복구")
+    void reopen_나간상태_복구() {
+        ChatRoom c = ChatRoom.openFor(10L, 100L, 200L);
+        c.leave(100L, LocalDateTime.of(2026, 5, 8, 12, 0));
+        c.leave(200L, LocalDateTime.of(2026, 5, 8, 13, 0));
+
+        c.reopen();
+
+        assertThat(c.getUser1LeftAt()).isNull();
+        assertThat(c.getUser2LeftAt()).isNull();
+        assertThat(c.iLeft(100L)).isFalse();
+        assertThat(c.opponentLeft(100L)).isFalse();
+        assertThat(c.isActive()).isTrue();
+    }
+
+    @Test
     @DisplayName("leave 비참여자_IllegalStateException")
     void leave_비참여자_거부() {
         ChatRoom c = ChatRoom.openFor(10L, 100L, 200L);

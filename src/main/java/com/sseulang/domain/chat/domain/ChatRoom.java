@@ -137,7 +137,11 @@ public class ChatRoom extends BaseEntity {
         }
     }
 
-    
+    public void reopen() {
+        this.user1LeftAt = null;
+        this.user2LeftAt = null;
+        this.active = true;
+    }
 
     public boolean iLeft(Long userId) {
         if (userId == null) return false;

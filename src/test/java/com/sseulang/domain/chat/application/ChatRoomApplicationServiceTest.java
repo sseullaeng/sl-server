@@ -64,6 +64,43 @@ class ChatRoomApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("openFor 나간 방 재호출_기존 방 재진입")
+    void openFor_나간방_재진입() {
+        Long roomId = service.openFor(BUYER, itemId, null).id();
+        service.leave(roomId, BUYER);
+
+        assertThat(service.listMine(BUYER, PageRequest.of(0, 10)).getContent()).isEmpty();
+
+        ChatRoomResult reopened = service.openFor(BUYER, itemId, null);
+
+        assertThat(reopened.id()).isEqualTo(roomId);
+        assertThat(reopened.iLeft()).isFalse();
+        assertThat(reopened.opponentLeft()).isFalse();
+        assertThat(service.listMine(BUYER, PageRequest.of(0, 10)).getContent())
+                .extracting(ChatRoomResult::id)
+                .containsExactly(roomId);
+    }
+
+    @Test
+    @DisplayName("openFor 동일 item/user라도 tradeMode가 다르면 별도 방")
+    void openFor_동일상대_동일아이템_tradeMode별_분리() {
+        Item dual = itemRepo.save(Item.createMulti(
+                SELLER, null, "판매대여", "설명",
+                java.util.EnumSet.of(TradeType.판매, TradeType.대여),
+                80_000L, 10_000L, 30_000L,
+                com.sseulang.domain.item.domain.RentalUnit.일,
+                null
+        ));
+
+        ChatRoomResult sale = service.openFor(BUYER, dual.getId(), TradeType.판매);
+        ChatRoomResult rental = service.openFor(BUYER, dual.getId(), TradeType.대여);
+
+        assertThat(sale.id()).isNotEqualTo(rental.id());
+        assertThat(service.openFor(BUYER, dual.getId(), TradeType.판매).id()).isEqualTo(sale.id());
+        assertThat(service.openFor(BUYER, dual.getId(), TradeType.대여).id()).isEqualTo(rental.id());
+    }
+
+    @Test
     @DisplayName("openFor 본인 item_CHAT_FORBIDDEN")
     void openFor_self_거부() {
         assertThatThrownBy(() -> service.openFor(SELLER, itemId, null))

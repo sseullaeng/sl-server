@@ -25,7 +25,8 @@ import java.util.Set;
 public class ChatRoomApplicationService {
 
     
-    private static final String UNIQUE_ITEM_USERS = "uk_chat_rooms_item_users";
+    private static final String UNIQUE_ITEM_USERS_MODE = "uk_chat_rooms_item_users_mode";
+    private static final String LEGACY_UNIQUE_ITEM_USERS = "uk_chat_rooms_item_users";
 
     private final ChatRoomRepository chatRoomRepository;
     private final com.sseulang.domain.chat.domain.ChatRoomCardRepository chatRoomCardRepository;
@@ -72,6 +73,7 @@ public class ChatRoomApplicationService {
                 ? tradeMode
                 : pickPrimary(itemApplicationService.findActiveForTransaction(itemId).tradeTypes());
         ChatRoom room = chatRoomRepository.findByItemAndUsers(itemId, requesterId, sellerId, mode)
+                .map(this::reopen)
                 .orElseGet(() -> createWithRaceGuard(itemId, requesterId, sellerId, mode));
         return enrichOne(room, requesterId);
     }
@@ -288,10 +290,16 @@ public class ChatRoomApplicationService {
         } catch (DataIntegrityViolationException violation) {
             if (isUniqueConflict(violation)) {
                 return chatRoomRepository.findByItemAndUsers(itemId, requesterId, sellerId, tradeMode)
+                        .map(this::reopen)
                         .orElseThrow(() -> violation);
             }
             throw violation;
         }
+    }
+
+    private ChatRoom reopen(ChatRoom room) {
+        room.reopen();
+        return room;
     }
 
     
@@ -314,7 +322,7 @@ public class ChatRoomApplicationService {
         Throwable cause = violation;
         while (cause != null) {
             if (cause instanceof ConstraintViolationException cve
-                    && UNIQUE_ITEM_USERS.equalsIgnoreCase(cve.getConstraintName())) {
+                    && isChatRoomUniqueConstraint(cve.getConstraintName())) {
                 return true;
             }
             Throwable next = cause.getCause();
@@ -324,5 +332,10 @@ public class ChatRoomApplicationService {
             cause = next;
         }
         return false;
+    }
+
+    private static boolean isChatRoomUniqueConstraint(String constraintName) {
+        return UNIQUE_ITEM_USERS_MODE.equalsIgnoreCase(constraintName)
+                || LEGACY_UNIQUE_ITEM_USERS.equalsIgnoreCase(constraintName);
     }
 }

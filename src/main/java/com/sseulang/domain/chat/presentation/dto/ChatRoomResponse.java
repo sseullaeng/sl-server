@@ -51,14 +51,19 @@ public record ChatRoomResponse(
             @Schema(description = "활성 거래대행 ID (INTERNAL 거래대행 + 미취소, 없으면 null)") Long escrowApplicationId,
             @Schema(example = "진행중", description = "EscrowApplication 상태 (정보입력대기/결제대기/결제완료/진행중/완료/취소)")
             String escrowStatus,
-            @Schema(description = "거래대행에 매칭된 DeliveryRequest ID (없으면 null)") Long deliveryId
+            @Schema(description = "거래대행에 매칭된 DeliveryRequest ID (없으면 null)") Long deliveryId,
+            @Schema(description = "대여 시작 시각. 대여 거래/거래대행 카드가 아니면 null", nullable = true)
+            LocalDateTime rentalStart,
+            @Schema(description = "대여 종료 시각. 대여 거래/거래대행 카드가 아니면 null", nullable = true)
+            LocalDateTime rentalEnd
     ) {
         public static SystemCard from(ChatRoomResult.SystemCard c) {
             if (c == null) return null;
             return new SystemCard(
                     c.cardKind(), c.tradeMode(), c.itemId(), c.itemTitle(), c.itemThumbnailUrl(), c.price(),
                     c.transactionId(), c.transactionStatus(),
-                    c.escrowApplicationId(), c.escrowStatus(), c.deliveryId()
+                    c.escrowApplicationId(), c.escrowStatus(), c.deliveryId(),
+                    c.rentalStart(), c.rentalEnd()
             );
         }
     }
