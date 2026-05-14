@@ -192,6 +192,8 @@ public class EscrowApplicationService {
         if (itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
             app.markAsRental();
         }
+        // PR4 — paired Tx tradeType/보증금 lookup 위해 itemId 보존.
+        app.linkItem(cmd.itemId());
         EscrowApplication saved = applicationRepository.save(app);
         return EscrowApplicationResult.from(saved, parseImageUrls(saved.getImageUrls()));
     }
@@ -236,6 +238,8 @@ public class EscrowApplicationService {
         if (itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
             app.markAsRental();
         }
+        // PR4 — paired Tx tradeType/보증금 lookup 위해 itemId 보존.
+        app.linkItem(cmd.itemId());
         EscrowApplication saved = applicationRepository.save(app);
 
         // buyer 에게 수령지 입력 요청 알림. linkType=ESCROW + linkId=app.id 로 프론트가
@@ -805,7 +809,7 @@ public class EscrowApplicationService {
         );
     }
 
-    // PR3 stub — PR4 에서 보증금 환불/paired Tx/cascade 추가 예정. 현재는 상태 전이만.
+    // PR4 라운드 14 — seller [회신확인] = 거래완료 + 양쪽 라이더 보상 + paired Tx (대여) + cascade.
     @Transactional
     public void confirmReturn(Long applicationId, Long requesterId) {
         EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
@@ -814,7 +818,57 @@ public class EscrowApplicationService {
             throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
         }
         app.markSettledAfterReturn();
-        // TODO PR4 — 보증금 환불, return 라이더 보상, paired Tx (대여) 생성, cascade.
+
+        // 라이더 보상 — forward + return 양쪽. forward 보상은 confirmReceipt 시점에 settle 안 했으므로 여기서 일괄.
+        long deliveryFee = app.getAppliedDeliveryFee() == null ? 0L : app.getAppliedDeliveryFee();
+        if (deliveryFee > 0) {
+            deliveryRepository.findByEscrowApplicationIdAndDirection(
+                    app.getId(), com.sseulang.domain.delivery.domain.DeliveryDirection.FORWARD
+            ).map(d -> d.getRiderId()).filter(java.util.Objects::nonNull).ifPresent(forwardRiderId ->
+                    pointApplicationService.credit(
+                            forwardRiderId, deliveryFee,
+                            PointHistoryType.배달정산, PointReferenceType.ESCROW, app.getId(),
+                            "거래대행 정산 — 라이더 보상 (forward)"
+                    )
+            );
+            deliveryRepository.findByEscrowApplicationIdAndDirection(
+                    app.getId(), com.sseulang.domain.delivery.domain.DeliveryDirection.RETURN
+            ).map(d -> d.getRiderId()).filter(java.util.Objects::nonNull).ifPresent(returnRiderId ->
+                    pointApplicationService.credit(
+                            returnRiderId, deliveryFee,
+                            PointHistoryType.배달정산, PointReferenceType.ESCROW, app.getId(),
+                            "거래대행 정산 — 라이더 보상 (return)"
+                    )
+            );
+        }
+
+        // paired Tx — 대여 tradeType + 보증금 정보 보존 (Item lookup).
+        com.sseulang.domain.item.domain.TradeType paired = com.sseulang.domain.item.domain.TradeType.대여;
+        Long deposit = null;
+        Integer depositPct = null;
+        if (app.getItemId() != null) {
+            try {
+                var info = itemApplicationService.findActiveForTransaction(app.getItemId());
+                deposit = info.deposit();
+                depositPct = info.depositOriginalPercent();
+            } catch (RuntimeException ignored) {
+                // Item 비활성/삭제 시 보증금 정보 누락 — paired Tx 만 생성.
+            }
+        }
+        transactionApplicationService.createFromEscrow(
+                app.getId(), app.getItemId(),
+                app.getSellerId(), app.getBuyerId(),
+                app.getItemPrice(),
+                app.getChatRoomId(),
+                app.getSettledAt() != null ? app.getSettledAt() : java.time.LocalDateTime.now(),
+                paired, deposit, depositPct, null, null
+        );
+
+        // cascade — 같은 chatRoom 의 활성 직거래 자동 정리. 대여 직거래는 도메인 가드로 자동 스킵 (반납 흐름 보존).
+        if (app.getChatRoomId() != null) {
+            transactionCascadeService.cascadeCompleteByChatRoom(
+                    app.getChatRoomId(), app.getBuyerId(), app.getSellerId());
+        }
     }
 
     @Transactional

@@ -79,6 +79,13 @@ public class DeliveryRepositoryImpl implements DeliveryRepository {
     }
 
     @Override
+    public Optional<DeliveryRequest> findByEscrowApplicationIdAndDirection(
+            Long escrowApplicationId, com.sseulang.domain.delivery.domain.DeliveryDirection direction) {
+        if (escrowApplicationId == null || direction == null) return Optional.empty();
+        return jpa.findByEscrowApplicationIdAndDirection(escrowApplicationId, direction);
+    }
+
+    @Override
     public Page<DeliveryRequest> adminSearch(
             DeliveryStatus status, Long riderId, Long requesterId,
             LocalDateTime createdAfter, LocalDateTime createdBefore,

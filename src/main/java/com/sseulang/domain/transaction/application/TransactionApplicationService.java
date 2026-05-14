@@ -182,10 +182,30 @@ public class TransactionApplicationService {
             Long chatRoomId,
             LocalDateTime settledAt
     ) {
+        return createFromEscrow(escrowApplicationId, itemId, sellerId, buyerId, itemPrice, chatRoomId, settledAt,
+                null, null, null, null, null);
+    }
+
+    // 라운드 14 — 대여 paired Tx (tradeType=대여 + deposit/기간 보존). PR4·5.
+    @Transactional
+    public Long createFromEscrow(
+            Long escrowApplicationId,
+            Long itemId,
+            Long sellerId, Long buyerId,
+            long itemPrice,
+            Long chatRoomId,
+            LocalDateTime settledAt,
+            com.sseulang.domain.item.domain.TradeType explicitTradeType,
+            Long deposit,
+            Integer depositOriginalPercent,
+            LocalDateTime rentalStart,
+            LocalDateTime rentalEnd
+    ) {
         return transactionRepository.findByEscrowApplicationId(escrowApplicationId)
                 .map(Transaction::getId)
                 .orElseGet(() -> transactionRepository.save(Transaction.createFromEscrow(
-                        escrowApplicationId, itemId, sellerId, buyerId, itemPrice, chatRoomId, settledAt
+                        escrowApplicationId, itemId, sellerId, buyerId, itemPrice, chatRoomId, settledAt,
+                        explicitTradeType, deposit, depositOriginalPercent, rentalStart, rentalEnd
                 )).getId());
     }
 

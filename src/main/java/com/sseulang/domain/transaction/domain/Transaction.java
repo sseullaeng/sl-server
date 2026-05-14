@@ -295,7 +295,8 @@ public class Transaction extends BaseEntity {
     }
 
     // 라운드 12 — 거래대행 정산 시점에 paired Transaction 자동 생성.
-    // tradeType 매핑: itemPrice==0(나눔) → 나눔, 그 외 → 판매. (대여는 거래대행 흐름에 안 들어옴)
+    // 라운드 14 — explicitTradeType 전달 시 그 값 사용. null 이면 기존 (itemPrice==0 ? 나눔 : 판매).
+    // 대여 거래대행 (라운드 14) 은 explicitTradeType=대여 + deposit/depositPct 보존.
     // Item 은 INTERNAL escrow 면 linkedItem, EXTERNAL 이면 null.
     public static Transaction createFromEscrow(
             Long escrowApplicationId,
@@ -304,6 +305,23 @@ public class Transaction extends BaseEntity {
             long itemPrice,
             Long chatRoomId,
             LocalDateTime settledAt
+    ) {
+        return createFromEscrow(escrowApplicationId, itemId, sellerId, buyerId, itemPrice, chatRoomId, settledAt,
+                null, null, null, null, null);
+    }
+
+    public static Transaction createFromEscrow(
+            Long escrowApplicationId,
+            Long itemId,
+            Long sellerId, Long buyerId,
+            long itemPrice,
+            Long chatRoomId,
+            LocalDateTime settledAt,
+            TradeType explicitTradeType,
+            Long deposit,
+            Integer depositOriginalPercent,
+            LocalDateTime rentalStart,
+            LocalDateTime rentalEnd
     ) {
         if (escrowApplicationId == null || escrowApplicationId <= 0) {
             throw new IllegalArgumentException("escrowApplicationId 는 양수여야 합니다");
@@ -320,16 +338,20 @@ public class Transaction extends BaseEntity {
         if (settledAt == null) {
             throw new IllegalArgumentException("settledAt 필수");
         }
+        TradeType resolvedType = explicitTradeType != null
+                ? explicitTradeType
+                : (itemPrice == 0 ? TradeType.나눔 : TradeType.판매);
         Transaction t = new Transaction();
         t.escrowApplicationId = escrowApplicationId;
         t.itemId = itemId;   // nullable
         t.sellerId = sellerId;
         t.buyerId = buyerId;
-        t.tradeType = itemPrice == 0 ? TradeType.나눔 : TradeType.판매;
+        t.tradeType = resolvedType;
         t.price = itemPrice;
-        t.deposit = null;
-        t.rentalStart = null;
-        t.rentalEnd = null;
+        t.deposit = resolvedType == TradeType.대여 ? deposit : null;
+        t.depositOriginalPercent = resolvedType == TradeType.대여 ? depositOriginalPercent : null;
+        t.rentalStart = resolvedType == TradeType.대여 ? rentalStart : null;
+        t.rentalEnd = resolvedType == TradeType.대여 ? rentalEnd : null;
         t.chatRoomId = chatRoomId;
         t.status = TransactionStatus.거래완료;
         t.reservedAt = settledAt;

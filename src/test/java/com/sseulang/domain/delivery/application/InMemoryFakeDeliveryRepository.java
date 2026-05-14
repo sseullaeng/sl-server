@@ -140,4 +140,14 @@ public class InMemoryFakeDeliveryRepository implements DeliveryRepository {
     public long countCreatedSince(LocalDateTime since) {
         return store.values().stream().filter(d -> !d.getRequestedAt().isBefore(since)).count();
     }
+
+    @Override
+    public java.util.Optional<DeliveryRequest> findByEscrowApplicationIdAndDirection(
+            Long escrowApplicationId, com.sseulang.domain.delivery.domain.DeliveryDirection direction) {
+        if (escrowApplicationId == null || direction == null) return java.util.Optional.empty();
+        return store.values().stream()
+                .filter(d -> escrowApplicationId.equals(d.getEscrowApplicationId()))
+                .filter(d -> direction.equals(d.getDirection()))
+                .findFirst();
+    }
 }

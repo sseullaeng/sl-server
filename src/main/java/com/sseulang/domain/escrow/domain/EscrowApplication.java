@@ -188,6 +188,18 @@ public class EscrowApplication extends BaseEntity {
     @Column(name = "return_requested_at")
     private LocalDateTime returnRequestedAt;
 
+    // 라운드 14 — INTERNAL escrow 의 source Item id. paired Tx tradeType/보증금 lookup. EXTERNAL 은 NULL.
+    @Column(name = "item_id")
+    private Long itemId;
+
+    // INTERNAL escrow 생성 시 호출. EXTERNAL 은 호출 안 함.
+    public void linkItem(Long itemId) {
+        if (itemId == null || itemId <= 0) {
+            throw new IllegalArgumentException("itemId 는 양수여야 합니다");
+        }
+        this.itemId = itemId;
+    }
+
     
 
     public static EscrowApplication create(

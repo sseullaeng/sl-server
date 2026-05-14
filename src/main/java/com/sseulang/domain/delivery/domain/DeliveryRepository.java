@@ -42,6 +42,10 @@ public interface DeliveryRepository {
 
     java.util.List<DeliveryRequest> findByEscrowApplicationIdIn(java.util.Collection<Long> escrowApplicationIds);
 
+    // 라운드 14 — 대여 거래대행 forward/return 구분 조회.
+    Optional<DeliveryRequest> findByEscrowApplicationIdAndDirection(
+            Long escrowApplicationId, com.sseulang.domain.delivery.domain.DeliveryDirection direction);
+
     // 라운드 12 — admin delivery 검색.
     Page<DeliveryRequest> adminSearch(
             DeliveryStatus status, Long riderId, Long requesterId,

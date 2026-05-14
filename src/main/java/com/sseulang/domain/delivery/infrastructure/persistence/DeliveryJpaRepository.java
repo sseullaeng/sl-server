@@ -87,6 +87,9 @@ interface DeliveryJpaRepository extends JpaRepository<DeliveryRequest, Long> {
 
     java.util.List<DeliveryRequest> findByEscrowApplicationIdIn(java.util.Collection<Long> escrowApplicationIds);
 
+    java.util.Optional<DeliveryRequest> findByEscrowApplicationIdAndDirection(
+            Long escrowApplicationId, com.sseulang.domain.delivery.domain.DeliveryDirection direction);
+
     @Query("""
             SELECT d FROM DeliveryRequest d
              WHERE (:status IS NULL OR d.status = :status)
