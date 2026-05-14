@@ -176,6 +176,18 @@ public class EscrowApplication extends BaseEntity {
     @Column(name = "handover_confirmed_by_seller_at")
     private LocalDateTime handoverConfirmedBySellerAt;
 
+    // 라운드 14 — 대여 거래대행 여부. confirmReceipt 후 사용중/반납중 lifecycle 진입.
+    @Column(name = "rental_mode", nullable = false)
+    private boolean rentalMode = false;
+
+    // 라운드 14 — 대여 한정. confirmReceipt 시점 (사용중 진입). buyer 가 받은 순간.
+    @Column(name = "using_started_at")
+    private LocalDateTime usingStartedAt;
+
+    // 라운드 14 — 대여 한정. buyer [반납요청] 시점. return delivery 모집 시작.
+    @Column(name = "return_requested_at")
+    private LocalDateTime returnRequestedAt;
+
     
 
     public static EscrowApplication create(
@@ -484,7 +496,61 @@ public class EscrowApplication extends BaseEntity {
 
     
     public void markSettled() {
+        // 일반(판매/나눔) 거래대행 — 진행중 → 완료. 대여는 markSettledAfterReturn 사용.
         if (this.status != EscrowApplicationStatus.진행중) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        this.status = EscrowApplicationStatus.완료;
+        this.settledAt = LocalDateTime.now();
+    }
+
+    // 라운드 14 — createInternal 시 item.tradeType=대여 면 호출. forward 결제 정상 처리 후 confirmReceipt 가 settle 대신 enterUsing 호출.
+    public void markAsRental() {
+        if (this.rentalMode) {
+            return;  // 멱등
+        }
+        if (this.tradeMode != TradeMode.INTERNAL) {
+            throw new IllegalStateException("rental mode 는 INTERNAL escrow 만 지원");
+        }
+        if (this.status.isAfterMatching()) {
+            throw new IllegalStateException("결제 진행 후엔 rental mode 변경 불가");
+        }
+        this.rentalMode = true;
+    }
+
+    // 라운드 14 — 대여 한정. confirmReceipt 후 enterUsing 으로 분기 (settle X).
+    public void enterUsing() {
+        if (!this.rentalMode) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);  // 일반 거래는 settle 사용
+        }
+        if (!this.status.canEnterUsing()) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        this.status = EscrowApplicationStatus.사용중;
+        this.usingStartedAt = LocalDateTime.now();
+    }
+
+    // 라운드 14 — 대여 한정. buyer 가 [반납요청] 누른 시점. 사용중 → 반납중. return delivery 모집 시작 트리거 (service).
+    public void requestReturnByBuyer(Long requesterId) {
+        if (!this.rentalMode) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (!this.buyerId.equals(requesterId)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
+        }
+        if (!this.status.canRequestReturn()) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        this.status = EscrowApplicationStatus.반납중;
+        this.returnRequestedAt = LocalDateTime.now();
+    }
+
+    // 라운드 14 — 대여 한정. seller [회신확인] = 거래완료. return delivery 완료 + seller 도착 후 호출.
+    public void markSettledAfterReturn() {
+        if (!this.rentalMode) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (!this.status.canConfirmReturn()) {
             throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
         }
         this.status = EscrowApplicationStatus.완료;

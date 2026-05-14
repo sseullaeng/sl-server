@@ -141,6 +141,91 @@ class EscrowApplicationTest {
         assertThat(a.isParticipant(99L)).isFalse();
     }
 
+    // ───── 라운드 14 — 대여 거래대행 lifecycle ─────
+
+    private static EscrowApplication readyForUsing() {
+        EscrowApplication a = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, 1_062_000L, 0L);
+        a.markAsRental();
+        a.markInitiatorPaid();
+        a.markInProgress();
+        return a;
+    }
+
+    @Test
+    @DisplayName("markAsRental EXTERNAL escrow_거부")
+    void markAsRental_external_거부() {
+        EscrowApplication a = build(InitiatorRole.buyer, TradeMode.EXTERNAL, FeePayer.buyer,
+                0L, 12_000L, 0L);
+        assertThatThrownBy(a::markAsRental)
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("enterUsing 정상 — 진행중 + rentalMode → 사용중 + usingStartedAt")
+    void enterUsing_정상() {
+        EscrowApplication a = readyForUsing();
+        a.enterUsing();
+        assertThat(a.getStatus()).isEqualTo(EscrowApplicationStatus.사용중);
+        assertThat(a.getUsingStartedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("enterUsing rentalMode 아님_거부")
+    void enterUsing_일반거래_거부() {
+        EscrowApplication a = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, 1_062_000L, 0L);
+        a.markInitiatorPaid();
+        a.markInProgress();
+        assertThatThrownBy(a::enterUsing)
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("requestReturnByBuyer 정상 — 사용중 → 반납중 + returnRequestedAt")
+    void requestReturnByBuyer_정상() {
+        EscrowApplication a = readyForUsing();
+        a.enterUsing();
+        a.requestReturnByBuyer(11L);  // initiator buyer
+        assertThat(a.getStatus()).isEqualTo(EscrowApplicationStatus.반납중);
+        assertThat(a.getReturnRequestedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("requestReturnByBuyer seller 호출_FORBIDDEN")
+    void requestReturnByBuyer_seller_거부() {
+        EscrowApplication a = readyForUsing();
+        a.enterUsing();
+        assertThatThrownBy(() -> a.requestReturnByBuyer(20L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("markSettledAfterReturn 정상 — 반납중 → 완료 + settledAt")
+    void markSettledAfterReturn_정상() {
+        EscrowApplication a = readyForUsing();
+        a.enterUsing();
+        a.requestReturnByBuyer(11L);
+        a.markSettledAfterReturn();
+        assertThat(a.getStatus()).isEqualTo(EscrowApplicationStatus.완료);
+        assertThat(a.getSettledAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("markSettled 대여 status 진행중 아님_거부 (대여는 markSettledAfterReturn 사용)")
+    void markSettled_사용중_거부() {
+        EscrowApplication a = readyForUsing();
+        a.enterUsing();  // 사용중 진입
+        assertThatThrownBy(a::markSettled)
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_INVALID_STATE);
+    }
+
     @Test
     @DisplayName("create_buyer_seller_같음_SELF_NOT_ALLOWED")
     void create_self_rejected() {
