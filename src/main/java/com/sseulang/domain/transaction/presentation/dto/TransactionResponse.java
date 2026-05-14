@@ -13,6 +13,11 @@ public record TransactionResponse(
         @Schema(example = "42") Long itemId,
         @Schema(example = "100") Long sellerId,
         @Schema(example = "200") Long buyerId,
+        @Schema(example = "45",
+                description = "페어 EscrowApplication id (escrow 자동 생성 paired Tx 만 not-null). "
+                        + "프론트가 일반 거래 액션 버튼 숨김 분기에 사용 — null 이면 직거래, not-null 이면 거래대행 페어.",
+                nullable = true)
+        Long escrowApplicationId,
         TradeType tradeType,
         @Schema(example = "1200000") long price,
         @Schema(example = "100000", description = "대여 보증금 (판매/나눔은 null)") Long deposit,
@@ -36,6 +41,7 @@ public record TransactionResponse(
     public static TransactionResponse from(TransactionResult r) {
         return new TransactionResponse(
                 r.id(), r.itemId(), r.sellerId(), r.buyerId(),
+                r.escrowApplicationId(),
                 r.tradeType(), r.price(), r.deposit(),
                 r.rentalStart(), r.rentalEnd(),
                 r.status(),

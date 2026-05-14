@@ -11,6 +11,7 @@ public record TransactionResult(
         Long itemId,
         Long sellerId,
         Long buyerId,
+        Long escrowApplicationId,
         TradeType tradeType,
         long price,
         Long deposit,
@@ -31,6 +32,7 @@ public record TransactionResult(
     public static TransactionResult from(Transaction t) {
         return new TransactionResult(
                 t.getId(), t.getItemId(), t.getSellerId(), t.getBuyerId(),
+                t.getEscrowApplicationId(),
                 t.getTradeType(), t.getPrice(), t.getDeposit(),
                 t.getRentalStart(), t.getRentalEnd(),
                 t.getStatus(),
