@@ -39,8 +39,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
@@ -62,6 +67,8 @@ public class EscrowApplicationService {
     private final com.sseulang.domain.transaction.application.TransactionApplicationService transactionApplicationService;
     private final com.sseulang.domain.transaction.application.TransactionCascadeService transactionCascadeService;
     private final com.sseulang.domain.notification.application.NotificationApplicationService notificationApplicationService;
+    private final Clock clock;
+    private final TransactionTemplate newTxTemplate;
     private final int linkExpiryHours;
 
     public EscrowApplicationService(
@@ -77,6 +84,8 @@ public class EscrowApplicationService {
             com.sseulang.domain.transaction.application.TransactionApplicationService transactionApplicationService,
             com.sseulang.domain.transaction.application.TransactionCascadeService transactionCascadeService,
             com.sseulang.domain.notification.application.NotificationApplicationService notificationApplicationService,
+            PlatformTransactionManager transactionManager,
+            Clock clock,
             @Value("${app.escrow.link.expiry-hours:24}") int linkExpiryHours
     ) {
         this.linkRepository = linkRepository;
@@ -91,6 +100,9 @@ public class EscrowApplicationService {
         this.transactionApplicationService = transactionApplicationService;
         this.transactionCascadeService = transactionCascadeService;
         this.notificationApplicationService = notificationApplicationService;
+        this.clock = clock;
+        this.newTxTemplate = new TransactionTemplate(transactionManager);
+        this.newTxTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.linkExpiryHours = linkExpiryHours;
     }
 
@@ -191,6 +203,7 @@ public class EscrowApplicationService {
         // PR2 — item.tradeType=대여 면 escrow 도 대여 lifecycle (사용중/반납중) 진입.
         if (itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
             app.markAsRental();
+            app.markRentalEnd(cmd.rentalEndAt());
         }
         // PR4 — paired Tx tradeType/보증금 lookup 위해 itemId 보존.
         app.linkItem(cmd.itemId());
@@ -237,6 +250,7 @@ public class EscrowApplicationService {
         // PR2 — item.tradeType=대여 면 escrow 도 대여 lifecycle (사용중/반납중) 진입.
         if (itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
             app.markAsRental();
+            app.markRentalEnd(cmd.rentalEndAt());
         }
         // PR4 — paired Tx tradeType/보증금 lookup 위해 itemId 보존.
         app.linkItem(cmd.itemId());
@@ -785,26 +799,92 @@ public class EscrowApplicationService {
         EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
         app.requestReturnByBuyer(requesterId);
-        // return delivery 자동 생성 — pickup/dropoff 반대. fee = forward fee 와 동일 (대칭, PR4 에서 결제).
-        com.sseulang.domain.delivery.domain.DeliveryRequest returnDelivery =
-                com.sseulang.domain.delivery.domain.DeliveryRequest.createFromEscrow(
-                        app.getBuyerId(),                       // buyer 가 반환 발신자
-                        app.getId(),
-                        app.getDeliveryAddress(),               // pickup = forward 의 도착지 (buyer 위치)
-                        app.getPickupAddress(),                 // dropoff = forward 의 출발지 (seller 위치)
-                        "반납: " + app.getItemDescription(),
-                        app.getAppliedDeliveryFee() == null ? 0L : app.getAppliedDeliveryFee(),
-                        com.sseulang.domain.delivery.domain.DeliveryDirection.RETURN,
-                        java.time.LocalDateTime.now()
-                );
-        deliveryRepository.save(returnDelivery);
-
-        // seller 알림 — 반환 픽업 도착 안내.
-        notificationApplicationService.notify(
-                app.getSellerId(),
-                com.sseulang.domain.notification.domain.NotificationType.거래,
+        createReturnDelivery(app, LocalDateTime.now(clock));
+        notifyReturnRequested(app,
                 "반납 요청이 도착했어요",
-                "거래대행 #" + app.getId() + " — 라이더가 곧 반환 픽업하러 갑니다.",
+                "거래대행 #" + app.getId() + " — 라이더가 곧 반환 픽업하러 갑니다.");
+    }
+
+    // PR6 — 스케줄러 진입점. self-invocation 없이 명시적 REQUIRES_NEW template 사용.
+    public List<Long> findOverdueRentalEndIds() {
+        LocalDateTime threshold = LocalDateTime.now(clock);
+        return applicationRepository.findOverdueRentalEndApplications(threshold).stream()
+                .map(EscrowApplication::getId)
+                .toList();
+    }
+
+    // PR6 — 단일 row 자동 반납요청. 새 트랜잭션으로 격리.
+    public void autoTriggerReturn(Long applicationId) {
+        newTxTemplate.executeWithoutResult(status -> {
+            EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+            LocalDateTime now = LocalDateTime.now(clock);
+            app.autoRequestReturn(now);
+            createReturnDelivery(app, now);
+            notifyReturnRequested(app,
+                    "반납 자동 요청됨",
+                    "거래대행 #" + app.getId() + " — 라이더가 곧 반환 픽업하러 갑니다.");
+        });
+    }
+
+    // PR7 라운드 14 — 사용중 단계 한쪽이 [취소 요청]. 다른쪽 동의 필요 (즉시 취소 X).
+    @Transactional
+    public void requestCancelDuringUsing(Long applicationId, Long requesterId, String reason) {
+        EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        app.requestCancelDuringUsing(requesterId, reason);
+
+        // 다른 참여자에게 알림 — 취소 동의/거절 유도.
+        Long counterpartId = requesterId.equals(app.getBuyerId()) ? app.getSellerId() : app.getBuyerId();
+        notificationApplicationService.notify(
+                counterpartId,
+                com.sseulang.domain.notification.domain.NotificationType.거래,
+                "거래대행 취소 요청이 도착했어요",
+                "사용 중인 거래대행 #" + app.getId() + " 취소를 요청했어요. 동의 또는 철회 응답이 필요해요.",
+                "ESCROW", app.getId()
+        );
+    }
+
+    // PR7 — 다른 참여자가 [취소 동의] → 취소 확정.
+    @Transactional
+    public void confirmCancelDuringUsing(Long applicationId, Long requesterId) {
+        EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        app.confirmCancelDuringUsing(requesterId);
+
+        // 양쪽 알림 — 취소 확정.
+        notificationApplicationService.notify(
+                app.getBuyerId(),
+                com.sseulang.domain.notification.domain.NotificationType.거래,
+                "거래대행이 취소되었어요",
+                "거래대행 #" + app.getId() + " 가 양쪽 합의로 취소 처리됐어요.",
+                "ESCROW", app.getId()
+        );
+        if (!app.getBuyerId().equals(app.getSellerId())) {
+            notificationApplicationService.notify(
+                    app.getSellerId(),
+                    com.sseulang.domain.notification.domain.NotificationType.거래,
+                    "거래대행이 취소되었어요",
+                    "거래대행 #" + app.getId() + " 가 양쪽 합의로 취소 처리됐어요.",
+                    "ESCROW", app.getId()
+            );
+        }
+    }
+
+    // PR7 — 요청자가 본인 요청 [철회].
+    @Transactional
+    public void withdrawCancelRequest(Long applicationId, Long requesterId) {
+        EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        app.withdrawCancelRequest(requesterId);
+
+        // 다른 참여자에게 알림 — 철회 안내.
+        Long counterpartId = requesterId.equals(app.getBuyerId()) ? app.getSellerId() : app.getBuyerId();
+        notificationApplicationService.notify(
+                counterpartId,
+                com.sseulang.domain.notification.domain.NotificationType.거래,
+                "취소 요청이 철회됐어요",
+                "거래대행 #" + app.getId() + " 의 취소 요청을 철회했어요.",
                 "ESCROW", app.getId()
         );
     }
@@ -947,6 +1027,31 @@ public class EscrowApplicationService {
             transactionCascadeService.cascadeCompleteByChatRoom(
                     app.getChatRoomId(), app.getBuyerId(), app.getSellerId());
         }
+    }
+
+    private void createReturnDelivery(EscrowApplication app, LocalDateTime now) {
+        com.sseulang.domain.delivery.domain.DeliveryRequest returnDelivery =
+                com.sseulang.domain.delivery.domain.DeliveryRequest.createFromEscrow(
+                        app.getBuyerId(),
+                        app.getId(),
+                        app.getDeliveryAddress(),
+                        app.getPickupAddress(),
+                        "반납: " + app.getItemDescription(),
+                        app.getAppliedDeliveryFee() == null ? 0L : app.getAppliedDeliveryFee(),
+                        com.sseulang.domain.delivery.domain.DeliveryDirection.RETURN,
+                        now
+                );
+        deliveryRepository.save(returnDelivery);
+    }
+
+    private void notifyReturnRequested(EscrowApplication app, String title, String body) {
+        notificationApplicationService.notify(
+                app.getSellerId(),
+                com.sseulang.domain.notification.domain.NotificationType.거래,
+                title,
+                body,
+                "ESCROW", app.getId()
+        );
     }
 
     

@@ -7,6 +7,7 @@ import com.sseulang.domain.escrow.domain.Volume;
 import com.sseulang.domain.escrow.domain.Weight;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public record EscrowApplicationCreateInternalCommand(
@@ -23,6 +24,7 @@ public record EscrowApplicationCreateInternalCommand(
         String deliveryAddress,
         BigDecimal deliveryLat,
         BigDecimal deliveryLng,
+        LocalDateTime rentalEndAt,
         Weight weight,
         Volume volume,
         Fragility fragility,

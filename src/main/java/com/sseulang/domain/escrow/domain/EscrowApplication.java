@@ -163,6 +163,13 @@ public class EscrowApplication extends BaseEntity {
     @Column(name = "cancelled_by")
     private Long cancelledBy;
 
+    // 라운드 14 PR7 — 사용중 단계 양 당사자 합의 취소. 한쪽이 요청하면 채워지고, 다른쪽 confirm 시 취소 확정.
+    @Column(name = "cancel_requested_by")
+    private Long cancelRequestedBy;
+
+    @Column(name = "cancel_requested_at")
+    private LocalDateTime cancelRequestedAt;
+
     @Column(name = "receipt_confirmed_at")
     private LocalDateTime receiptConfirmedAt;
 
@@ -187,6 +194,10 @@ public class EscrowApplication extends BaseEntity {
     // 라운드 14 — 대여 한정. buyer [반납요청] 시점. return delivery 모집 시작.
     @Column(name = "return_requested_at")
     private LocalDateTime returnRequestedAt;
+
+    // PR6 — 대여 한정. 자동 [반납요청] 스케줄러 기준 종료 예정 시각.
+    @Column(name = "rental_end_at")
+    private LocalDateTime rentalEndAt;
 
     // 라운드 14 — INTERNAL escrow 의 source Item id. paired Tx tradeType/보증금 lookup. EXTERNAL 은 NULL.
     @Column(name = "item_id")
@@ -530,6 +541,20 @@ public class EscrowApplication extends BaseEntity {
         this.rentalMode = true;
     }
 
+    // PR6 — 대여 한정. 결제/진행 전 only. rentalMode=true 일 때 종료 예정 시각을 기록.
+    public void markRentalEnd(LocalDateTime endAt) {
+        if (!this.rentalMode) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (endAt == null) {
+            throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+        }
+        if (this.status.isAfterMatching()) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        this.rentalEndAt = endAt;
+    }
+
     // 라운드 14 — 대여 한정. confirmReceipt 후 enterUsing 으로 분기 (settle X).
     public void enterUsing() {
         if (!this.rentalMode) {
@@ -557,6 +582,21 @@ public class EscrowApplication extends BaseEntity {
         this.returnRequestedAt = LocalDateTime.now();
     }
 
+    // PR6 — 시스템 자동 호출. 권한 가드 없음. 사용중 상태만 반납중으로 전이.
+    public void autoRequestReturn(LocalDateTime now) {
+        if (!this.rentalMode) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (now == null) {
+            throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+        }
+        if (!this.status.canRequestReturn()) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        this.status = EscrowApplicationStatus.반납중;
+        this.returnRequestedAt = now;
+    }
+
     // 라운드 14 — 대여 한정. seller [회신확인] = 거래완료. return delivery 완료 + seller 도착 후 호출.
     public void markSettledAfterReturn() {
         if (!this.rentalMode) {
@@ -567,6 +607,65 @@ public class EscrowApplication extends BaseEntity {
         }
         this.status = EscrowApplicationStatus.완료;
         this.settledAt = LocalDateTime.now();
+    }
+
+    // PR7 라운드 14 — 사용중 단계 한쪽이 [취소 요청]. 참여자만, 사용중 + 기존 요청 없을 때.
+    public void requestCancelDuringUsing(Long requesterId, String reason) {
+        if (!this.rentalMode) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (this.status != EscrowApplicationStatus.사용중) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (!isParticipant(requesterId)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
+        }
+        if (this.cancelRequestedBy != null) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);  // 이미 요청 중
+        }
+        if (reason != null && reason.length() > 500) {
+            throw new IllegalArgumentException("cancelReason 은 500자 이하여야 합니다");
+        }
+        this.cancelRequestedBy = requesterId;
+        this.cancelRequestedAt = LocalDateTime.now();
+        this.cancelReason = reason;
+    }
+
+    // PR7 — 다른 참여자가 [취소 동의]. 사용중 + 요청자 != 호출자. 취소 status 전이.
+    public void confirmCancelDuringUsing(Long requesterId) {
+        if (!this.rentalMode) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (this.status != EscrowApplicationStatus.사용중) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (this.cancelRequestedBy == null) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);  // 요청 없음
+        }
+        if (!isParticipant(requesterId)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
+        }
+        if (this.cancelRequestedBy.equals(requesterId)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);  // 요청자가 본인 confirm 불가
+        }
+        this.status = EscrowApplicationStatus.취소;
+        this.cancelledBy = requesterId;  // confirm 한 쪽으로 기록 — 합의 완성한 사람
+    }
+
+    // PR7 — 요청자가 본인 요청 [철회]. 사용중 + 본인이 요청자.
+    public void withdrawCancelRequest(Long requesterId) {
+        if (!this.rentalMode) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (this.status != EscrowApplicationStatus.사용중) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (this.cancelRequestedBy == null || !this.cancelRequestedBy.equals(requesterId)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
+        }
+        this.cancelRequestedBy = null;
+        this.cancelRequestedAt = null;
+        this.cancelReason = null;
     }
 
     

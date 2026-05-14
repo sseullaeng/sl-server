@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -152,6 +153,36 @@ class EscrowApplicationTest {
         return a;
     }
 
+    private static EscrowApplication readyForRentalDraft() {
+        EscrowApplication a = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, 1_062_000L, 0L);
+        a.markAsRental();
+        return a;
+    }
+
+    @Test
+    @DisplayName("markRentalEnd 정상 — rentalMode=true + 결제 전 시각 기록")
+    void markRentalEnd_정상() {
+        EscrowApplication a = readyForRentalDraft();
+        LocalDateTime endAt = LocalDateTime.now().plusDays(3);
+
+        a.markRentalEnd(endAt);
+
+        assertThat(a.getRentalEndAt()).isEqualTo(endAt);
+    }
+
+    @Test
+    @DisplayName("markRentalEnd rentalMode 아님_거부")
+    void markRentalEnd_일반거래_거부() {
+        EscrowApplication a = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, 1_062_000L, 0L);
+
+        assertThatThrownBy(() -> a.markRentalEnd(LocalDateTime.now().plusDays(3)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_INVALID_STATE);
+    }
+
     @Test
     @DisplayName("markAsRental EXTERNAL escrow_거부")
     void markAsRental_external_거부() {
@@ -205,6 +236,34 @@ class EscrowApplicationTest {
     }
 
     @Test
+    @DisplayName("autoRequestReturn 정상 — 사용중 → 반납중 + returnRequestedAt")
+    void autoRequestReturn_정상() {
+        EscrowApplication a = readyForRentalDraft();
+        a.markRentalEnd(LocalDateTime.now().plusDays(1));
+        a.markInitiatorPaid();
+        a.markInProgress();
+        a.enterUsing();
+
+        LocalDateTime now = LocalDateTime.now();
+        a.autoRequestReturn(now);
+
+        assertThat(a.getStatus()).isEqualTo(EscrowApplicationStatus.반납중);
+        assertThat(a.getReturnRequestedAt()).isEqualTo(now);
+    }
+
+    @Test
+    @DisplayName("autoRequestReturn 사용중 아님_거부")
+    void autoRequestReturn_상태거부() {
+        EscrowApplication a = readyForRentalDraft();
+        a.markRentalEnd(LocalDateTime.now().plusDays(1));
+
+        assertThatThrownBy(() -> a.autoRequestReturn(LocalDateTime.now()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_INVALID_STATE);
+    }
+
+    @Test
     @DisplayName("markSettledAfterReturn 정상 — 반납중 → 완료 + settledAt")
     void markSettledAfterReturn_정상() {
         EscrowApplication a = readyForUsing();
@@ -224,6 +283,110 @@ class EscrowApplicationTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ESCROW_INVALID_STATE);
+    }
+
+    // ───── 라운드 14 PR7 — 사용중 단계 양 당사자 합의 취소 ─────
+
+    private static EscrowApplication readyForCancelDuringUsing() {
+        EscrowApplication a = readyForUsing();
+        a.enterUsing();
+        return a;
+    }
+
+    @Test
+    @DisplayName("requestCancelDuringUsing 정상 — 사용중 + 참여자 + 첫 요청")
+    void cancelRequest_정상() {
+        EscrowApplication a = readyForCancelDuringUsing();
+        a.requestCancelDuringUsing(11L, "사정이 생김");
+        assertThat(a.getCancelRequestedBy()).isEqualTo(11L);
+        assertThat(a.getCancelRequestedAt()).isNotNull();
+        assertThat(a.getCancelReason()).isEqualTo("사정이 생김");
+        assertThat(a.getStatus()).isEqualTo(EscrowApplicationStatus.사용중);
+    }
+
+    @Test
+    @DisplayName("requestCancelDuringUsing 비참여자_FORBIDDEN")
+    void cancelRequest_비참여자_거부() {
+        EscrowApplication a = readyForCancelDuringUsing();
+        assertThatThrownBy(() -> a.requestCancelDuringUsing(99L, "외부인"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("requestCancelDuringUsing 이미 요청 중_INVALID_STATE")
+    void cancelRequest_중복_거부() {
+        EscrowApplication a = readyForCancelDuringUsing();
+        a.requestCancelDuringUsing(11L, "1차");
+        assertThatThrownBy(() -> a.requestCancelDuringUsing(20L, "2차"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("requestCancelDuringUsing 사용중 아님_INVALID_STATE")
+    void cancelRequest_status_거부() {
+        EscrowApplication a = readyForUsing();  // 진행중 (사용중 아직 X)
+        assertThatThrownBy(() -> a.requestCancelDuringUsing(11L, "x"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("confirmCancelDuringUsing 정상 — 다른 참여자 동의 → 취소")
+    void cancelConfirm_정상() {
+        EscrowApplication a = readyForCancelDuringUsing();
+        a.requestCancelDuringUsing(11L, "사정");
+        a.confirmCancelDuringUsing(20L);
+        assertThat(a.getStatus()).isEqualTo(EscrowApplicationStatus.취소);
+        assertThat(a.getCancelledBy()).isEqualTo(20L);
+    }
+
+    @Test
+    @DisplayName("confirmCancelDuringUsing 요청자 본인_FORBIDDEN")
+    void cancelConfirm_본인_거부() {
+        EscrowApplication a = readyForCancelDuringUsing();
+        a.requestCancelDuringUsing(11L, "사정");
+        assertThatThrownBy(() -> a.confirmCancelDuringUsing(11L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("confirmCancelDuringUsing 요청 없음_INVALID_STATE")
+    void cancelConfirm_요청없음_거부() {
+        EscrowApplication a = readyForCancelDuringUsing();
+        assertThatThrownBy(() -> a.confirmCancelDuringUsing(20L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("withdrawCancelRequest 요청자 본인_정상 클리어")
+    void cancelWithdraw_정상() {
+        EscrowApplication a = readyForCancelDuringUsing();
+        a.requestCancelDuringUsing(11L, "사정");
+        a.withdrawCancelRequest(11L);
+        assertThat(a.getCancelRequestedBy()).isNull();
+        assertThat(a.getCancelRequestedAt()).isNull();
+        assertThat(a.getCancelReason()).isNull();
+        assertThat(a.getStatus()).isEqualTo(EscrowApplicationStatus.사용중);
+    }
+
+    @Test
+    @DisplayName("withdrawCancelRequest 요청자 아님_FORBIDDEN")
+    void cancelWithdraw_타인_거부() {
+        EscrowApplication a = readyForCancelDuringUsing();
+        a.requestCancelDuringUsing(11L, "사정");
+        assertThatThrownBy(() -> a.withdrawCancelRequest(20L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_FORBIDDEN);
     }
 
     @Test

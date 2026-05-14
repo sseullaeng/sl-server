@@ -39,6 +39,15 @@ public interface EscrowApplicationJpaRepository extends JpaRepository<EscrowAppl
     List<EscrowApplication> findPaymentTimedOut(@Param("now") LocalDateTime now);
 
     @Query("""
+            SELECT a FROM EscrowApplication a
+            WHERE a.status = com.sseulang.domain.escrow.domain.EscrowApplicationStatus.사용중
+              AND a.rentalMode = true
+              AND a.rentalEndAt < :threshold
+            ORDER BY a.rentalEndAt ASC
+            """)
+    List<EscrowApplication> findOverdueRentalEndApplications(@Param("threshold") LocalDateTime threshold);
+
+    @Query("""
             SELECT COUNT(a) FROM EscrowApplication a
             WHERE a.status IN (
                 com.sseulang.domain.escrow.domain.EscrowApplicationStatus.결제대기,

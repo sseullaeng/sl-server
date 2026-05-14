@@ -247,4 +247,41 @@ public class EscrowController {
         service.confirmReturn(id, userId);
         return ApiResponse.ok();
     }
+
+    @Operation(summary = "사용중 단계 취소 요청 (라운드 14 PR7 — 양 당사자 합의 취소)",
+            description = "rentalMode + 사용중 status 한정. buyer/seller 어느 쪽이든 호출. "
+                    + "다른 참여자가 [동의] 또는 [철회] 응답해야 취소 확정. 한 번에 한 요청만. "
+                    + "에러: ESCROW_INVALID_STATE / ESCROW_FORBIDDEN.")
+    @PostMapping("/applications/{id}/cancel-request")
+    public ApiResponse<Void> requestCancelDuringUsing(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id,
+            @RequestBody(required = false) com.sseulang.domain.escrow.presentation.dto.EscrowCancelRequestRequest request
+    ) {
+        service.requestCancelDuringUsing(id, userId, request == null ? null : request.reason());
+        return ApiResponse.ok();
+    }
+
+    @Operation(summary = "사용중 단계 취소 동의 (라운드 14 PR7)",
+            description = "취소 요청자의 상대방만 호출. 호출 시 즉시 취소 status 전이. "
+                    + "에러: ESCROW_INVALID_STATE (요청 없음/사용중 아님) / ESCROW_FORBIDDEN (요청자 본인 또는 비참여자).")
+    @PostMapping("/applications/{id}/cancel-confirm")
+    public ApiResponse<Void> confirmCancelDuringUsing(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        service.confirmCancelDuringUsing(id, userId);
+        return ApiResponse.ok();
+    }
+
+    @Operation(summary = "사용중 단계 취소 요청 철회 (라운드 14 PR7)",
+            description = "요청자 본인만 호출. cancel_requested_by/at/reason 클리어. status 유지(사용중).")
+    @PostMapping("/applications/{id}/cancel-withdraw")
+    public ApiResponse<Void> withdrawCancelRequest(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        service.withdrawCancelRequest(id, userId);
+        return ApiResponse.ok();
+    }
 }

@@ -4,8 +4,10 @@ import com.sseulang.domain.escrow.application.dto.EscrowApplicationCreateCommand
 import com.sseulang.domain.escrow.application.dto.EscrowApplicationResult;
 import com.sseulang.domain.escrow.application.dto.EscrowLinkCreateCommand;
 import com.sseulang.domain.escrow.application.dto.EscrowLinkResult;
+import com.sseulang.domain.escrow.domain.EscrowApplication;
 import com.sseulang.domain.escrow.domain.EscrowApplicationStatus;
 import com.sseulang.domain.escrow.domain.FeePayer;
+import com.sseulang.domain.escrow.domain.FeeBreakdown;
 import com.sseulang.domain.escrow.domain.Fragility;
 import com.sseulang.domain.escrow.domain.InitiatorRole;
 import com.sseulang.domain.escrow.domain.TradeMode;
@@ -21,8 +23,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -41,6 +51,8 @@ class EscrowApplicationServiceTest {
     private com.sseulang.domain.delivery.application.InMemoryFakeDeliveryRepository deliveryRepo;
     private UserApplicationService userService;
     private PointApplicationService pointService;
+    private PlatformTransactionManager transactionManager;
+    private Clock clock;
     private List<Object> publishedEvents;
     private ApplicationEventPublisher eventPublisher;
     private EscrowApplicationService service;
@@ -52,6 +64,8 @@ class EscrowApplicationServiceTest {
         settingsRepo = new InMemoryFakeEscrowFeeSettingsRepository();
         userService = mock(UserApplicationService.class);
         pointService = mock(PointApplicationService.class);
+        transactionManager = mock(PlatformTransactionManager.class);
+        clock = Clock.fixed(Instant.parse("2026-05-14T00:00:00Z"), ZoneOffset.UTC);
         publishedEvents = new ArrayList<>();
         eventPublisher = publishedEvents::add;
 
@@ -74,11 +88,15 @@ class EscrowApplicationServiceTest {
                 mock(com.sseulang.domain.transaction.application.TransactionCascadeService.class);
         com.sseulang.domain.notification.application.NotificationApplicationService notifService =
                 mock(com.sseulang.domain.notification.application.NotificationApplicationService.class);
+        when(transactionManager.getTransaction(any(TransactionDefinition.class)))
+                .thenReturn(new SimpleTransactionStatus());
+        doNothing().when(transactionManager).commit(any(TransactionStatus.class));
+        doNothing().when(transactionManager).rollback(any(TransactionStatus.class));
         service = new EscrowApplicationService(
                 linkRepo, appRepo, settingsRepo,
                 userService, pointService, deliveryRepo, eventPublisher,
                 chatRoomService, itemAppService, txAppService, txCascadeService, notifService,
-                24
+                transactionManager, clock, 24
         );
     }
 
@@ -189,6 +207,27 @@ class EscrowApplicationServiceTest {
         expectedDeliveryFee = fb.deliveryFee();
         expectedCommissionFee = fb.commissionFee();
         expectedTotalFee = fb.totalFee();
+    }
+
+    private static FeeBreakdown snap(long deliveryFee, long commissionFee, long itemPrice, TradeMode mode) {
+        long total = deliveryFee + commissionFee + (mode == TradeMode.INTERNAL ? itemPrice : 0);
+        return new FeeBreakdown(new BigDecimal("8.50"), deliveryFee, commissionFee, total, new BigDecimal("0.0500"));
+    }
+
+    private static EscrowApplication build(InitiatorRole role, TradeMode mode, FeePayer payer,
+                                           long itemPrice, long initiatorShare, long receiverShare) {
+        return EscrowApplication.create(
+                100L,
+                11L, 20L, role,
+                mode, payer,
+                itemPrice, "맥북",
+                "픽업주소", new BigDecimal("37.5"), new BigDecimal("127.0"),
+                "도착주소", new BigDecimal("37.6"), new BigDecimal("127.1"),
+                Weight.R1TO3, Volume.M, Fragility.F3, null,
+                snap(12000L, mode == TradeMode.INTERNAL ? 50_000L : 0L, itemPrice, mode),
+                initiatorShare, receiverShare,
+                null
+        );
     }
 
     @Test
@@ -480,5 +519,64 @@ class EscrowApplicationServiceTest {
 
         assertThat(preview.alreadyPaid()).isTrue();
         assertThat(preview.canPay()).isFalse();
+    }
+
+    // ------------------------------- PR6 auto return -------------------------------
+
+    @Test
+    @DisplayName("findOverdueRentalEndIds_사용중_대여만_만료순_조회")
+    void findOverdueRentalEndIds_rental_overdue_only() {
+        EscrowApplication overdueEarlier = rentalApplication(LocalDateTime.of(2026, 5, 13, 8, 0));
+        EscrowApplication overdueLater = rentalApplication(LocalDateTime.of(2026, 5, 13, 9, 0));
+        EscrowApplication notOverdue = rentalApplication(LocalDateTime.of(2026, 5, 15, 0, 0));
+        appRepo.save(overdueEarlier);
+        appRepo.save(overdueLater);
+        appRepo.save(notOverdue);
+
+        assertThat(service.findOverdueRentalEndIds()).containsExactly(overdueEarlier.getId(), overdueLater.getId());
+    }
+
+    @Test
+    @DisplayName("autoTriggerReturn_새트랜잭션_반납중전환_returnDelivery_알림")
+    void autoTriggerReturn_creates_return_delivery_and_notification() {
+        EscrowApplication app = rentalApplication(LocalDateTime.of(2026, 5, 13, 8, 0));
+        appRepo.save(app);
+
+        service.autoTriggerReturn(app.getId());
+
+        assertThat(app.getStatus()).isEqualTo(EscrowApplicationStatus.반납중);
+        assertThat(app.getReturnRequestedAt()).isEqualTo(LocalDateTime.now(clock));
+    }
+
+    @Test
+    @DisplayName("autoTriggerReturn_사용중아님_BUSINESS_EXCEPTION")
+    void autoTriggerReturn_invalid_state_throws() {
+        EscrowApplication app = rentalDraftApplication(LocalDateTime.of(2026, 5, 13, 8, 0));
+        app.markRentalEnd(LocalDateTime.of(2026, 5, 13, 8, 0));
+        appRepo.save(app);
+
+        assertThatThrownBy(() -> service.autoTriggerReturn(app.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ESCROW_INVALID_STATE);
+    }
+
+    private EscrowApplication rentalApplication(LocalDateTime rentalEndAt) {
+        EscrowApplication app = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, 1_062_000L, 0L);
+        app.markAsRental();
+        app.markRentalEnd(rentalEndAt);
+        app.markInitiatorPaid();
+        app.markInProgress();
+        app.enterUsing();
+        return app;
+    }
+
+    private EscrowApplication rentalDraftApplication(LocalDateTime rentalEndAt) {
+        EscrowApplication app = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, 1_062_000L, 0L);
+        app.markAsRental();
+        app.markRentalEnd(rentalEndAt);
+        return app;
     }
 }

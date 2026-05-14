@@ -61,6 +61,11 @@ public class EscrowApplicationRepositoryImpl implements EscrowApplicationReposit
     }
 
     @Override
+    public List<EscrowApplication> findOverdueRentalEndApplications(LocalDateTime threshold) {
+        return jpa.findOverdueRentalEndApplications(threshold);
+    }
+
+    @Override
     public long countInProgress() {
         return jpa.countInProgress();
     }

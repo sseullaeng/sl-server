@@ -13,6 +13,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Schema(description = "내부 거래대행 신청 (채팅방 + 판매자만).")
@@ -32,6 +33,8 @@ public record EscrowApplicationCreateInternalRequest(
         @NotBlank @Size(max = 255) String deliveryAddress,
         @NotNull BigDecimal deliveryLat,
         @NotNull BigDecimal deliveryLng,
+        @Schema(description = "대여 종료 예정 시각, 대여 거래대행만 필수")
+        LocalDateTime rentalEndAt,
 
         @NotNull Weight weight,
         @NotNull Volume volume,
@@ -51,7 +54,7 @@ public record EscrowApplicationCreateInternalRequest(
                 tradeMode, feePayer,
                 itemPrice, itemDescription,
                 pickupAddress, pickupLat, pickupLng,
-                deliveryAddress, deliveryLat, deliveryLng,
+                deliveryAddress, deliveryLat, deliveryLng, rentalEndAt,
                 weight, volume, fragility, deliveryNotes,
                 submittedDeliveryFee, submittedCommissionFee, submittedTotalFee, submittedDistanceKm,
                 imageUrls
