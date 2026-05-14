@@ -7,11 +7,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class TransactionCascadeServiceTest {
 
@@ -28,7 +33,11 @@ class TransactionCascadeServiceTest {
     @BeforeEach
     void setUp() {
         repo = new InMemoryFakeTransactionRepository();
-        service = new TransactionCascadeService(repo, Clock.systemDefaultZone());
+        // 단위 테스트 — TransactionTemplate.execute 가 실행되도록 PlatformTransactionManager mock.
+        // (격리 자체 검증은 별도 IT 영역. 본 테스트는 정책 분기 + 결과 카운트 위주)
+        PlatformTransactionManager txManager = mock(PlatformTransactionManager.class);
+        when(txManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+        service = new TransactionCascadeService(repo, txManager, Clock.systemDefaultZone());
     }
 
     @Test
