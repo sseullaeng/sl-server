@@ -29,7 +29,11 @@ public enum Fragility {
 
     @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
     public static Fragility fromCode(String code) {
-        for (Fragility f : values()) if (f.code.equals(code)) return f;
+        if (code == null) {
+            throw new IllegalArgumentException("Fragility code 는 필수입니다");
+        }
+        String normalized = code.trim().toLowerCase(java.util.Locale.ROOT);
+        for (Fragility f : values()) if (f.code.equals(normalized)) return f;
         throw new IllegalArgumentException("Unknown Fragility: " + code);
     }
 }
