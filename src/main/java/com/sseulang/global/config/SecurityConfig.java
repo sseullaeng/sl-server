@@ -201,6 +201,9 @@ public class SecurityConfig {
                         // WebSocket handshake 는 인증 없이 통과 — STOMP CONNECT 단계의 ChannelInterceptor 가
                         // Authorization 헤더 검증으로 인증 책임 (follow-up #19 native 토큰 인증).
                         .requestMatchers("/ws-stomp/**", "/ws-stomp-native/**").permitAll()
+                        // /users/me 는 admin 로그인 후 FE 가 호출하는 케이스 허용 (read-only profile).
+                        // 나머지 /users/me/** (transactions, items, overdue 등) 은 USER 전용 유지.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/me").hasAnyRole("USER", "ADMIN")
                         // ROLE_USER 강제 — ADMIN AT 가 user 영역(특히 출금/결제) 진입하지 못하도록 차단.
                         // adminId 와 userId 가 동일 숫자면 본인 검사도 통과해버리는 격리 누수 방지 (게이트 1).
                         .anyRequest().hasRole("USER"))
