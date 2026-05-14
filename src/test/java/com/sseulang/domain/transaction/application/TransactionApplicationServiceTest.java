@@ -357,6 +357,28 @@ class TransactionApplicationServiceTest {
         assertThat(service.findRentalBlocks(rental.getId())).isEmpty();
     }
 
+    @Test
+    @DisplayName("findActiveRentalPeriodByChatRoom_완료된_대여기간은_거래대행에_재사용하지_않음")
+    void findActiveRentalPeriodByChatRoom_completed_ignored() {
+        Item rental = itemRepo.save(Item.createMulti(
+                SELLER, null, "대여물건", "설명", java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 10_000L, DepositType.AMOUNT, RentalUnit.일, "서울"
+        ));
+        com.sseulang.domain.chat.domain.ChatRoom room =
+                com.sseulang.domain.chat.domain.ChatRoom.openFor(rental.getId(), BUYER, SELLER, TradeType.대여);
+        Long roomId = chatRoomRepo.save(room).getId();
+        Long txId = service.createRentalRequest(BUYER, rental.getId(),
+                java.time.LocalDateTime.now().plusDays(1),
+                java.time.LocalDateTime.now().plusDays(3), roomId);
+        Transaction tx = txRepo.findById(txId).orElseThrow();
+        tx.markAsReserved(java.time.LocalDateTime.now());
+        tx.markHandover(java.time.LocalDateTime.now());
+        tx.requestReturn(BUYER, java.time.LocalDateTime.now());
+        tx.confirmReturn(SELLER, java.time.LocalDateTime.now());
+
+        assertThat(service.findActiveRentalPeriodByChatRoom(roomId)).isEmpty();
+    }
+
     // ───────── create ─────────
 
     @Test

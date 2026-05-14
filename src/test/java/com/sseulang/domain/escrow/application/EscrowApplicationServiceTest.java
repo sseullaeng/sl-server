@@ -55,6 +55,9 @@ class EscrowApplicationServiceTest {
     private PointApplicationService pointService;
     private PlatformTransactionManager transactionManager;
     private com.sseulang.domain.overdue.application.OverdueApplicationService overdueService;
+    private com.sseulang.domain.chat.application.ChatRoomApplicationService chatRoomService;
+    private com.sseulang.domain.item.application.ItemApplicationService itemAppService;
+    private com.sseulang.domain.transaction.application.TransactionApplicationService txAppService;
     private Clock clock;
     private List<Object> publishedEvents;
     private ApplicationEventPublisher eventPublisher;
@@ -81,12 +84,9 @@ class EscrowApplicationServiceTest {
 
         deliveryRepo = new com.sseulang.domain.delivery.application.InMemoryFakeDeliveryRepository();
         // 라운드 12 PR-B-3 — 내부 흐름 의존 추가 (외부 link 흐름 테스트엔 미사용 → mock 으로만 stub)
-        com.sseulang.domain.chat.application.ChatRoomApplicationService chatRoomService =
-                mock(com.sseulang.domain.chat.application.ChatRoomApplicationService.class);
-        com.sseulang.domain.item.application.ItemApplicationService itemAppService =
-                mock(com.sseulang.domain.item.application.ItemApplicationService.class);
-        com.sseulang.domain.transaction.application.TransactionApplicationService txAppService =
-                mock(com.sseulang.domain.transaction.application.TransactionApplicationService.class);
+        chatRoomService = mock(com.sseulang.domain.chat.application.ChatRoomApplicationService.class);
+        itemAppService = mock(com.sseulang.domain.item.application.ItemApplicationService.class);
+        txAppService = mock(com.sseulang.domain.transaction.application.TransactionApplicationService.class);
         com.sseulang.domain.transaction.application.TransactionCascadeService txCascadeService =
                 mock(com.sseulang.domain.transaction.application.TransactionCascadeService.class);
         com.sseulang.domain.notification.application.NotificationApplicationService notifService =
@@ -524,6 +524,43 @@ class EscrowApplicationServiceTest {
 
         assertThat(preview.alreadyPaid()).isTrue();
         assertThat(preview.canPay()).isFalse();
+    }
+
+    @Test
+    @DisplayName("createInternalDraft_dual_item_판매_chat은_대여기간_없이_일반거래대행")
+    void createInternalDraft_dual_item_sale_chat_not_rental() {
+        when(chatRoomService.findMetaForParticipant(7L, 11L))
+                .thenReturn(new com.sseulang.domain.chat.application.ChatRoomApplicationService.ChatRoomMeta(
+                        7L, 123L, com.sseulang.domain.item.domain.TradeType.판매, false, false));
+        when(chatRoomService.findOpponent(7L, 11L)).thenReturn(20L);
+        when(itemAppService.findActiveForTransaction(123L))
+                .thenReturn(new com.sseulang.domain.item.application.dto.ItemForTransactionResult(
+                        123L, 11L,
+                        java.util.EnumSet.of(com.sseulang.domain.item.domain.TradeType.판매,
+                                com.sseulang.domain.item.domain.TradeType.대여),
+                        120_000L, 10_000L,
+                        com.sseulang.domain.item.domain.DepositType.AMOUNT,
+                        30_000L, null,
+                        com.sseulang.domain.item.domain.RentalUnit.일
+                ));
+
+        EscrowApplicationResult result = service.createInternalDraft(
+                new com.sseulang.domain.escrow.application.dto.EscrowApplicationCreateInternalDraftCommand(
+                        11L, 7L, 123L,
+                        TradeMode.INTERNAL, FeePayer.buyer,
+                        120_000L, "판매 거래",
+                        "픽업주소", new BigDecimal("37.5"), new BigDecimal("127.0"),
+                        null, null,
+                        Weight.R1TO3, Volume.M, Fragility.F3, null,
+                        List.of()
+                )
+        );
+
+        EscrowApplication saved = appRepo.findById(result.id()).orElseThrow();
+        assertThat(saved.isRentalMode()).isFalse();
+        assertThat(saved.getRentalStartAt()).isNull();
+        assertThat(saved.getRentalEndAt()).isNull();
+        verify(txAppService, never()).findActiveRentalPeriodByChatRoom(anyLong());
     }
 
     // ------------------------------- PR6 auto return -------------------------------

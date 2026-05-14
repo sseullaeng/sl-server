@@ -372,9 +372,10 @@ public class TransactionApplicationService {
     // 입력 안 해도 buyer 의 사전 신청 기간을 그대로 재사용. 비대여 또는 없으면 empty.
     public java.util.Optional<RentalPeriod> findActiveRentalPeriodByChatRoom(Long chatRoomId) {
         if (chatRoomId == null) return java.util.Optional.empty();
-        return transactionRepository.findLatestNonCanceledByChatRoomIdIn(java.util.List.of(chatRoomId)).stream()
+        return transactionRepository.findActiveDirectByChatRoomId(chatRoomId).stream()
                 .filter(t -> t.getTradeType() == com.sseulang.domain.item.domain.TradeType.대여)
                 .filter(t -> t.getRentalStart() != null && t.getRentalEnd() != null)
+                .sorted(java.util.Comparator.comparing(com.sseulang.domain.transaction.domain.Transaction::getId).reversed())
                 .map(t -> new RentalPeriod(t.getRentalStart(), t.getRentalEnd()))
                 .findFirst();
     }

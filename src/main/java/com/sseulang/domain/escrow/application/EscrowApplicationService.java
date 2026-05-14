@@ -174,7 +174,10 @@ public class EscrowApplicationService {
 
         // V43 — 대여 한정 사전 산정. 자동 itemPrice = rentalPrice × duration.
         // chatRoom 의 buyer 사전 신청(/rental-request) 기간 우선, 없으면 cmd 값.
-        boolean isRental = itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여);
+        boolean isRental = meta.tradeMode() == com.sseulang.domain.item.domain.TradeType.대여;
+        if (isRental && !itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+        }
         java.time.LocalDateTime resolvedRentalStart = null;
         java.time.LocalDateTime resolvedRentalEnd = null;
         long resolvedItemPrice = cmd.itemPrice();
@@ -268,7 +271,10 @@ public class EscrowApplicationService {
         Long buyerId = chatRoomApplicationService.findOpponent(cmd.chatRoomId(), cmd.requesterId());
 
         // V43 — 대여 한정. 자동 itemPrice = rentalPrice × duration. chatRoom 사전 신청 기간 우선.
-        boolean isRental = itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여);
+        boolean isRental = meta.tradeMode() == com.sseulang.domain.item.domain.TradeType.대여;
+        if (isRental && !itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+        }
         java.time.LocalDateTime resolvedRentalStart = null;
         java.time.LocalDateTime resolvedRentalEnd = null;
         long resolvedItemPrice = cmd.itemPrice();
