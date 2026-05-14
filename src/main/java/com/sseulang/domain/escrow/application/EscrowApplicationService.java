@@ -178,8 +178,8 @@ public class EscrowApplicationService {
 
         EscrowApplication app = EscrowApplication.createInternal(
                 cmd.chatRoomId(),
-                cmd.requesterId(),  
-                buyerId,            
+                cmd.requesterId(),
+                buyerId,
                 cmd.tradeMode(), cmd.feePayer(),
                 cmd.itemPrice(), cmd.itemDescription(),
                 cmd.pickupAddress(), cmd.pickupLat(), cmd.pickupLng(),
@@ -188,6 +188,10 @@ public class EscrowApplicationService {
                 calculated, initiatorShare, receiverShare,
                 serializeImageUrls(cmd.imageUrls())
         );
+        // PR2 — item.tradeType=대여 면 escrow 도 대여 lifecycle (사용중/반납중) 진입.
+        if (itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
+            app.markAsRental();
+        }
         EscrowApplication saved = applicationRepository.save(app);
         return EscrowApplicationResult.from(saved, parseImageUrls(saved.getImageUrls()));
     }
@@ -228,6 +232,10 @@ public class EscrowApplicationService {
                 cmd.weight(), cmd.volume(), cmd.fragility(), cmd.deliveryNotes(),
                 serializeImageUrls(cmd.imageUrls())
         );
+        // PR2 — item.tradeType=대여 면 escrow 도 대여 lifecycle (사용중/반납중) 진입.
+        if (itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
+            app.markAsRental();
+        }
         EscrowApplication saved = applicationRepository.save(app);
 
         // buyer 에게 수령지 입력 요청 알림. linkType=ESCROW + linkId=app.id 로 프론트가
@@ -772,12 +780,20 @@ public class EscrowApplicationService {
         EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
         app.confirmReceipt(requesterId);
-        
+
+        // PR2 — 대여 거래대행 분기:
+        //   rentalMode → settle 안 함, enterUsing(사용중 진입). seller 정산은 confirmReturn 시점.
+        //   일반(판매/나눔) → 기존 settle (라이더 보상 + paired Tx + cascade).
+        if (app.isRentalMode()) {
+            app.enterUsing();
+            return;
+        }
+
         Long riderId = deliveryRepository.findByEscrowApplicationId(applicationId)
                 .map(d -> d.getRiderId())
                 .orElse(null);
         if (riderId == null) {
-            
+
             throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
         }
         settle(app, riderId);
