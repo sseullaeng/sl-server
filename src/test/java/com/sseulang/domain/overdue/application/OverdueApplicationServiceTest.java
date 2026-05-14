@@ -3,6 +3,8 @@ package com.sseulang.domain.overdue.application;
 import com.sseulang.domain.escrow.application.EscrowOverdueQueryService;
 import com.sseulang.domain.escrow.application.dto.EscrowOverdueSnapshot;
 import com.sseulang.domain.escrow.domain.EscrowApplicationStatus;
+import com.sseulang.domain.notification.application.NotificationApplicationService;
+import com.sseulang.domain.notification.domain.NotificationType;
 import com.sseulang.domain.overdue.domain.OverduePhase;
 import com.sseulang.domain.overdue.domain.OverdueRecord;
 import com.sseulang.domain.overdue.domain.OverdueStatus;
@@ -33,6 +35,7 @@ class OverdueApplicationServiceTest {
     private EscrowOverdueQueryService escrowQueryService;
     private UserApplicationService userService;
     private PointApplicationService pointService;
+    private NotificationApplicationService notificationService;
     private OverdueApplicationService service;
 
     @BeforeEach
@@ -41,12 +44,14 @@ class OverdueApplicationServiceTest {
         escrowQueryService = mock(EscrowOverdueQueryService.class);
         userService = mock(UserApplicationService.class);
         pointService = mock(PointApplicationService.class);
+        notificationService = mock(NotificationApplicationService.class);
         Clock clock = Clock.fixed(Instant.parse("2026-05-02T10:00:00Z"), ZoneOffset.UTC);
         service = new OverdueApplicationService(
                 overdueRepo,
                 escrowQueryService,
                 userService,
                 pointService,
+                notificationService,
                 clock,
                 50_000,
                 14,
@@ -87,7 +92,7 @@ class OverdueApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("advanceDay_8일차_증분_몰수와_추가채무만_처리")
+    @DisplayName("advanceDay_8일차_증분_몰수와_추가채무_처리_+_phase3_임계_초과시_자동정지")
     void advanceDay_applies_delta_only() {
         when(escrowQueryService.getForOverdue(100L)).thenReturn(snapshot(100_000L));
         service.startOverdue(100L, STARTED);
@@ -98,7 +103,9 @@ class OverdueApplicationServiceTest {
 
         assertThat(advanced).isTrue();
         assertThat(record.getOverdueDays()).isEqualTo(8);
-        assertThat(record.getPhase()).isEqualTo(OverduePhase.PHASE_2);
+        // Day 8 totalDebt = 90k(몰수) + 20k(추가채무) = 110k ≥ phase3AmountKrw(50k) → 즉시 PHASE_3 트리거
+        assertThat(record.getPhase()).isEqualTo(OverduePhase.PHASE_3);
+        assertThat(record.getAccountSuspendedAt()).isNotNull();
         assertThat(record.getDepositForfeitedAmount()).isEqualTo(90_000L);
         assertThat(record.getExtraDebtAmount()).isEqualTo(20_000L);
         verify(userService).releaseHold(11L, 60_000L);
@@ -108,6 +115,7 @@ class OverdueApplicationServiceTest {
                 contains("8일차")
         );
         verify(userService).incrementOverdueDebt(11L, 20_000L);
+        verify(userService).adminAutoSuspend(eq(11L), anyInt(), contains("연체 임계값"));
     }
 
     @Test
@@ -159,6 +167,103 @@ class OverdueApplicationServiceTest {
         List<Long> ids = service.findOverdueCandidateEscrowIds(STARTED);
 
         assertThat(ids).containsExactly(101L);
+    }
+
+    @Test
+    @DisplayName("startOverdue_Day1_buyer_알림_발송")
+    void startOverdue_sends_day1_notification() {
+        when(escrowQueryService.getForOverdue(100L)).thenReturn(snapshot(100_000L));
+
+        service.startOverdue(100L, STARTED);
+
+        verify(notificationService).notify(
+                eq(11L),
+                eq(NotificationType.시스템),
+                contains("반납 기한 초과"),
+                anyString(),
+                eq("OVERDUE"),
+                anyLong()
+        );
+    }
+
+    @Test
+    @DisplayName("advanceDay_Phase1_to_Phase2_전이시_알림_발송")
+    void advanceDay_phase2_transition_notifies() {
+        when(escrowQueryService.getForOverdue(100L)).thenReturn(snapshot(100_000L));
+        service.startOverdue(100L, STARTED);
+        OverdueRecord record = overdueRepo.all().get(0);
+        clearInvocations(notificationService);
+
+        service.advanceDay(record.getId(), STARTED.plusDays(7));
+
+        verify(notificationService).notify(
+                eq(11L),
+                eq(NotificationType.시스템),
+                contains("보증금 초과 채무"),
+                anyString(),
+                eq("OVERDUE"),
+                eq(record.getId())
+        );
+    }
+
+    @Test
+    @DisplayName("advanceDay_phase3_threshold_도달시_자동정지_+_알림")
+    void advanceDay_phase3_auto_suspends() {
+        when(escrowQueryService.getForOverdue(100L)).thenReturn(snapshot(100_000L));
+        service.startOverdue(100L, STARTED);
+        OverdueRecord record = overdueRepo.all().get(0);
+        clearInvocations(userService, notificationService);
+
+        // Day 14 도달 — phase3DaysThreshold=14 트리거
+        service.advanceDay(record.getId(), STARTED.plusDays(13));
+
+        assertThat(record.getOverdueDays()).isEqualTo(14);
+        assertThat(record.getAccountSuspendedAt()).isNotNull();
+        assertThat(record.getPhase()).isEqualTo(OverduePhase.PHASE_3);
+
+        verify(userService).adminAutoSuspend(eq(11L), eq(30), contains("연체 임계값"));
+        verify(notificationService).notify(
+                eq(11L),
+                eq(NotificationType.시스템),
+                contains("계정 정지"),
+                anyString(),
+                eq("OVERDUE"),
+                eq(record.getId())
+        );
+    }
+
+    @Test
+    @DisplayName("advanceDay_이미_정지된_record는_재정지_안함_(idempotent)")
+    void advanceDay_already_suspended_no_resuspend() {
+        when(escrowQueryService.getForOverdue(100L)).thenReturn(snapshot(100_000L));
+        service.startOverdue(100L, STARTED);
+        OverdueRecord record = overdueRepo.all().get(0);
+        service.advanceDay(record.getId(), STARTED.plusDays(13));  // Day 14 → suspend
+        clearInvocations(userService, notificationService);
+
+        service.advanceDay(record.getId(), STARTED.plusDays(14));  // Day 15
+
+        verify(userService, never()).adminAutoSuspend(anyLong(), anyInt(), anyString());
+    }
+
+    @Test
+    @DisplayName("markResolvedByReturn_buyer_정산완료_알림_발송")
+    void markResolvedByReturn_sends_settlement_notification() {
+        when(escrowQueryService.getForOverdue(100L)).thenReturn(snapshot(100_000L));
+        service.startOverdue(100L, STARTED);
+        OverdueRecord record = overdueRepo.all().get(0);
+        clearInvocations(notificationService);
+
+        service.markResolvedByReturn(100L, STARTED.plusDays(1));
+
+        verify(notificationService).notify(
+                eq(11L),
+                eq(NotificationType.시스템),
+                contains("정산완료"),
+                anyString(),
+                eq("OVERDUE"),
+                eq(record.getId())
+        );
     }
 
     private static EscrowOverdueSnapshot snapshot(long depositAmount) {

@@ -349,6 +349,18 @@ public class UserApplicationService {
         u.unsuspend();
     }
 
+    @Transactional
+    public void adminAutoSuspend(Long userId, int days, String reason) {
+        User u = getById(userId);
+        u.suspend(days, java.time.LocalDateTime.now(clock));
+        refreshTokenStore.revokeAll(USER_ROLE, userId);
+        log.warn("[admin-auto-suspend] userId={} days={} reason={}", userId, days, reason);
+        if (u.isAutoWithdrawTarget()) {
+            u.markWithdrawn();
+            sendAutoWithdrawnNotice(u);
+        }
+    }
+
     
 
     public java.util.List<Long> findAutoWithdrawTargetIds(int limit) {
