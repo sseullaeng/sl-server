@@ -207,7 +207,10 @@ public class EscrowApplicationService {
         // PR2 — item.tradeType=대여 면 escrow 도 대여 lifecycle (사용중/반납중) 진입.
         if (itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
             app.markAsRental();
+            app.markRentalStart(cmd.rentalStartAt());
             app.markRentalEnd(cmd.rentalEndAt());
+            // V43 — itemPrice 위변조 차단. 백엔드가 item.rentalPrice × duration 으로 산정해 검증.
+            verifyRentalItemPrice(itemInfo, cmd.rentalStartAt(), cmd.rentalEndAt(), cmd.itemPrice());
             // PR8 — 보증금 snapshot 저장. 결제 시 hold 대상.
             if (itemInfo.deposit() != null) {
                 app.setRentalDeposit(itemInfo.deposit(), itemInfo.depositOriginalPercent());
@@ -258,7 +261,10 @@ public class EscrowApplicationService {
         // PR2 — item.tradeType=대여 면 escrow 도 대여 lifecycle (사용중/반납중) 진입.
         if (itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
             app.markAsRental();
+            app.markRentalStart(cmd.rentalStartAt());
             app.markRentalEnd(cmd.rentalEndAt());
+            // V43 — itemPrice 위변조 차단. 백엔드가 item.rentalPrice × duration 으로 산정해 검증.
+            verifyRentalItemPrice(itemInfo, cmd.rentalStartAt(), cmd.rentalEndAt(), cmd.itemPrice());
             // PR8 — 보증금 snapshot 저장. 결제 시 hold 대상.
             if (itemInfo.deposit() != null) {
                 app.setRentalDeposit(itemInfo.deposit(), itemInfo.depositOriginalPercent());
@@ -598,6 +604,29 @@ public class EscrowApplicationService {
     }
 
 
+
+    /**
+     * V43 — 대여 itemPrice 위변조 차단.
+     *  expected = item.rentalPrice × ceil(duration / item.rentalUnit)
+     *  FE 가 보낸 itemPrice 가 expected 와 다르면 ESCROW_FORM_INVALID.
+     *  itemInfo.rentalPrice 또는 rentalUnit 이 비면 검증 skip (data inconsistency, 기존 item).
+     */
+    private void verifyRentalItemPrice(
+            com.sseulang.domain.item.application.dto.ItemForTransactionResult itemInfo,
+            java.time.LocalDateTime startAt,
+            java.time.LocalDateTime endAt,
+            long submittedItemPrice
+    ) {
+        if (itemInfo.rentalPrice() == null || itemInfo.rentalUnit() == null) {
+            return;
+        }
+        long expected = com.sseulang.domain.escrow.domain.RentalDurationCalculator.expectedItemPrice(
+                itemInfo.rentalPrice(), startAt, endAt, itemInfo.rentalUnit()
+        );
+        if (submittedItemPrice != expected) {
+            throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+        }
+    }
 
     private long computeBuyerOwed(TradeMode mode, long itemPrice, FeeBreakdown fee, FeePayer payer) {
         long feeTotal = fee.deliveryFee() + fee.commissionFee();

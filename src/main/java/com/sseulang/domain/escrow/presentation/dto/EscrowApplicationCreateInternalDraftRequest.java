@@ -30,6 +30,8 @@ public record EscrowApplicationCreateInternalDraftRequest(
         @NotBlank @Size(max = 255) String pickupAddress,
         @NotNull BigDecimal pickupLat,
         @NotNull BigDecimal pickupLng,
+        @Schema(description = "대여 시작 예정 시각, 대여 거래대행만 필수. rentalEndAt 보다 이전이어야 함.")
+        LocalDateTime rentalStartAt,
         @Schema(description = "대여 종료 예정 시각, 대여 거래대행만 필수")
         LocalDateTime rentalEndAt,
 
@@ -45,7 +47,8 @@ public record EscrowApplicationCreateInternalDraftRequest(
                 requesterId, chatRoomId, itemId,
                 tradeMode, feePayer,
                 itemPrice, itemDescription,
-                pickupAddress, pickupLat, pickupLng, rentalEndAt,
+                pickupAddress, pickupLat, pickupLng,
+                rentalStartAt, rentalEndAt,
                 weight, volume, fragility, deliveryNotes,
                 imageUrls
         );

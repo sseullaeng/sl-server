@@ -21,6 +21,7 @@ public record EscrowApplicationCreateInternalDraftCommand(
         String pickupAddress,
         BigDecimal pickupLat,
         BigDecimal pickupLng,
+        LocalDateTime rentalStartAt,
         LocalDateTime rentalEndAt,
         Weight weight,
         Volume volume,

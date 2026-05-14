@@ -33,6 +33,8 @@ public record EscrowApplicationCreateInternalRequest(
         @NotBlank @Size(max = 255) String deliveryAddress,
         @NotNull BigDecimal deliveryLat,
         @NotNull BigDecimal deliveryLng,
+        @Schema(description = "대여 시작 예정 시각, 대여 거래대행만 필수. rentalEndAt 보다 이전이어야 함.")
+        LocalDateTime rentalStartAt,
         @Schema(description = "대여 종료 예정 시각, 대여 거래대행만 필수")
         LocalDateTime rentalEndAt,
 
@@ -54,7 +56,8 @@ public record EscrowApplicationCreateInternalRequest(
                 tradeMode, feePayer,
                 itemPrice, itemDescription,
                 pickupAddress, pickupLat, pickupLng,
-                deliveryAddress, deliveryLat, deliveryLng, rentalEndAt,
+                deliveryAddress, deliveryLat, deliveryLng,
+                rentalStartAt, rentalEndAt,
                 weight, volume, fragility, deliveryNotes,
                 submittedDeliveryFee, submittedCommissionFee, submittedTotalFee, submittedDistanceKm,
                 imageUrls

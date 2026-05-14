@@ -199,6 +199,11 @@ public class EscrowApplication extends BaseEntity {
     @Column(name = "rental_end_at")
     private LocalDateTime rentalEndAt;
 
+    // V43 — 대여 한정. 시작 예정 시각. (rentalEndAt - rentalStartAt) 으로 duration 계산하여
+    // 백엔드가 itemPrice 자동 산정 (item.rentalPrice × duration).
+    @Column(name = "rental_start_at")
+    private LocalDateTime rentalStartAt;
+
     // 라운드 14 — INTERNAL escrow 의 source Item id. paired Tx tradeType/보증금 lookup. EXTERNAL 은 NULL.
     @Column(name = "item_id")
     private Long itemId;
@@ -572,6 +577,23 @@ public class EscrowApplication extends BaseEntity {
             throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
         }
         this.rentalEndAt = endAt;
+    }
+
+    // V43 — 대여 한정. start <= end 검증, status.afterMatching 전까지만 변경 허용.
+    public void markRentalStart(LocalDateTime startAt) {
+        if (!this.rentalMode) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (startAt == null) {
+            throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+        }
+        if (this.status.isAfterMatching()) {
+            throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
+        }
+        if (this.rentalEndAt != null && !startAt.isBefore(this.rentalEndAt)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+        }
+        this.rentalStartAt = startAt;
     }
 
     // 라운드 14 — 대여 한정. confirmReceipt 후 enterUsing 으로 분기 (settle X).

@@ -338,7 +338,8 @@ public class ItemApplicationService {
                 item.getSalePrice(), item.getRentalPrice(),
                 isRental ? item.getDepositType() : null,
                 item.computeDepositAmount(),
-                depositOriginalPercent
+                depositOriginalPercent,
+                isRental ? item.getRentalUnit() : null
         );
     }
 

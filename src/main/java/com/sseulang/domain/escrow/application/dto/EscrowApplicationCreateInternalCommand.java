@@ -24,6 +24,7 @@ public record EscrowApplicationCreateInternalCommand(
         String deliveryAddress,
         BigDecimal deliveryLat,
         BigDecimal deliveryLng,
+        LocalDateTime rentalStartAt,
         LocalDateTime rentalEndAt,
         Weight weight,
         Volume volume,
