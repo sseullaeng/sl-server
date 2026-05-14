@@ -117,6 +117,7 @@ public class PointHistory {
         h.balanceAfter = balanceAfter;
         h.referenceType = referenceType;
         h.referenceId = referenceId;
+        h.overdueRecordId = referenceType == PointReferenceType.OVERDUE ? referenceId : null;
         h.description = description;
         h.createdAt = now;
         return h;

@@ -238,6 +238,36 @@ public class UserApplicationService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     }
 
+    @Transactional
+    public void incrementOverdueDebt(Long userId, long amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount 는 양수여야 합니다");
+        }
+        int affected = userRepository.incrementOverdueDebt(userId, amount);
+        if (affected != 1) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+    }
+
+    @Transactional
+    public void decrementOverdueDebt(Long userId, long amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount 는 양수여야 합니다");
+        }
+        int affected = userRepository.decrementOverdueDebt(userId, amount);
+        if (affected != 1) {
+            throw new BusinessException(ErrorCode.INSUFFICIENT_POINT);
+        }
+    }
+
+    public long findOverdueDebt(Long userId) {
+        Long debt = userRepository.findOverdueDebtBalance(userId);
+        if (debt == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+        return debt;
+    }
+
     
 
     public Page<User> adminFindAll(Pageable pageable) {

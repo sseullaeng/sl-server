@@ -54,6 +54,7 @@ class EscrowApplicationServiceTest {
     private UserApplicationService userService;
     private PointApplicationService pointService;
     private PlatformTransactionManager transactionManager;
+    private com.sseulang.domain.overdue.application.OverdueApplicationService overdueService;
     private Clock clock;
     private List<Object> publishedEvents;
     private ApplicationEventPublisher eventPublisher;
@@ -90,6 +91,7 @@ class EscrowApplicationServiceTest {
                 mock(com.sseulang.domain.transaction.application.TransactionCascadeService.class);
         com.sseulang.domain.notification.application.NotificationApplicationService notifService =
                 mock(com.sseulang.domain.notification.application.NotificationApplicationService.class);
+        overdueService = mock(com.sseulang.domain.overdue.application.OverdueApplicationService.class);
         when(transactionManager.getTransaction(any(TransactionDefinition.class)))
                 .thenReturn(new SimpleTransactionStatus());
         doNothing().when(transactionManager).commit(any(TransactionStatus.class));
@@ -98,6 +100,7 @@ class EscrowApplicationServiceTest {
                 linkRepo, appRepo, settingsRepo,
                 userService, pointService, deliveryRepo, eventPublisher,
                 chatRoomService, itemAppService, txAppService, txCascadeService, notifService,
+                overdueService,
                 transactionManager, clock, 24
         );
     }
@@ -572,6 +575,20 @@ class EscrowApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("confirmReturn_연체record_있으면_OverdueService가_보증금환불_처리하고_전액환불_skip")
+    void confirmReturn_overdue_record_delegates_deposit_refund() {
+        EscrowApplication app = rentalApplication(LocalDateTime.of(2026, 5, 13, 8, 0));
+        app.requestReturnByBuyer(app.getBuyerId());
+        appRepo.save(app);
+        when(overdueService.markResolvedByReturn(eq(app.getId()), any(LocalDateTime.class))).thenReturn(true);
+
+        service.confirmReturn(app.getId(), app.getSellerId());
+
+        verify(overdueService).markResolvedByReturn(eq(app.getId()), any(LocalDateTime.class));
+        verify(userService, never()).refundHold(eq(app.getBuyerId()), eq(36_000L));
+    }
+
+    @Test
     @DisplayName("autoTriggerReturn_사용중아님_BUSINESS_EXCEPTION")
     void autoTriggerReturn_invalid_state_throws() {
         EscrowApplication app = rentalDraftApplication(LocalDateTime.of(2026, 5, 13, 8, 0));
@@ -589,6 +606,7 @@ class EscrowApplicationServiceTest {
                 1_000_000L, 1_062_000L, 0L);
         app.markAsRental();
         app.markRentalEnd(rentalEndAt);
+        app.setRentalDeposit(36_000L, 30);
         app.markInitiatorPaid();
         app.markInProgress();
         app.enterUsing();

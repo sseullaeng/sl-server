@@ -100,3 +100,8 @@ app:
     enabled: true
   delivery:
     auto-accept-rider-id: ${APP_DELIVERY_AUTO_ACCEPT_RIDER_ID:0}
+  overdue:
+    phase3-amount-krw: ${APP_OVERDUE_PHASE3_AMOUNT_KRW:50000}
+    phase3-days-threshold: ${APP_OVERDUE_PHASE3_DAYS_THRESHOLD:14}
+    phase4-days-after-suspend: ${APP_OVERDUE_PHASE4_DAYS_AFTER_SUSPEND:7}
+    phase2-daily-rate-percent: ${APP_OVERDUE_PHASE2_DAILY_RATE_PERCENT:20}

@@ -137,6 +137,9 @@ public enum ErrorCode {
     ESCROW_TX_CHATROOM_MISMATCH(HttpStatus.BAD_REQUEST, "쓸랭 거래의 채팅방과 거래대행 신청 채팅방이 다릅니다."),
     ESCROW_SELLER_ONLY(HttpStatus.FORBIDDEN, "거래대행 신청은 판매자만 가능합니다."),
 
+    // 연체
+    OVERDUE_NOT_FOUND(HttpStatus.NOT_FOUND, "연체 기록을 찾을 수 없습니다."),
+
     PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "요청 본문 크기가 한도를 초과합니다.");
 
     private final HttpStatus status;

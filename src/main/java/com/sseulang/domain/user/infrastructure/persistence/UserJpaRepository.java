@@ -92,6 +92,22 @@ interface UserJpaRepository extends JpaRepository<User, Long> {
         long getHold();
     }
 
+    @Modifying
+    @Query("UPDATE User u SET u.overdueDebtBalance = u.overdueDebtBalance + :amount WHERE u.id = :userId")
+    int incrementOverdueDebt(@Param("userId") Long userId, @Param("amount") long amount);
+
+    @Modifying
+    @Query("""
+            UPDATE User u
+               SET u.overdueDebtBalance = u.overdueDebtBalance - :amount
+             WHERE u.id = :userId
+               AND u.overdueDebtBalance >= :amount
+            """)
+    int decrementOverdueDebt(@Param("userId") Long userId, @Param("amount") long amount);
+
+    @Query("SELECT u.overdueDebtBalance FROM User u WHERE u.id = :userId")
+    Long findOverdueDebtBalanceById(@Param("userId") Long userId);
+
     Page<User> findAllByOrderByIdDesc(Pageable pageable);
 
     

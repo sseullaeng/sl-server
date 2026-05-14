@@ -29,6 +29,7 @@ import com.sseulang.domain.escrow.domain.event.EscrowConfirmedEvent;
 import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.point.domain.PointHistoryType;
 import com.sseulang.domain.point.domain.PointReferenceType;
+import com.sseulang.domain.overdue.application.OverdueApplicationService;
 import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.domain.user.domain.User;
 import com.sseulang.global.exception.BusinessException;
@@ -67,6 +68,7 @@ public class EscrowApplicationService {
     private final com.sseulang.domain.transaction.application.TransactionApplicationService transactionApplicationService;
     private final com.sseulang.domain.transaction.application.TransactionCascadeService transactionCascadeService;
     private final com.sseulang.domain.notification.application.NotificationApplicationService notificationApplicationService;
+    private final OverdueApplicationService overdueApplicationService;
     private final Clock clock;
     private final TransactionTemplate newTxTemplate;
     private final int linkExpiryHours;
@@ -84,6 +86,7 @@ public class EscrowApplicationService {
             com.sseulang.domain.transaction.application.TransactionApplicationService transactionApplicationService,
             com.sseulang.domain.transaction.application.TransactionCascadeService transactionCascadeService,
             com.sseulang.domain.notification.application.NotificationApplicationService notificationApplicationService,
+            OverdueApplicationService overdueApplicationService,
             PlatformTransactionManager transactionManager,
             Clock clock,
             @Value("${app.escrow.link.expiry-hours:24}") int linkExpiryHours
@@ -100,6 +103,7 @@ public class EscrowApplicationService {
         this.transactionApplicationService = transactionApplicationService;
         this.transactionCascadeService = transactionCascadeService;
         this.notificationApplicationService = notificationApplicationService;
+        this.overdueApplicationService = overdueApplicationService;
         this.clock = clock;
         this.newTxTemplate = new TransactionTemplate(transactionManager);
         this.newTxTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -998,9 +1002,12 @@ public class EscrowApplicationService {
                 paired, deposit, depositPct, null, null
         );
 
-        // PR8 — 보증금 환불 (point_hold → point_balance 복원). atomic UPDATE 한 번.
+        // PR8 — 보증금 환불. 연체 record 가 있으면 잔여 보증금만 overdue hook 에서 환불한다.
         if (app.getDepositAmount() != null && app.getDepositAmount() > 0) {
-            userApplicationService.refundHold(app.getBuyerId(), app.getDepositAmount());
+            boolean overdueHandled = overdueApplicationService.markResolvedByReturn(app.getId(), LocalDateTime.now(clock));
+            if (!overdueHandled) {
+                userApplicationService.refundHold(app.getBuyerId(), app.getDepositAmount());
+            }
         }
 
         // cascade — 같은 chatRoom 의 활성 직거래 자동 정리. 대여 직거래는 도메인 가드로 자동 스킵 (반납 흐름 보존).

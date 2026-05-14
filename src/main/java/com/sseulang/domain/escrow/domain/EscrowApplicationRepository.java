@@ -34,6 +34,8 @@ public interface EscrowApplicationRepository {
 
     List<EscrowApplication> findOverdueRentalEndApplications(LocalDateTime threshold);
 
+    List<EscrowApplication> findOverdueCandidates(LocalDateTime cutoff);
+
     
     long countInProgress();
 
