@@ -30,7 +30,8 @@ public class AdminReportController {
         this.reportService = reportService;
     }
 
-    @Operation(summary = "[관리자] 신고 목록", description = "status 필터 (PENDING/IN_PROGRESS/COMPLETED/REJECTED) + 페이징.")
+    @Operation(summary = "[관리자] 신고 목록",
+            description = "status 필터 + 페이징. 정식값(접수/처리중/처리완료/반려) 또는 alias(PENDING/IN_PROGRESS/COMPLETED/REJECTED) 둘 다 허용.")
     @GetMapping
     public ApiResponse<PageResponse<AdminReportResponse>> list(
             @RequestParam(value = "status", required = false) ReportStatus status,
