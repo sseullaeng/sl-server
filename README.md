@@ -17,8 +17,8 @@
 
 | 묶음 | 핵심 |
 |---|---|
-| 🛒 **거래** | 판매 / 대여 / 나눔 3유형, escrow hold + 양쪽 확인 정산 |
-| 💳 **결제·포인트** | 토스페이먼츠 실연동, 충전식 플랫폼 머니, 적자 방지 정책 |
+| 🛒 **거래** | 판매 / 대여 / 나눔 3유형, 직접 거래 상태 머신 + 거래대행 lifecycle |
+| 💳 **결제·포인트** | 토스페이먼츠 실연동, 충전식 플랫폼 머니, 거래대행 정산/보증금 hold |
 | 💬 **채팅·알림** | WebSocket + STOMP 실시간, MongoDB 영속, JWT 통합 인증 |
 | 🛵 **배달대행** | 라이더 매칭, 위치 트래킹, Redis 캐시 + STOMP 브로드캐스트 |
 | 🔐 **인증** | OAuth 카카오 / 구글 + LOCAL 이메일 인증, JWT + Refresh Rotation |
@@ -48,13 +48,13 @@ com.sseulang
     ├── user/           # Aggregate Root + VO: Email, Phone, PointBalance
     ├── auth/           # OAuth + LOCAL + JWT + Refresh Rotation
     ├── item/           # 상품 3유형 + 이미지 + 카테고리 + 해시태그
-    ├── transaction/    # 거래 상태 머신, escrow hold
+    ├── transaction/    # 직접 거래 상태 머신, paired escrow transaction
     ├── payment/        # 토스 결제 + 멱등성
     ├── point/          # 충전식 머니, 원자 UPDATE
     ├── delivery/       # 배달대행 + 위치 트래킹
     ├── chat/           # 채팅방 + 메시지, MongoDB
     ├── notification/   # 알림, MongoDB
-    ├── escrow/         # 거래대행, 라이더 매칭 + 수수료
+    ├── escrow/         # 거래대행, 양방향 대여 배달, 수수료/보증금 정산
     ├── review/         # 신뢰도, 양방향 별점
     ├── report/         # 신고
     ├── support/        # 고객센터
@@ -71,7 +71,7 @@ com.sseulang
 |---|---|
 | **DDD-lite** | Aggregate / VO / DomainEvent / Repository 인터페이스 분리는 채택하되, 1인 9일 일정상 헥사고날 모듈 분리와 CQRS는 제외 |
 | **충전식 포인트** | 가입 보너스나 추가 적립금이 아닌 거래 통화 머니로 설계해 시스템 적자 방지 |
-| **escrow hold + 양쪽 확인** | 구매자 hold 이후 handover → received 확인을 거쳐 정산하여 분쟁 가능성 감소 |
+| **직접 거래와 거래대행 분리** | 직접 거래는 상태/Item 잠금만 관리하고, 포인트 정산/보증금/라이더 매칭은 거래대행에서 처리 |
 | **JWT + CSRF 이중 가드** | HttpOnly + Secure + SameSite=Strict 쿠키와 X-XSRF-TOKEN double-submit 적용 |
 | **SecurityFilterChain 3분리** | PUBLIC / USER / ADMIN 체인을 분리해 권한별 진입 경로 명확화 |
 | **잔액 변경 = 원자 UPDATE** | `WHERE balance + amt >= 0` 단일 쿼리로 동시성 race 방어 |
@@ -84,17 +84,18 @@ com.sseulang
 ![거래 상태 머신](docs/img/transaction-flow.png)
 
 ```text
-[채팅중] ─reserve─▶ [HOLD] ─handover─▶ [HANDOVER] ─received─▶ [SETTLED]
-                      │                    │
-                      └─cancel─▶ refund    └─cancel─▶ refund
+직접 거래(판매/나눔): [채팅중] ─예약─▶ [예약] ─인계확인─▶ [인계완료] ─인수확인/완료─▶ [거래완료]
+직접 거래(대여):     [채팅중] ─예약─▶ [예약] ─인계확인─▶ [인계완료] ─반납요청─▶ [반납요청] ─회신확인─▶ [거래완료]
+
+거래대행(대여):      [결제완료] ─forward 배송─▶ [진행중] ─수령확인─▶ [사용중] ─반납요청/자동반납─▶ [반납중] ─회신확인─▶ [완료]
 ```
 
-상태 전이 시 잔액 효과는 다음과 같습니다.
+잔액 효과는 다음과 같습니다.
 
-- **HOLD**: 구매자 `point_balance → point_hold` 이동
-- **HANDOVER**: 금액 변화 없이 라이더 매칭 트리거
-- **SETTLED**: 구매자 `hold → 차감`, 판매자 `+금액 - 수수료`
-- **CANCEL**: HOLD / HANDOVER 단계별 환불 분기 처리
+- **직접 거래**: 사이트 포인트 정산 없음. 백엔드는 상태와 Item 잠금만 관리
+- **거래대행 결제**: 참여자 share 만큼 포인트 차감, 대여 보증금은 buyer `point_hold` 로 이동
+- **거래대행 완료**: 판매자 `itemPrice` 정산, forward/return 라이더 정산, 보증금 refundHold
+- **자동 반납**: `rentalEndAt` 경과 시 buyer 수동 반납과 동일하게 return fee 차감 + return delivery 모집
 
 ---
 
@@ -120,12 +121,12 @@ com.sseulang
 [2] 토스 SDK 결제창          → 카드 / 카카오뱅크 인증
 [3] POST /payments/confirm  → 토스 API 금액 재검증 + 멱등 처리
 [4] 포인트 잔액 +금액        → 원자 UPDATE
-[5] 거래 시 HOLD → SETTLED   → 판매자 적립, PG 재호출 없음
+[5] 거래대행 결제/정산       → 판매자·라이더 적립, 보증금 hold/refund, PG 재호출 없음
 [6] 출금 신청 → 관리자 승인 → 외부 계좌
-[7] 웹훅 POST /payments/webhook/toss → 별도 검증
+[7] 웹훅 POST /payments/webhook/toss → HMAC signature + timestamp + Toss lookup 검증
 ```
 
-결제 구조의 핵심은 **충전식 플랫폼 머니**, **merchant_uid 기반 멱등성**, **토스 API 금액 재검증**, **잔액 원자 UPDATE**입니다.
+결제 구조의 핵심은 **충전식 플랫폼 머니**, **merchant_uid 기반 멱등성**, **토스 API 금액 재검증**, **webhook HMAC 검증**, **잔액 원자 UPDATE**입니다.
 
 ---
 

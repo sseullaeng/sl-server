@@ -153,9 +153,11 @@ com.sseulang
 ### 4.8 포인트 (충전식 — 플랫폼 머니)
 - **개념**: 추가 적립금 X. **실제 결제에 쓰는 머니**.
 - **충전**: 토스페이먼츠로 결제 → `point_balance` 증가
-- **거래 결제**: 구매자 포인트 차감 → 판매자 포인트 적립 (PG 안 거침)
+- **직접 거래**: 사이트 포인트 정산 없음. 백엔드는 상태와 Item 잠금만 관리
+- **거래대행 결제**: 참여자 share 포인트 차감, 완료 시 판매자/라이더 포인트 정산 (PG 안 거침)
+- **대여 보증금**: buyer 결제 시 `point_balance → point_hold`, 반납 완료 또는 사용중 취소 확정 시 `point_hold → point_balance`
 - **출금**: 판매자가 출금 신청 → 관리자 승인 → 외부 계좌 이체 (시뮬레이션)
-- **환불**: 거래 취소 시 양쪽 잔액 원복
+- **환불**: 취소/반납 정책에 따라 포인트 hold 또는 잔액 원복
 - **가입 보너스 X** / **거래 완료 추가 적립 X** (시스템이 진짜 돈 뿌리면 적자)
 - **만료**: 없음
 
@@ -173,6 +175,8 @@ com.sseulang
 - **멱등성**: `merchant_uid` UNIQUE로 중복 결제 방지
 - **검증**: 결제 완료 후 백엔드에서 토스 API로 금액 재검증 (위변조 방지)
 - **웹훅 엔드포인트**: `POST /api/v1/payments/webhook/toss`
+- **웹훅 보안**: `tosspayments-webhook-signature` + `tosspayments-webhook-timestamp` HMAC 검증 후 Toss lookup 재조회
+- **웹훅 처리 상태**: lookup 실패/불일치 시 `webhook_events.processed_at` 을 찍지 않고 다음 webhook 또는 reconciliation 재시도 대기
 
 ### 4.10 채팅 / 알림
 - **채팅방**: 1:1 고정 (`chat_rooms.user1_id, user2_id`)
@@ -187,12 +191,14 @@ com.sseulang
 - 채팅 메시지는 잃어도 비즈니스 크리티컬 X
 
 ### 4.11 거래 정책
-- **상태 머신**: `채팅중 → 예약 → 거래완료` (또는 `취소`)
+- **상태 머신(판매/나눔)**: `채팅중 → 예약 → 인계완료 → 거래완료` (또는 `취소`)
+- **상태 머신(대여)**: `채팅중 → 예약 → 인계완료 → 반납요청 → 거래완료` (또는 `취소`)
 - **동시 거래**:
     - 예약 전: 한 물품에 여러 명과 채팅 OK
     - **예약 직후: 다른 사용자와의 채팅 차단**
     - 예약 취소되면 채팅 다시 활성화
 - **거래 타입**: `대여`, `판매`, `나눔` (ERD 통일)
+- **정산**: 직접 거래는 포인트 정산 없음. 거래대행 완료 시 paired Transaction 이 생성되어 리뷰/관리자 화면과 통합
 
 ### 4.12 배달대행
 - **방식**: 외부 대행사 API 연동 X, **상태 전이 시뮬레이션**
@@ -200,10 +206,13 @@ com.sseulang
 - **기사 위치**: `driver_lat`, `driver_lng` (DECIMAL(10,7)) — 단일 컬럼 분리
 - **상태 머신**: `신청 → 배달중 → 완료` (또는 `취소`)
 
-### 4.13 보증금 처리
-- 대여 거래 결제 시 `payments` 두 건: `대여금` + `보증금`
-- 대여 종료 시 보증금 반환은 **관리자 수동 처리** (UC-43)
-- 환불은 토스 API 또는 포인트 복원
+### 4.13 거래대행 대여 lifecycle / 보증금 처리
+- **생성**: 내부 거래대행에서 source Item 이 대여면 `rentalMode=true`, `rentalEndAt` 필수
+- **진행**: `결제완료 → 진행중 → confirmReceipt → 사용중`
+- **반납**: buyer 수동 `request-return` 또는 `rentalEndAt` 경과 scheduler 자동 트리거 → `반납중` + return delivery 모집
+- **완료**: seller `confirm-return` → `완료`, 판매자 `itemPrice` 정산, forward/return 라이더 정산, 보증금 refundHold, paired Transaction 생성
+- **보증금**: Item 보증금 snapshot 을 `escrow_applications.deposit_amount` 에 저장. buyer 결제 시 hold, 반납 완료/사용중 취소 확정 시 반환
+- **return fee**: 수동/자동 반납 요청 모두 buyer 포인트에서 forward delivery fee 와 동일 금액을 추가 차감
 
 ---
 
@@ -305,12 +314,32 @@ POST   /api/v1/chat-rooms/{id}/messages
 
 # 거래
 POST   /api/v1/transactions
-PATCH  /api/v1/transactions/{id}           # 예약/완료/취소
+PATCH  /api/v1/transactions/{id}           # 예약/인계확인/인수확인/완료/반납요청/회신확인/취소
+
+# 거래대행 (Escrow)
+POST   /api/v1/escrow/links
+GET    /api/v1/escrow/links/{linkToken}
+POST   /api/v1/escrow/applications/preview
+POST   /api/v1/escrow/applications
+POST   /api/v1/escrow/applications/by-link
+POST   /api/v1/escrow/applications/internal
+POST   /api/v1/escrow/applications/internal/draft
+PATCH  /api/v1/escrow/applications/{id}/seller-info
+PATCH  /api/v1/escrow/applications/{id}/buyer-info
+GET    /api/v1/escrow/applications/{id}/payment-preview
+POST   /api/v1/escrow/applications/{id}/pay
+POST   /api/v1/escrow/applications/{id}/confirm-receipt
+POST   /api/v1/escrow/applications/{id}/confirm-handover
+POST   /api/v1/escrow/applications/{id}/request-return
+POST   /api/v1/escrow/applications/{id}/confirm-return
+POST   /api/v1/escrow/applications/{id}/cancel-request
+POST   /api/v1/escrow/applications/{id}/cancel-confirm
+POST   /api/v1/escrow/applications/{id}/cancel-withdraw
 
 # 결제 (토스 연동)
 POST   /api/v1/payments/charge             # 충전 시작
 POST   /api/v1/payments/charge/confirm     # 충전 승인 (콜백)
-POST   /api/v1/payments/webhook/toss       # 웹훅
+POST   /api/v1/payments/webhook/toss       # 웹훅. transmission-id/signature/timestamp 헤더 검증
 
 # 포인트
 GET    /api/v1/points/balance
@@ -356,7 +385,10 @@ PATCH  /api/v1/admin/items/{id}            # 비공개/삭제
 GET    /api/v1/admin/reports
 PATCH  /api/v1/admin/reports/{id}
 
-POST   /api/v1/admin/transactions/{id}/refund-deposit   # 보증금 반환
+GET    /api/v1/admin/escrow/applications
+GET    /api/v1/admin/escrow/applications/{id}
+GET    /api/v1/admin/escrow/fee-settings
+PATCH  /api/v1/admin/escrow/fee-settings
 
 GET    /api/v1/admin/withdrawals
 PATCH  /api/v1/admin/withdrawals/{id}      # 출금 승인/거부

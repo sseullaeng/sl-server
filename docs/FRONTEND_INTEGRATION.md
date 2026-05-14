@@ -1,6 +1,6 @@
 # 프론트엔드 연동 가이드
 
-> 쓸랭 백엔드 + 프론트엔드 연동을 위한 종합 가이드. 최신 갱신: 2026-05-03 (라운드 5 — 채팅 schema/STOMP 정확성 보강).
+> 쓸랭 백엔드 + 프론트엔드 연동을 위한 종합 가이드. 최신 갱신: 2026-05-14 (라운드 14 — 거래대행 대여 lifecycle + Toss webhook 시그니처 반영).
 
 ## 0. 빠른 시작
 
@@ -376,6 +376,17 @@ POST /api/v1/auth/oauth2/kakao
 - `GET  /api/v1/payments/{id}` — 본인 결제 단건 조회
 - `POST /api/v1/payments/webhook/toss` — 토스 webhook (프론트 호출 X)
 
+### Toss webhook 처리 (프론트 호출 X)
+토스가 직접 호출하는 서버 간 endpoint. 운영에서는 아래 헤더가 백엔드까지 보존돼야 한다.
+
+| Header | 용도 |
+|---|---|
+| `tosspayments-webhook-transmission-id` | 멱등성 키. 중복 webhook 은 같은 event 로 처리 |
+| `tosspayments-webhook-signature` | HMAC-SHA256 시그니처 |
+| `tosspayments-webhook-timestamp` | replay window 검증용 timestamp |
+
+백엔드는 시그니처 검증 후 payload 의 `paymentKey/orderId` 로 Toss lookup 을 다시 수행한다. lookup 실패/불일치면 `webhook_events.processed_at` 을 찍지 않고 다음 webhook/reconciliation 재시도를 기다린다.
+
 ### ChargeStartResponse 응답
 ```json
 {
@@ -407,6 +418,7 @@ POST /api/v1/auth/oauth2/kakao
 - confirm 호출 시 `amount` 가 토스 응답과 mismatch → `PAYMENT_AMOUNT_MISMATCH` (위변조 차단).
 - 같은 `merchantUid` 재호출 → `PAYMENT_DUPLICATED` (멱등성).
 - 결제 페이지 자체는 토스 SDK가 렌더 — 별도 백엔드 페이지 X.
+- webhook 은 프론트가 호출하지 않는다. 로컬 테스트에서 직접 호출할 때 운영 secret 이 설정돼 있으면 signature/timestamp 헤더가 필요하다.
 
 ### 결제 fail redirect 정책
 백엔드는 `successUrl`/`failUrl` 받지 않음. 프론트 SDK 측 결정:
@@ -646,10 +658,16 @@ GET    /api/v1/users/me/wishlist?page=&size=    → Page<ItemSummaryResponse>
 
 #### 상태 머신
 ```
-채팅중 → 예약 → 거래완료
+판매/나눔:
+채팅중 → 예약 → 인계완료 → 거래완료
+   └─→ 취소 (채팅중/예약 양쪽에서 가능)
+
+대여:
+채팅중 → 예약 → 인계완료 → 반납요청 → 거래완료
    └─→ 취소 (채팅중/예약 양쪽에서 가능)
 ```
-- 상태값은 모두 **한글**: `채팅중 | 예약 | 거래완료 | 취소`. "진행중" 없음.
+- 상태값은 모두 **한글**: `채팅중 | 예약 | 인계완료 | 반납요청 | 거래완료 | 취소`. "진행중" 없음.
+- 직접 거래는 사이트 포인트 정산을 하지 않는다. 결제/정산은 오프라인 또는 별도 외부 수단이며, 백엔드는 상태와 Item 잠금만 관리한다.
 
 #### TransactionResponse
 ```json
@@ -683,20 +701,92 @@ POST  /api/v1/transactions                    → 201 + { id }
 GET   /api/v1/transactions/{id}               → TransactionResponse (참여자만)
 
 PATCH /api/v1/transactions/{id}               → null
-  Body: { action: "예약"|"거래완료"|"취소", cancelReason?: string }
+  Body: { action: "예약"|"인계확인"|"인수확인"|"완료"|"반납요청"|"회신확인"|"취소", cancelReason?: string }
   - 예약: seller, 채팅중→예약, Item 자동 → 예약
-  - 거래완료: seller, 예약→거래완료, Item 자동 → 거래완료, 포인트 정산
+  - 인계확인: seller, 예약→인계완료
+  - 인수확인: buyer, 인계완료→거래완료, 판매/나눔만. 대여는 INVALID_STATE
+  - 완료: seller, 채팅중/예약/인계완료→거래완료, 판매/나눔만. 대여는 INVALID_STATE
+  - 반납요청: buyer, 대여만 인계완료→반납요청
+  - 회신확인: seller, 대여만 반납요청→거래완료
   - 취소: 양쪽 참여자, Item 예약이었으면 → 판매중 복원
 
 GET   /api/v1/users/me/transactions?role=buyer|seller&status=&page=&size=
   - role 미지정 = 양쪽. status 미지정 = 전체
 ```
 
-⚠️ **거래 정산은 잔액 이동만** (PG 안 거침). PaymentResponse.transactionId 는 항상 null. 거래 추적은 PointHistory.
+⚠️ **직접 거래는 포인트/PG 정산 없음**. `PaymentResponse.transactionId` 는 항상 null. 거래대행 정산 추적은 `PointHistory` 에 기록된다.
 
-⚠️ **대여 반납 별도 endpoint 없음** — 일반 거래완료와 동일하게 PATCH action=거래완료. 보증금 환불 흐름 미지원 (관리자 수동, Day 9+).
+⚠️ **직접 대여와 거래대행 대여는 endpoint 가 다르다.** 직접 대여는 `PATCH /transactions/{id}` 의 `반납요청/회신확인` action 을 사용한다. 거래대행 대여는 아래 Escrow 전용 endpoint 를 사용한다.
 
-### 10.4 ChatRoom
+### 10.4 Escrow / 거래대행
+
+#### 상태 머신
+```
+공통:
+정보입력대기 → 결제대기 → 결제완료 → 진행중
+                               ├─ 판매/나눔: buyer confirmReceipt → 완료
+                               └─ 대여: buyer confirmReceipt → 사용중
+
+대여 거래대행:
+사용중 → 반납중 → 완료
+   │        │
+   │        └─ seller confirmReturn: 판매자 정산 + 보증금 환불 + forward/return 라이더 정산 + paired Transaction 생성
+   └─ rentalEndAt 경과 시 scheduler 가 자동 requestReturn
+
+사용중 취소:
+사용중 → cancel-request → 사용중(취소 대기) → cancel-confirm → 취소
+                    └─ cancel-withdraw → 사용중
+```
+
+- 상태값: `정보입력대기 | 결제대기 | 결제완료 | 진행중 | 사용중 | 반납중 | 완료 | 취소`
+- 판매자/구매자 share 결제는 포인트 잔액에서 차감된다. 보증금은 대여 buyer 결제 시 `point_hold` 로 잡고 `confirmReturn` 또는 사용중 취소 확정 시 반환한다.
+- 대여 `confirmReceipt` 는 정산하지 않고 `사용중` 으로 진입한다. 판매자 `itemPrice` 정산은 `confirmReturn` 시점에 일어난다.
+- 수동/자동 반납 요청 모두 return delivery fee 를 buyer 포인트에서 추가 차감한 뒤 return delivery 를 모집한다.
+
+#### 핵심 endpoints
+```
+POST /api/v1/escrow/applications/internal
+  - 판매자가 채팅방에서 거래대행 생성. 대여 item 이면 rentalEndAt 필수
+
+POST /api/v1/escrow/applications/internal/draft
+  - 판매자가 본인 영역만 입력. 대여 item 이면 rentalEndAt 필수
+
+PATCH /api/v1/escrow/applications/{id}/buyer-info
+  - 구매자 영역 입력. 양쪽 입력 완료 시 fee 산정 + 결제대기 전환
+
+GET  /api/v1/escrow/applications/{id}/payment-preview
+POST /api/v1/escrow/applications/{id}/pay
+  - 본인 share 결제. 양쪽 완료 시 결제완료 + forward delivery 모집
+
+POST /api/v1/escrow/applications/{id}/confirm-receipt
+  - buyer 수령 확인. 판매/나눔은 완료 정산, 대여는 사용중 진입
+
+POST /api/v1/escrow/applications/{id}/request-return
+  - 대여 buyer 수동 반납 요청. 사용중→반납중 + return fee 차감 + return delivery 모집
+
+POST /api/v1/escrow/applications/{id}/confirm-return
+  - 대여 seller 회신 확인. 반납중→완료 + seller/rider 정산 + 보증금 환불
+
+POST /api/v1/escrow/applications/{id}/cancel-request
+POST /api/v1/escrow/applications/{id}/cancel-confirm
+POST /api/v1/escrow/applications/{id}/cancel-withdraw
+  - 대여 사용중 단계 합의 취소
+```
+
+#### 내부 생성 body 추가 필드
+```json
+{
+  "chatRoomId": 7,
+  "itemId": 123,
+  "tradeMode": "INTERNAL",
+  "feePayer": "both",
+  "itemPrice": 30000,
+  "rentalEndAt": "2026-05-20T18:00:00"
+}
+```
+- `rentalEndAt` 은 대여 거래대행에서 필수. 이 시각이 지나도 buyer 가 반납 요청을 누르지 않으면 스케줄러가 자동으로 `request-return` 과 동일한 효과를 수행한다.
+
+### 10.5 ChatRoom
 
 #### ChatRoomResponse
 ```json
@@ -742,7 +832,7 @@ PATCH /api/v1/chat-rooms/{id}/read               → ChatRoomResponse (myUnread=
   - 채팅방 진입 시 / 새 메시지 수신 후 호출
 ```
 
-### 10.5 Message
+### 10.6 Message
 
 #### MessageResponse
 ```json
@@ -770,7 +860,7 @@ GET   /api/v1/chat-rooms/{roomId}/messages?before=&size=30
   - before = 메시지 id (MongoDB ObjectId hex string) → 그 이전 size 개
 ```
 
-### 10.6 Report (신고)
+### 10.7 Report (신고)
 
 ```
 POST /api/v1/items/{itemId}/report             → 201 + { id } (이메일 인증)
@@ -783,7 +873,7 @@ Body:
 }
 ```
 
-### 10.7 Category
+### 10.8 Category
 
 ```
 GET /api/v1/categories                         → 활성 카테고리 트리 (root → children 재귀)
@@ -791,7 +881,7 @@ GET /api/v1/categories/{id}                    → 단건
 ```
 - DB 시드된 트리 (2단 깊이). enum 고정 X.
 
-### 10.8 Banner (메인 배너, 공개)
+### 10.9 Banner (메인 배너, 공개)
 
 ```
 GET /api/v1/banners                            → List<BannerResponse>
@@ -815,7 +905,7 @@ GET /api/v1/banners                            → List<BannerResponse>
 }
 ```
 
-### 10.9 Notice (공지, 공개)
+### 10.10 Notice (공지, 공개)
 
 ```
 GET /api/v1/notices?type=&page=&size=          → Page<NoticeResponse>
@@ -843,7 +933,7 @@ GET /api/v1/notices/{id}                       → NoticeResponse (viewCount +1)
 }
 ```
 
-### 10.10 Notification (본인 알림)
+### 10.11 Notification (본인 알림)
 
 ```
 GET   /api/v1/notifications?page=&size=        → Page<NotificationResponse>
@@ -871,7 +961,7 @@ PATCH /api/v1/notifications/{id}/read          → null  (id 는 String — Mong
 - 신규 알림 발생 시 `/user/queue/notifications` 로 자동 broadcast (§9 참조).
 - 클라이언트는 STOMP 구독 + REST 페이징 둘 다 사용 (재접속/페이지 새로고침 시 REST 로 보강).
 
-### 10.11 UserBlock (사용자 차단)
+### 10.12 UserBlock (사용자 차단)
 
 ```
 POST   /api/v1/blocks                          → null   (Body: { userId })
@@ -891,7 +981,7 @@ GET    /api/v1/blocks?page=&size=              → Page<UserBlockResponse>
 }
 ```
 
-### 10.12 Review (거래 후기)
+### 10.13 Review (거래 후기)
 
 #### endpoints
 ```
@@ -936,7 +1026,7 @@ GET   /api/v1/reviews/pending?page=&size=      → Page<PendingReviewResponse>
 }
 ```
 
-### 10.13 Delivery (배달대행)
+### 10.14 Delivery (배달대행)
 
 #### 상태 머신
 ```
@@ -1068,7 +1158,7 @@ stomp.subscribe(`/topic/delivery/${id}/location`, msg => renderMarker(JSON.parse
 await api.patch(`/deliveries/${id}/complete`); // → 정산완료, 잔액 이동, 위치 캐시 evict
 ```
 
-### 10.14 Inquiry (1:1 문의 — 본인)
+### 10.15 Inquiry (1:1 문의 — 본인)
 
 비공개 1:1 문의. 본인이 작성·삭제, 본인만 조회. 관리자가 답변. 첨부 이미지 최대 5장 (presigned `purpose=SUPPORT`).
 
@@ -1100,7 +1190,7 @@ await api.patch(`/deliveries/${id}/complete`); // → 정산완료, 잔액 이�
 - `PENDING` → 본인 삭제 가능
 - `PROCESSING` / `DONE` → 본인 삭제 불가 (감사 추적). 관리자만 hard-delete 가능.
 
-### 10.15 SupportPost (FAQ / QNA — 공개)
+### 10.16 SupportPost (FAQ / QNA — 공개)
 
 관리자가 작성하는 공개 게시글. 비로그인 포함 누구나 GET 조회.
 
@@ -1309,7 +1399,7 @@ GET /api/v1/admin/stats/dashboard               → AdminDashboardResponse
 
 ### 11.8 AdminInquiry — 1:1 문의 답변/관리
 
-본 도메인은 `Inquiry` (사용자용 §10.14) 와 동일 데이터. 응답 schema 동일.
+본 도메인은 `Inquiry` (사용자용 §10.15) 와 동일 데이터. 응답 schema 동일.
 
 - `GET /api/v1/admin/inquiries?status=&page=&size=` — 전체 목록 (status 필터 선택, 최신순)
 - `GET /api/v1/admin/inquiries/{id}` — 단건
@@ -1323,7 +1413,7 @@ GET /api/v1/admin/stats/dashboard               → AdminDashboardResponse
 - `PUT /api/v1/admin/support/posts/{id}` — 전체 수정 (body 동일)
 - `DELETE /api/v1/admin/support/posts/{id}` — hard delete
 
-조회는 사용자 endpoint (`GET /api/v1/support/posts`, §10.15) 를 그대로 사용.
+조회는 사용자 endpoint (`GET /api/v1/support/posts`, §10.16) 를 그대로 사용.
 
 ### 11.10 admin 호출 시 흔한 함정
 
@@ -1413,7 +1503,8 @@ PM·프론트 합의 후 본 문서 갱신 + `application-prod.yml` 환경변수
 
 ## 17. 변경 이력
 
-- **2026-05-03 (라운드 7)** — 고객지원 도메인 추가: §10.14 Inquiry / §10.15 SupportPost (FAQ·QNA), §11.8 AdminInquiry / §11.9 AdminSupportPost. presigned `purpose=SUPPORT` 추가, ErrorCode `INQUIRY_NOT_FOUND/FORBIDDEN/INVALID_STATE` + `SUPPORT_POST_NOT_FOUND` 추가. §11.8 흔한 함정 → §11.10.
+- **2026-05-14 (라운드 14)** — 거래대행 대여 lifecycle 추가: `사용중/반납중`, `request-return/confirm-return`, `rentalEndAt` 자동 반납, 보증금 hold/refund, seller/itemPrice 정산, return fee 차감. Toss webhook signature/timestamp 헤더와 processed_at 보류 정책 반영.
+- **2026-05-03 (라운드 7)** — 고객지원 도메인 추가: §10.15 Inquiry / §10.16 SupportPost (FAQ·QNA), §11.8 AdminInquiry / §11.9 AdminSupportPost. presigned `purpose=SUPPORT` 추가, ErrorCode `INQUIRY_NOT_FOUND/FORBIDDEN/INVALID_STATE` + `SUPPORT_POST_NOT_FOUND` 추가. §11.8 흔한 함정 → §11.10.
 - **2026-05-03 (라운드 6)** — §11 관리자(Admin) 영역 신설 — AdminAuth/User/Banner/Notice/Report/Withdrawal/Stats 7개 endpoint group + Dashboard schema. 페이징/환경/트러블슈팅 §12~17 재번호.
 - **2026-05-03 (라운드 5 보강)** — §10 도메인 schema 누락분 추가 (Banner/Notice/Notification/UserBlock/Review/Delivery 6개).
 - **2026-05-03 (라운드 5)** — 채팅 도메인 schema 정확성 보강, STOMP destination 잘못된 매핑 수정, Item/ChatRoom 부분 편집 endpoint 추가, 도메인 schema 통합 §10 신설.

@@ -39,6 +39,8 @@
 - **AWS IAM**: S3 PutObject/GetObject/DeleteObject/CopyObject 권한 (특정 버킷 한정)
 - **토스페이먼츠**: 운영 키 (테스트 키 X). webhook secret 도 콘솔에서 발급
   - webhook URL: `https://{백엔드 도메인}/api/v1/payments/webhook/toss`
+  - `.env.prod` 에 `TOSS_WEBHOOK_SECRET` 필수 주입. 미주입 시 백엔드가 webhook signature 검증을 비활성화하므로 운영 금지
+  - Toss webhook 요청 헤더 `tosspayments-webhook-transmission-id`, `tosspayments-webhook-signature`, `tosspayments-webhook-timestamp` 가 nginx/app 까지 보존돼야 함
 - **SMTP**: Gmail App Password / AWS SES / Naver SMTP 중 택
 
 ---
@@ -155,6 +157,9 @@ server {
         proxy_set_header   X-Real-IP         $remote_addr;
         proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   Tosspayments-Webhook-Transmission-Id $http_tosspayments_webhook_transmission_id;
+        proxy_set_header   Tosspayments-Webhook-Signature       $http_tosspayments_webhook_signature;
+        proxy_set_header   Tosspayments-Webhook-Timestamp       $http_tosspayments_webhook_timestamp;
         proxy_read_timeout 30s;
     }
 
@@ -252,6 +257,7 @@ docker exec sseulang-mongo mongodump \
 | `503 from nginx` | app 컨테이너 healthy 안 됐거나 포트 차이. `docker logs sseulang-app` 확인 |
 | `Cookie SameSite=Strict 인데 OAuth 쿠키 안 박힘` | 외부 redirect 후 첫 요청 — Lax 가 아니면 누락. SDK redirect URI 도메인이 동일 site 인지 확인 |
 | Toss webhook 타임아웃 | nginx `proxy_read_timeout` ≥ 30s. 토스 default 30s 재시도 |
+| Toss webhook 401 `PAYMENT_WEBHOOK_SIGNATURE_INVALID` | `TOSS_WEBHOOK_SECRET` 값, raw body 변형 여부, signature/timestamp 헤더 proxy 보존 여부 확인 |
 
 ---
 
