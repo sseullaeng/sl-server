@@ -394,6 +394,30 @@ class TransactionApplicationServiceTest {
         TransactionResult r = service.getById(txId, BUYER);
         assertThat(r.price()).isEqualTo(99_997L);
         assertThat(r.deposit()).isEqualTo(36_000L);
+        // FE #5 — 원본 % snapshot 보존. 청구서 표기용.
+        assertThat(r.depositOriginalPercent()).isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("create AMOUNT deposit_depositOriginalPercent=null")
+    void create_amount_deposit_percent_null() {
+        Item rental = itemRepo.save(Item.createMulti(
+                SELLER, null, "대여물건", "설명", java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 10_000L, DepositType.AMOUNT, RentalUnit.일, "서울"
+        ));
+        com.sseulang.domain.chat.domain.ChatRoom room =
+                com.sseulang.domain.chat.domain.ChatRoom.openFor(rental.getId(), BUYER, SELLER, TradeType.대여);
+        Long roomId = chatRoomRepo.save(room).getId();
+
+        Long txId = service.create(new TransactionCreateCommand(
+                rental.getId(), SELLER, roomId,
+                java.time.LocalDateTime.now().plusDays(1),
+                java.time.LocalDateTime.now().plusDays(2)
+        ));
+
+        TransactionResult r = service.getById(txId, BUYER);
+        assertThat(r.deposit()).isEqualTo(10_000L);
+        assertThat(r.depositOriginalPercent()).isNull();
     }
 
     @Test

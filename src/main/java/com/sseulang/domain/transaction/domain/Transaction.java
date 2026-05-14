@@ -57,6 +57,9 @@ public class Transaction extends BaseEntity {
     @Column(name = "deposit")
     private Long deposit;
 
+    @Column(name = "deposit_original_percent")
+    private Integer depositOriginalPercent;
+
     @Column(name = "rental_start")
     private LocalDateTime rentalStart;
 
@@ -108,6 +111,23 @@ public class Transaction extends BaseEntity {
             LocalDateTime rentalEnd,
             Long chatRoomId
     ) {
+        return create(itemId, sellerId, buyerId, tradeType, price, deposit,
+                null, rentalStart, rentalEnd, chatRoomId);
+    }
+
+    // depositOriginalPercent: PERCENT 환산 시 원본 % snapshot. AMOUNT/없음은 null.
+    public static Transaction create(
+            Long itemId,
+            Long sellerId,
+            Long buyerId,
+            TradeType tradeType,
+            long price,
+            Long deposit,
+            Integer depositOriginalPercent,
+            LocalDateTime rentalStart,
+            LocalDateTime rentalEnd,
+            Long chatRoomId
+    ) {
         if (itemId == null || itemId <= 0) {
             throw new IllegalArgumentException("itemId 는 양수여야 합니다");
         }
@@ -130,6 +150,9 @@ public class Transaction extends BaseEntity {
         if (chatRoomId != null && chatRoomId <= 0) {
             throw new IllegalArgumentException("chatRoomId 는 양수여야 합니다");
         }
+        if (depositOriginalPercent != null && (depositOriginalPercent < 1 || depositOriginalPercent > 100)) {
+            throw new IllegalArgumentException("depositOriginalPercent 는 1~100 범위여야 합니다");
+        }
         validateRentalFields(tradeType, deposit, rentalStart, rentalEnd);
 
         Transaction t = new Transaction();
@@ -139,6 +162,7 @@ public class Transaction extends BaseEntity {
         t.tradeType = tradeType;
         t.price = price;
         t.deposit = deposit;
+        t.depositOriginalPercent = depositOriginalPercent;
         t.rentalStart = rentalStart;
         t.rentalEnd = rentalEnd;
         t.chatRoomId = chatRoomId;

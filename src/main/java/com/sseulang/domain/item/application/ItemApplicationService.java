@@ -327,12 +327,18 @@ public class ItemApplicationService {
         if (item.getStatus() != ItemStatus.판매중) {
             throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
         }
+        boolean isRental = item.getTradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여);
+        Integer depositOriginalPercent = (isRental
+                && item.getDepositType() == com.sseulang.domain.item.domain.DepositType.PERCENT
+                && item.getDeposit() != null)
+                ? item.getDeposit().intValue() : null;
         return new ItemForTransactionResult(
                 item.getId(), item.getSellerId(),
                 item.getTradeTypes(),
                 item.getSalePrice(), item.getRentalPrice(),
-                item.getTradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여) ? item.getDepositType() : null,
-                item.computeDepositAmount()
+                isRental ? item.getDepositType() : null,
+                item.computeDepositAmount(),
+                depositOriginalPercent
         );
     }
 

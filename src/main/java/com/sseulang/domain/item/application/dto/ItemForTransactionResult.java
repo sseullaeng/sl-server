@@ -12,7 +12,9 @@ public record ItemForTransactionResult(
         Long salePrice,
         Long rentalPrice,
         DepositType depositType,
-        Long deposit
+        Long deposit,
+        // PERCENT 보증금일 때 원본 % 값(1~100). AMOUNT/없음은 null. Tx 생성 시 snapshot 으로 보존.
+        Integer depositOriginalPercent
 ) {
     public Long priceFor(TradeType mode) {
         if (mode == null || !tradeTypes.contains(mode)) {

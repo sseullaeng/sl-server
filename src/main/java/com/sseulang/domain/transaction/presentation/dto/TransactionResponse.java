@@ -20,7 +20,13 @@ public record TransactionResponse(
         Long escrowApplicationId,
         TradeType tradeType,
         @Schema(example = "1200000") long price,
-        @Schema(example = "100000", description = "대여 보증금 (판매/나눔은 null)") Long deposit,
+        @Schema(example = "100000", description = "대여 보증금 (판매/나눔은 null). PERCENT 였으면 환산 후 원 단위.") Long deposit,
+        @Schema(example = "30",
+                description = "PERCENT 보증금일 때 원본 % snapshot (1~100). AMOUNT/없음은 null. "
+                        + "청구서에 \"rentalPrice/salePrice 의 N% = X원\" 식으로 표기 가능. "
+                        + "Item 가격이 거래 후 변경돼도 거래 시점 값 보존.",
+                nullable = true)
+        Integer depositOriginalPercent,
         LocalDateTime rentalStart,
         LocalDateTime rentalEnd,
         TransactionStatus status,
@@ -43,6 +49,7 @@ public record TransactionResponse(
                 r.id(), r.itemId(), r.sellerId(), r.buyerId(),
                 r.escrowApplicationId(),
                 r.tradeType(), r.price(), r.deposit(),
+                r.depositOriginalPercent(),
                 r.rentalStart(), r.rentalEnd(),
                 r.status(),
                 r.reservedAt(),

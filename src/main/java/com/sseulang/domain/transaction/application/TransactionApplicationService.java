@@ -102,6 +102,7 @@ public class TransactionApplicationService {
             throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
         }
         Long deposit = mode == com.sseulang.domain.item.domain.TradeType.대여 ? info.deposit() : null;
+        Integer depositPct = mode == com.sseulang.domain.item.domain.TradeType.대여 ? info.depositOriginalPercent() : null;
 
         Transaction tx = Transaction.create(
                 info.itemId(),
@@ -110,6 +111,7 @@ public class TransactionApplicationService {
                 mode,
                 price,
                 deposit,
+                depositPct,
                 cmd.rentalStart(),
                 cmd.rentalEnd(),
                 cmd.chatRoomId()
@@ -392,6 +394,7 @@ public class TransactionApplicationService {
                 com.sseulang.domain.item.domain.TradeType.대여,
                 rentalPrice,
                 info.deposit(),
+                info.depositOriginalPercent(),
                 rentalStart,
                 rentalEnd,
                 chatRoomId
