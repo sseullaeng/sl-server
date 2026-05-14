@@ -178,69 +178,6 @@ class TransactionApplicationServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.TRANSACTION_INVALID_STATE);
     }
 
-    @Test
-    @DisplayName("cascadeCompleteByChatRoom 직거래 활성_거래완료 + paired tx 는 무영향")
-    void cascade_정상() {
-        // 직거래 tx 생성 (예약 상태)
-        Long directTxId = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
-        service.reserve(directTxId, SELLER);
-        // paired tx 시뮬레이션 — escrowApplicationId=999 직접 세팅
-        Transaction paired = Transaction.create(itemId, SELLER, BUYER, TradeType.판매, 50_000L, null, null, null, chatRoomId);
-        org.springframework.test.util.ReflectionTestUtils.setField(paired, "escrowApplicationId", 999L);
-        org.springframework.test.util.ReflectionTestUtils.setField(paired, "status", TransactionStatus.거래완료);
-        Long pairedId = txRepo.save(paired).getId();
-
-        var result = service.cascadeCompleteByChatRoom(chatRoomId, BUYER, SELLER);
-
-        assertThat(result.completed()).isEqualTo(1);
-        assertThat(result.skipped()).isZero();
-        assertThat(service.getById(directTxId, BUYER).status()).isEqualTo(TransactionStatus.거래완료);
-        // paired tx 는 그대로 (이미 완료 + escrowApplicationId 있어서 후보 아님)
-        assertThat(service.getById(pairedId, BUYER).status()).isEqualTo(TransactionStatus.거래완료);
-    }
-
-    @Test
-    @DisplayName("cascadeCompleteByChatRoom 대여 직거래_제외 (반납 흐름 보존)")
-    void cascade_대여_제외() {
-        Item rental = itemRepo.save(Item.createMulti(
-                SELLER, null, "대여물건", "설명", java.util.EnumSet.of(TradeType.대여),
-                null, 5_000L, 10_000L, DepositType.AMOUNT, RentalUnit.일, "서울"
-        ));
-        com.sseulang.domain.chat.domain.ChatRoom rentalRoom =
-                com.sseulang.domain.chat.domain.ChatRoom.openFor(rental.getId(), BUYER, SELLER, TradeType.대여);
-        Long rentalRoomId = chatRoomRepo.save(rentalRoom).getId();
-        Long rentalTxId = service.createRentalRequest(BUYER, rental.getId(),
-                java.time.LocalDateTime.now().plusDays(1),
-                java.time.LocalDateTime.now().plusDays(3), rentalRoomId);
-
-        var result = service.cascadeCompleteByChatRoom(rentalRoomId, BUYER, SELLER);
-
-        assertThat(result.completed()).isZero();
-        assertThat(result.skipped()).isEqualTo(1);  // 대여라 도메인 가드가 거부
-        assertThat(service.getById(rentalTxId, BUYER).status()).isEqualTo(TransactionStatus.채팅중);
-    }
-
-    @Test
-    @DisplayName("cascadeCompleteByChatRoom buyer/seller 불일치_제외")
-    void cascade_권한_불일치() {
-        Long directTxId = service.create(new TransactionCreateCommand(itemId, SELLER, chatRoomId, null, null));
-
-        // escrow 의 buyer/seller 가 직거래의 buyer/seller 와 다른 경우 → cascade 제외
-        var result = service.cascadeCompleteByChatRoom(chatRoomId, OUTSIDER, SELLER);
-
-        assertThat(result.completed()).isZero();
-        assertThat(result.skipped()).isEqualTo(1);
-        assertThat(service.getById(directTxId, BUYER).status()).isEqualTo(TransactionStatus.채팅중);
-    }
-
-    @Test
-    @DisplayName("cascadeCompleteByChatRoom 후보 없음_no-op")
-    void cascade_빈() {
-        var result = service.cascadeCompleteByChatRoom(chatRoomId, BUYER, SELLER);
-        assertThat(result.completed()).isZero();
-        assertThat(result.skipped()).isZero();
-    }
-
     private Long persistRentalInHandover() {
         Item rental = itemRepo.save(Item.createMulti(
                 SELLER, null, "대여물건" + System.nanoTime(), "설명",

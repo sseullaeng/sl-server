@@ -70,12 +70,14 @@ class EscrowApplicationServiceTest {
                 mock(com.sseulang.domain.item.application.ItemApplicationService.class);
         com.sseulang.domain.transaction.application.TransactionApplicationService txAppService =
                 mock(com.sseulang.domain.transaction.application.TransactionApplicationService.class);
+        com.sseulang.domain.transaction.application.TransactionCascadeService txCascadeService =
+                mock(com.sseulang.domain.transaction.application.TransactionCascadeService.class);
         com.sseulang.domain.notification.application.NotificationApplicationService notifService =
                 mock(com.sseulang.domain.notification.application.NotificationApplicationService.class);
         service = new EscrowApplicationService(
                 linkRepo, appRepo, settingsRepo,
                 userService, pointService, deliveryRepo, eventPublisher,
-                chatRoomService, itemAppService, txAppService, notifService,
+                chatRoomService, itemAppService, txAppService, txCascadeService, notifService,
                 24
         );
     }

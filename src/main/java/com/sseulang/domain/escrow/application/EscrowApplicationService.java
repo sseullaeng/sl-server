@@ -60,6 +60,7 @@ public class EscrowApplicationService {
     private final com.sseulang.domain.chat.application.ChatRoomApplicationService chatRoomApplicationService;
     private final com.sseulang.domain.item.application.ItemApplicationService itemApplicationService;
     private final com.sseulang.domain.transaction.application.TransactionApplicationService transactionApplicationService;
+    private final com.sseulang.domain.transaction.application.TransactionCascadeService transactionCascadeService;
     private final com.sseulang.domain.notification.application.NotificationApplicationService notificationApplicationService;
     private final int linkExpiryHours;
 
@@ -74,6 +75,7 @@ public class EscrowApplicationService {
             com.sseulang.domain.chat.application.ChatRoomApplicationService chatRoomApplicationService,
             com.sseulang.domain.item.application.ItemApplicationService itemApplicationService,
             com.sseulang.domain.transaction.application.TransactionApplicationService transactionApplicationService,
+            com.sseulang.domain.transaction.application.TransactionCascadeService transactionCascadeService,
             com.sseulang.domain.notification.application.NotificationApplicationService notificationApplicationService,
             @Value("${app.escrow.link.expiry-hours:24}") int linkExpiryHours
     ) {
@@ -87,6 +89,7 @@ public class EscrowApplicationService {
         this.chatRoomApplicationService = chatRoomApplicationService;
         this.itemApplicationService = itemApplicationService;
         this.transactionApplicationService = transactionApplicationService;
+        this.transactionCascadeService = transactionCascadeService;
         this.notificationApplicationService = notificationApplicationService;
         this.linkExpiryHours = linkExpiryHours;
     }
@@ -827,9 +830,9 @@ public class EscrowApplicationService {
                 app.getSettledAt() != null ? app.getSettledAt() : java.time.LocalDateTime.now()
         );
         // B-5: 같은 chatRoom 의 직거래(non-paired) 활성 tx 일괄 거래완료. zombie 제거.
-        // 대여 / buyer-seller 불일치 / 종료 상태는 도메인 가드로 자동 스킵. row 단위 try-catch (한 건 실패가 settle 롤백 안 시킴).
+        // 별도 컴포넌트(self-invocation 회피) — 각 row REQUIRES_NEW 로 격리.
         if (app.getChatRoomId() != null) {
-            transactionApplicationService.cascadeCompleteByChatRoom(
+            transactionCascadeService.cascadeCompleteByChatRoom(
                     app.getChatRoomId(), app.getBuyerId(), app.getSellerId());
         }
     }
