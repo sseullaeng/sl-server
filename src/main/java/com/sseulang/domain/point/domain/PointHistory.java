@@ -45,6 +45,9 @@ public class PointHistory {
     @Column(name = "reference_id")
     private Long referenceId;
 
+    @Column(name = "overdue_record_id")
+    private Long overdueRecordId;
+
     @Column(name = "description", length = 255)
     private String description;
 
@@ -130,9 +133,10 @@ public class PointHistory {
                 && type != PointHistoryType.판매정산
                 && type != PointHistoryType.환불
                 && type != PointHistoryType.배달정산
-                && type != PointHistoryType.거래환불) {
+                && type != PointHistoryType.거래환불
+                && type != PointHistoryType.연체몰수) {
             throw new IllegalArgumentException(
-                    "recordCredit 은 충전 / 판매정산 / 환불 / 배달정산 / 거래환불 type 만 허용: " + type);
+                    "recordCredit 은 충전 / 판매정산 / 환불 / 배달정산 / 거래환불 / 연체몰수 type 만 허용: " + type);
         }
     }
 
@@ -141,9 +145,10 @@ public class PointHistory {
                 && type != PointHistoryType.출금
                 && type != PointHistoryType.환불
                 && type != PointHistoryType.배달결제
-                && type != PointHistoryType.거래보관) {
+                && type != PointHistoryType.거래보관
+                && type != PointHistoryType.연체채무상환) {
             throw new IllegalArgumentException(
-                    "recordDebit 은 결제 / 출금 / 환불 / 배달결제 / 거래보관 type 만 허용: " + type);
+                    "recordDebit 은 결제 / 출금 / 환불 / 배달결제 / 거래보관 / 연체채무상환 type 만 허용: " + type);
         }
     }
 }
