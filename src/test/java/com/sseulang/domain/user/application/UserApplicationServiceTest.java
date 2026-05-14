@@ -376,7 +376,7 @@ class UserApplicationServiceTest {
         }
 
         @Test
-        @DisplayName("adminSuspend_누적 200 도달_markAutoWithdrawn + 안내 메일 발송")
+        @DisplayName("adminSuspend_누적 200 도달_markWithdrawn + 안내 메일 발송")
         void adminSuspend_도달_자동탈퇴() {
             User u = userRepo.save(User.createSocialUser(SocialProvider.KAKAO, "k-2", EMAIL, "n", null));
             svc.adminSuspend(u.getId(), 199);
@@ -401,7 +401,7 @@ class UserApplicationServiceTest {
             assertThat(mailFake.toCount()).isZero();
 
             u.suspend(300, java.time.LocalDateTime.now());
-            u.markAutoWithdrawn();
+            u.markWithdrawn();
             assertThat(svc.processAutoWithdrawal(u.getId())).as("이미 deleted").isFalse();
             assertThat(mailFake.toCount()).isZero();
         }
@@ -418,10 +418,33 @@ class UserApplicationServiceTest {
             b.suspend(200, java.time.LocalDateTime.now());  // 대상
             c.suspend(500, java.time.LocalDateTime.now());  // 대상
             d.suspend(300, java.time.LocalDateTime.now());
-            d.markAutoWithdrawn();                            // 이미 처리됨
+            d.markWithdrawn();                                // 이미 처리됨
 
             assertThat(svc.findAutoWithdrawTargetIds(100))
                     .containsExactlyInAnyOrder(b.getId(), c.getId());
+        }
+
+        @Test
+        @DisplayName("adminForceWithdraw_정상_즉시 탈퇴 + RT revoke + 메일 X")
+        void adminForceWithdraw_정상() {
+            User u = userRepo.save(User.createSocialUser(SocialProvider.KAKAO, "k-fw", EMAIL, "n", null));
+            assertThat(u.isDeleted()).isFalse();
+
+            svc.adminForceWithdraw(u.getId(), "다중 신고 누적");
+
+            assertThat(u.isDeleted()).isTrue();
+            assertThat(mailFake.toCount()).as("강제 탈퇴는 자동 탈퇴 메일 X").isZero();
+        }
+
+        @Test
+        @DisplayName("adminForceWithdraw_이미 탈퇴된 user_USER_ALREADY_WITHDRAWN")
+        void adminForceWithdraw_이미탈퇴() {
+            User u = userRepo.save(User.createSocialUser(SocialProvider.KAKAO, "k-fw2", EMAIL, "n", null));
+            u.markWithdrawn();
+
+            assertThatThrownBy(() -> svc.adminForceWithdraw(u.getId(), null))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.USER_ALREADY_WITHDRAWN);
         }
     }
 

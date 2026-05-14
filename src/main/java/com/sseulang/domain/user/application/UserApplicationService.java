@@ -298,7 +298,7 @@ public class UserApplicationService {
         u.suspend(days, java.time.LocalDateTime.now(clock));
         refreshTokenStore.revokeAll(USER_ROLE, userId);
         if (u.isAutoWithdrawTarget()) {
-            u.markAutoWithdrawn();
+            u.markWithdrawn();
             sendAutoWithdrawnNotice(u);
         }
     }
@@ -333,10 +333,22 @@ public class UserApplicationService {
         if (u == null || !u.isAutoWithdrawTarget()) {
             return false;
         }
-        u.markAutoWithdrawn();
+        u.markWithdrawn();
         refreshTokenStore.revokeAll(USER_ROLE, userId);
         sendAutoWithdrawnNotice(u);
         return true;
+    }
+
+    @Transactional
+    public void adminForceWithdraw(Long userId, String reason) {
+        User u = getById(userId);
+        if (u.isDeleted()) {
+            throw new BusinessException(ErrorCode.USER_ALREADY_WITHDRAWN);
+        }
+        u.markWithdrawn();
+        refreshTokenStore.revokeAll(USER_ROLE, userId);
+        log.info("[admin-withdraw] userId={} email={} reason={}",
+                userId, u.email().value(), reason == null ? "" : reason);
     }
 
     

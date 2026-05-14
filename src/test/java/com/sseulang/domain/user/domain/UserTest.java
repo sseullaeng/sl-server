@@ -134,7 +134,7 @@ class UserTest {
     void isAutoWithdrawTarget_이미_탈퇴() {
         User u = User.createSocialUser(SocialProvider.KAKAO, "k-5", EMAIL, "n", null);
         u.suspend(250, LocalDateTime.now());
-        u.markAutoWithdrawn();
+        u.markWithdrawn();
         assertThat(u.isDeleted()).isTrue();
         assertThat(u.isAutoWithdrawTarget()).isFalse();
     }

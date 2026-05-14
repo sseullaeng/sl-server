@@ -5,6 +5,7 @@ import com.sseulang.domain.user.application.dto.AdminUserSearchCriteria;
 import com.sseulang.domain.user.domain.UserStatus;
 import com.sseulang.domain.user.presentation.dto.AdminUserResponse;
 import com.sseulang.domain.user.presentation.dto.UserBlockRequest;
+import com.sseulang.domain.user.presentation.dto.UserForceWithdrawRequest;
 import com.sseulang.domain.user.presentation.dto.UserSuspendRequest;
 import com.sseulang.global.common.ApiResponse;
 import com.sseulang.global.common.PageResponse;
@@ -84,6 +85,19 @@ public class AdminUserController {
     @DeleteMapping("/{id}/suspend")
     public ApiResponse<Void> unsuspend(@PathVariable("id") Long id) {
         userService.adminUnsuspend(id);
+        return ApiResponse.ok();
+    }
+
+    @Operation(summary = "[관리자] 강제 탈퇴",
+            description = "관리자 권한으로 회원을 즉시 soft-delete (is_deleted=true) 처리. "
+                    + "Refresh Token 전부 revoke. 진행 중 거래/대행은 별도 처리하지 않음 (counterparty 가 취소). "
+                    + "이미 탈퇴 상태면 409 USER_ALREADY_WITHDRAWN.")
+    @PatchMapping("/{id}/withdraw")
+    public ApiResponse<Void> forceWithdraw(
+            @PathVariable("id") Long id,
+            @Valid @RequestBody(required = false) UserForceWithdrawRequest request
+    ) {
+        userService.adminForceWithdraw(id, request == null ? null : request.reason());
         return ApiResponse.ok();
     }
 }

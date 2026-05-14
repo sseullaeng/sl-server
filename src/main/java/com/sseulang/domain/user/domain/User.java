@@ -260,7 +260,7 @@ public class User extends BaseEntity {
     }
 
     
-    public void markAutoWithdrawn() {
+    public void markWithdrawn() {
         this.deleted = true;
     }
 
