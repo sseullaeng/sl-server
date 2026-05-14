@@ -130,22 +130,22 @@ class FileApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("issueForUser PROFILE/ITEM 만 허용")
+    @DisplayName("issueForUser PROFILE/ITEM/SUPPORT/ESCROW/MESSAGE 허용")
     void issueForUser_화이트리스트() {
         assertThat(service.issueForUser(FilePurpose.PROFILE, OWNER, List.of(jpeg()))).hasSize(1);
         assertThat(service.issueForUser(FilePurpose.ITEM, OWNER, List.of(jpeg()))).hasSize(1);
+        assertThat(service.issueForUser(FilePurpose.SUPPORT, OWNER, List.of(jpeg()))).hasSize(1);
+        assertThat(service.issueForUser(FilePurpose.ESCROW, OWNER, List.of(jpeg()))).hasSize(1);
+        assertThat(service.issueForUser(FilePurpose.MESSAGE, OWNER, List.of(jpeg()))).hasSize(1);
     }
 
     @Test
-    @DisplayName("issueForUser NOTICE/BANNER/MESSAGE_FORBIDDEN")
+    @DisplayName("issueForUser NOTICE/BANNER_FORBIDDEN (관리자 도메인 전용)")
     void issueForUser_관리자_도메인_거부() {
         assertThatThrownBy(() -> service.issueForUser(FilePurpose.NOTICE, OWNER, List.of(jpeg())))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.FORBIDDEN);
         assertThatThrownBy(() -> service.issueForUser(FilePurpose.BANNER, OWNER, List.of(jpeg())))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.FORBIDDEN);
-        assertThatThrownBy(() -> service.issueForUser(FilePurpose.MESSAGE, OWNER, List.of(jpeg())))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.FORBIDDEN);
     }

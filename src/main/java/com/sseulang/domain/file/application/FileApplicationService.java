@@ -29,7 +29,8 @@ public class FileApplicationService {
             FilePurpose.PROFILE,
             FilePurpose.ITEM,
             FilePurpose.SUPPORT,
-            FilePurpose.ESCROW
+            FilePurpose.ESCROW,
+            FilePurpose.MESSAGE   // 채팅 메시지 이미지 첨부 — 채팅방 참여자 인증은 메시지 send 단계에서 수행
     );
 
     private static final Map<String, String> EXTENSION_BY_CONTENT_TYPE = Map.of(
