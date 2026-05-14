@@ -822,15 +822,7 @@ public class EscrowApplicationService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
         app.requestReturnByBuyer(requesterId);
 
-        // PR9 — return fee 자동 추가 결제. 잔액 부족 시 deduct 가 INSUFFICIENT_POINT 던짐.
-        long returnFee = app.getAppliedDeliveryFee() == null ? 0L : app.getAppliedDeliveryFee();
-        if (returnFee > 0) {
-            pointApplicationService.deduct(
-                    app.getBuyerId(), returnFee,
-                    PointHistoryType.결제, PointReferenceType.ESCROW, app.getId(),
-                    "거래대행 결제 — return 라이더 fee (반납 배달)"
-            );
-        }
+        chargeReturnFee(app);
 
         createReturnDelivery(app, LocalDateTime.now(clock));
         notifyReturnRequested(app,
@@ -853,6 +845,7 @@ public class EscrowApplicationService {
                     .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
             LocalDateTime now = LocalDateTime.now(clock);
             app.autoRequestReturn(now);
+            chargeReturnFee(app);
             createReturnDelivery(app, now);
             notifyReturnRequested(app,
                     "반납 자동 요청됨",
@@ -958,6 +951,8 @@ public class EscrowApplicationService {
         }
         app.markSettledAfterReturn();
 
+        settleSellerItemPrice(app);
+
         // 라이더 보상 — forward + return 양쪽. forward 보상은 confirmReceipt 시점에 settle 안 했으므로 여기서 일괄.
         long deliveryFee = app.getAppliedDeliveryFee() == null ? 0L : app.getAppliedDeliveryFee();
         if (deliveryFee > 0) {
@@ -1061,13 +1056,7 @@ public class EscrowApplicationService {
     
 
     private void settle(EscrowApplication app, Long riderId) {
-        if (app.getTradeMode() == TradeMode.INTERNAL && app.getItemPrice() > 0) {
-            pointApplicationService.credit(
-                    app.getSellerId(), app.getItemPrice(),
-                    PointHistoryType.판매정산, PointReferenceType.ESCROW, app.getId(),
-                    "거래대행 정산 — 판매자 수령"
-            );
-        }
+        settleSellerItemPrice(app);
         if (riderId != null && app.getAppliedDeliveryFee() > 0) {
             pointApplicationService.credit(
                     riderId, app.getAppliedDeliveryFee(),
@@ -1219,5 +1208,28 @@ public class EscrowApplicationService {
         } catch (JsonProcessingException e) {
             return Collections.emptyList();
         }
+    }
+
+    private void chargeReturnFee(EscrowApplication app) {
+        long returnFee = app.getAppliedDeliveryFee() == null ? 0L : app.getAppliedDeliveryFee();
+        if (returnFee <= 0) {
+            return;
+        }
+        pointApplicationService.deduct(
+                app.getBuyerId(), returnFee,
+                PointHistoryType.결제, PointReferenceType.ESCROW, app.getId(),
+                "거래대행 결제 — return 라이더 fee (반납 배달)"
+        );
+    }
+
+    private void settleSellerItemPrice(EscrowApplication app) {
+        if (app.getTradeMode() != TradeMode.INTERNAL || app.getItemPrice() <= 0) {
+            return;
+        }
+        pointApplicationService.credit(
+                app.getSellerId(), app.getItemPrice(),
+                PointHistoryType.판매정산, PointReferenceType.ESCROW, app.getId(),
+                "거래대행 정산 — 판매자 수령"
+        );
     }
 }

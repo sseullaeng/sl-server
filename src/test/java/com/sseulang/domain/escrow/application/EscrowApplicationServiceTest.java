@@ -15,6 +15,8 @@ import com.sseulang.domain.escrow.domain.Volume;
 import com.sseulang.domain.escrow.domain.Weight;
 import com.sseulang.domain.escrow.domain.event.EscrowConfirmedEvent;
 import com.sseulang.domain.point.application.PointApplicationService;
+import com.sseulang.domain.point.domain.PointHistoryType;
+import com.sseulang.domain.point.domain.PointReferenceType;
 import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.domain.user.domain.User;
 import com.sseulang.global.exception.BusinessException;
@@ -546,6 +548,27 @@ class EscrowApplicationServiceTest {
 
         assertThat(app.getStatus()).isEqualTo(EscrowApplicationStatus.반납중);
         assertThat(app.getReturnRequestedAt()).isEqualTo(LocalDateTime.now(clock));
+        verify(pointService).deduct(
+                eq(app.getBuyerId()), eq(app.getAppliedDeliveryFee()),
+                eq(PointHistoryType.결제), eq(PointReferenceType.ESCROW), eq(app.getId()),
+                contains("return 라이더 fee")
+        );
+    }
+
+    @Test
+    @DisplayName("confirmReturn_대여완료_판매자_itemPrice_정산")
+    void confirmReturn_rental_settles_seller_item_price() {
+        EscrowApplication app = rentalApplication(LocalDateTime.of(2026, 5, 13, 8, 0));
+        app.requestReturnByBuyer(app.getBuyerId());
+        appRepo.save(app);
+
+        service.confirmReturn(app.getId(), app.getSellerId());
+
+        verify(pointService).credit(
+                eq(app.getSellerId()), eq(app.getItemPrice()),
+                eq(PointHistoryType.판매정산), eq(PointReferenceType.ESCROW), eq(app.getId()),
+                contains("판매자 수령")
+        );
     }
 
     @Test
