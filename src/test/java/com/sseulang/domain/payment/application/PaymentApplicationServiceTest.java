@@ -61,7 +61,8 @@ class PaymentApplicationServiceTest {
                 new TossWebhookSignatureVerifier(tossProps),
                 new ObjectMapper(),
                 new WebhookPendingRateLimiter(),
-                null  // EscrowApplicationService — Payment 단위 테스트에선 escrow 흐름 호출 X
+                null,  // EscrowApplicationService — Payment 단위 테스트에선 escrow 흐름 호출 X
+                null   // OverdueApplicationService — 미주입 시 skip
         );
         userId = userRepo.save(User.createSocialUser(
                 SocialProvider.KAKAO, "kakao-1", new Email("u1@x.com"), "u1", null
@@ -710,6 +711,7 @@ class PaymentApplicationServiceTest {
                 new TossWebhookSignatureVerifier(signedProps),
                 new ObjectMapper(),
                 new WebhookPendingRateLimiter(),
+                null,
                 null
         );
     }

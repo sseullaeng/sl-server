@@ -48,6 +48,7 @@ public class PaymentApplicationService {
     private final ObjectMapper objectMapper;
     private final WebhookPendingRateLimiter pendingRateLimiter;
     private final com.sseulang.domain.escrow.application.EscrowApplicationService escrowApplicationService;
+    private final com.sseulang.domain.overdue.application.OverdueApplicationService overdueApplicationService;
 
     public PaymentApplicationService(
             PaymentRepository paymentRepository,
@@ -59,7 +60,9 @@ public class PaymentApplicationService {
             TossWebhookSignatureVerifier webhookVerifier,
             ObjectMapper objectMapper,
             WebhookPendingRateLimiter pendingRateLimiter,
-            com.sseulang.domain.escrow.application.EscrowApplicationService escrowApplicationService
+            com.sseulang.domain.escrow.application.EscrowApplicationService escrowApplicationService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            com.sseulang.domain.overdue.application.OverdueApplicationService overdueApplicationService
     ) {
         this.paymentRepository = paymentRepository;
         this.paymentGateway = paymentGateway;
@@ -71,6 +74,7 @@ public class PaymentApplicationService {
         this.objectMapper = objectMapper;
         this.pendingRateLimiter = pendingRateLimiter;
         this.escrowApplicationService = escrowApplicationService;
+        this.overdueApplicationService = overdueApplicationService;
     }
 
     
@@ -197,13 +201,13 @@ public class PaymentApplicationService {
 
     private void applyPaymentConfirmedEffects(Payment payment, String chargeDescription) {
         if (payment.getEscrowApplicationId() != null) {
-            
+
             escrowApplicationService.recordPaymentConfirmed(
                     payment.getEscrowApplicationId(),
                     payment.getUserId()
             );
         } else {
-            
+
             pointApplicationService.credit(
                     payment.getUserId(),
                     payment.getAmount(),
@@ -212,6 +216,34 @@ public class PaymentApplicationService {
                     payment.getId(),
                     chargeDescription
             );
+            // 충전 직후 buyer 의 연체 채무 우선 차감 (PR4 hook). overdueApplicationService 미주입 시 skip.
+            applyOverdueDebtDeduction(payment);
+        }
+    }
+
+    private void applyOverdueDebtDeduction(Payment payment) {
+        if (overdueApplicationService == null) {
+            return;
+        }
+        long debt = userApplicationService.findOverdueDebt(payment.getUserId());
+        if (debt <= 0) {
+            return;
+        }
+        long deduct = Math.min(payment.getAmount(), debt);
+        try {
+            pointApplicationService.deduct(
+                    payment.getUserId(),
+                    deduct,
+                    PointHistoryType.연체채무상환,
+                    PointReferenceType.OVERDUE,
+                    payment.getId(),
+                    "연체 채무 우선 차감"
+            );
+            userApplicationService.decrementOverdueDebt(payment.getUserId(), deduct);
+            overdueApplicationService.recordDebtPayment(payment.getUserId(), deduct);
+        } catch (RuntimeException e) {
+            log.error("[overdue-debt-deduct] 채무 차감 실패 — 충전은 적용됨. paymentId={} userId={} debt={} deduct={} reason={}",
+                    payment.getId(), payment.getUserId(), debt, deduct, e.getMessage(), e);
         }
     }
 

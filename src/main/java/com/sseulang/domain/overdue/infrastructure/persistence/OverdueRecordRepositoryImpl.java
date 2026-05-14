@@ -1,9 +1,12 @@
 package com.sseulang.domain.overdue.infrastructure.persistence;
 
+import com.sseulang.domain.overdue.domain.OverduePhase;
 import com.sseulang.domain.overdue.domain.OverdueRecord;
 import com.sseulang.domain.overdue.domain.OverdueRecordRepository;
 import com.sseulang.domain.overdue.domain.OverdueStatus;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -49,6 +52,19 @@ public class OverdueRecordRepositoryImpl implements OverdueRecordRepository {
             return List.of();
         }
         return jpa.findActiveIds(OverdueStatus.진행중, PageRequest.of(0, limit));
+    }
+
+    @Override
+    public Page<OverdueRecord> searchAdmin(OverdueStatus status, OverduePhase phase, Pageable pageable) {
+        return jpa.searchAdmin(status, phase, pageable);
+    }
+
+    @Override
+    public List<OverdueRecord> findByBuyerIdAndStatusIn(Long buyerId, List<OverdueStatus> statuses) {
+        if (buyerId == null || statuses == null || statuses.isEmpty()) {
+            return List.of();
+        }
+        return jpa.findByBuyerIdAndStatusInOrderByIdDesc(buyerId, statuses);
     }
 
     @Override

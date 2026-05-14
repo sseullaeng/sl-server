@@ -1,5 +1,9 @@
 package com.sseulang.domain.overdue.domain;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
+import java.util.List;
 import java.util.Optional;
 
 public interface OverdueRecordRepository {
@@ -14,7 +18,11 @@ public interface OverdueRecordRepository {
 
     Optional<OverdueRecord> findByEscrowApplicationIdForUpdate(Long escrowApplicationId);
 
-    java.util.List<Long> findActiveIds(int limit);
+    List<Long> findActiveIds(int limit);
+
+    Page<OverdueRecord> searchAdmin(OverdueStatus status, OverduePhase phase, Pageable pageable);
+
+    List<OverdueRecord> findByBuyerIdAndStatusIn(Long buyerId, List<OverdueStatus> statuses);
 
     OverdueRecord save(OverdueRecord record);
 }

@@ -139,6 +139,7 @@ public enum ErrorCode {
 
     // 연체
     OVERDUE_NOT_FOUND(HttpStatus.NOT_FOUND, "연체 기록을 찾을 수 없습니다."),
+    OVERDUE_ALREADY_RESOLVED(HttpStatus.CONFLICT, "이미 종료된 연체 기록입니다."),
 
     PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "요청 본문 크기가 한도를 초과합니다.");
 

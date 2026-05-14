@@ -4,6 +4,7 @@ import com.sseulang.domain.escrow.application.EscrowOverdueQueryService;
 import com.sseulang.domain.escrow.application.dto.EscrowOverdueSnapshot;
 import com.sseulang.domain.notification.application.NotificationApplicationService;
 import com.sseulang.domain.notification.domain.NotificationType;
+import com.sseulang.domain.overdue.domain.OverdueLegalAction;
 import com.sseulang.domain.overdue.domain.OverduePhase;
 import com.sseulang.domain.overdue.domain.OverdueRecord;
 import com.sseulang.domain.overdue.domain.OverdueRecordRepository;
@@ -18,6 +19,8 @@ import com.sseulang.global.exception.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -245,6 +248,84 @@ public class OverdueApplicationService {
             log.error("[overdue] 알림 발송 실패 recordId={} buyerId={} title={} reason={}",
                     record.getId(), record.getBuyerId(), title, e.getMessage(), e);
         }
+    }
+
+    public Page<OverdueRecord> adminSearch(OverdueStatus status, OverduePhase phase, Pageable pageable) {
+        return overdueRecordRepository.searchAdmin(status, phase, pageable);
+    }
+
+    public OverdueRecord adminGet(Long recordId) {
+        return overdueRecordRepository.findById(recordId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.OVERDUE_NOT_FOUND));
+    }
+
+    public List<OverdueRecord> findByBuyer(Long buyerId, List<OverdueStatus> statuses) {
+        return overdueRecordRepository.findByBuyerIdAndStatusIn(buyerId, statuses);
+    }
+
+    @Transactional
+    public void adminMarkLegalAction(Long recordId, OverdueLegalAction action) {
+        OverdueRecord record = overdueRecordRepository.findByIdForUpdate(recordId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.OVERDUE_NOT_FOUND));
+        record.markLegalAction(action);
+        log.warn("[overdue] 관리자 법적 조치 수동 전이 recordId={} action={}", recordId, action);
+        notifyBuyer(record,
+                "[법적조치] 연체 관련 법적 조치 통보",
+                "연체 미해소로 다음 단계의 법적 조치가 진행됩니다 (" + action + ").");
+    }
+
+    @Transactional
+    public void adminResolve(Long recordId, String note) {
+        OverdueRecord record = overdueRecordRepository.findByIdForUpdate(recordId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.OVERDUE_NOT_FOUND));
+        if (record.getStatus() == OverdueStatus.종료) {
+            throw new BusinessException(ErrorCode.OVERDUE_ALREADY_RESOLVED);
+        }
+        long remainingDeposit = record.remainingDepositAmount();
+        if (remainingDeposit > 0 && record.getStatus() == OverdueStatus.진행중) {
+            // 진행중 상태에서 admin 강제 종료 시 잔여 hold 환불
+            userApplicationService.refundHold(record.getBuyerId(), remainingDeposit);
+        }
+        record.markResolved(LocalDateTime.now(clock), note);
+        notifyBuyer(record,
+                "[정산완료] 관리자 처리",
+                "관리자에 의해 연체 건이 정리되었습니다." + (note == null ? "" : " 메모: " + note));
+    }
+
+    @Transactional
+    public boolean recompute(Long recordId) {
+        return advanceDay(recordId, LocalDateTime.now(clock));
+    }
+
+    @Transactional
+    public long recordDebtPayment(Long buyerId, long amount) {
+        if (buyerId == null || amount <= 0) {
+            return 0L;
+        }
+        long remaining = userApplicationService.findOverdueDebt(buyerId);
+        if (remaining < 0) remaining = 0;
+        log.info("[overdue] 채무 차감 buyerId={} amount={} 잔여={}", buyerId, amount, remaining);
+
+        // 활성/정산완료 record 들에 대해 buyer 알림 (대표 1건만, 가장 최근)
+        List<OverdueRecord> records = overdueRecordRepository.findByBuyerIdAndStatusIn(
+                buyerId,
+                List.of(OverdueStatus.진행중, OverdueStatus.정산완료, OverdueStatus.법적조치중)
+        );
+        if (!records.isEmpty()) {
+            OverdueRecord representative = records.get(0);
+            String content = "충전 금액에서 연체 채무 " + amount + "원이 차감되었습니다. 잔여 채무: " + remaining + "원.";
+            notifyBuyer(representative, "[채무상환] 연체 채무 차감", content);
+
+            // 잔여 0 도달 + 정산완료 record 들 자동 종료
+            if (remaining == 0) {
+                for (OverdueRecord r : records) {
+                    if (r.getStatus() == OverdueStatus.정산완료) {
+                        r.markResolved(LocalDateTime.now(clock), "채무 전액 상환으로 자동 종료");
+                    }
+                }
+            }
+        }
+        return remaining;
     }
 
     private void notifyResolvedByReturn(OverdueRecord record, long remainingDeposit) {
