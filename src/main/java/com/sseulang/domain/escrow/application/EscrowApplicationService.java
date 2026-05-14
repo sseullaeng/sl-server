@@ -169,25 +169,45 @@ public class EscrowApplicationService {
             throw new BusinessException(ErrorCode.ESCROW_SELLER_ONLY);
         }
 
-        
+
         Long buyerId = chatRoomApplicationService.findOpponent(cmd.chatRoomId(), cmd.requesterId());
 
-        
+        // V43 — 대여 한정 사전 산정. 자동 itemPrice = rentalPrice × duration.
+        // chatRoom 의 buyer 사전 신청(/rental-request) 기간 우선, 없으면 cmd 값.
+        boolean isRental = itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여);
+        java.time.LocalDateTime resolvedRentalStart = null;
+        java.time.LocalDateTime resolvedRentalEnd = null;
+        long resolvedItemPrice = cmd.itemPrice();
+        if (isRental) {
+            java.util.Optional<com.sseulang.domain.transaction.application.TransactionApplicationService.RentalPeriod> existing =
+                    transactionApplicationService.findActiveRentalPeriodByChatRoom(cmd.chatRoomId());
+            resolvedRentalStart = existing.map(p -> p.start()).orElse(cmd.rentalStartAt());
+            resolvedRentalEnd = existing.map(p -> p.end()).orElse(cmd.rentalEndAt());
+            if (resolvedRentalStart == null || resolvedRentalEnd == null) {
+                throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+            }
+            if (itemInfo.rentalPrice() != null && itemInfo.rentalUnit() != null) {
+                resolvedItemPrice = com.sseulang.domain.escrow.domain.RentalDurationCalculator.expectedItemPrice(
+                        itemInfo.rentalPrice(), resolvedRentalStart, resolvedRentalEnd, itemInfo.rentalUnit()
+                );
+            }
+        }
+
         EscrowFeeSettings settings = feeSettingsRepository.findSingleton();
         BigDecimal calculatedDistance = EscrowFeeCalculator.distanceKm(
                 cmd.pickupLat().doubleValue(), cmd.pickupLng().doubleValue(),
                 cmd.deliveryLat().doubleValue(), cmd.deliveryLng().doubleValue()
         );
         FeeBreakdown calculated = EscrowFeeCalculator.calculate(
-                settings, cmd.tradeMode(), cmd.itemPrice(), calculatedDistance,
+                settings, cmd.tradeMode(), resolvedItemPrice, calculatedDistance,
                 cmd.weight(), cmd.volume(), cmd.fragility()
         );
         EscrowFeeCalculator.verifyTolerance(
                 calculated, cmd.submittedDeliveryFee(), cmd.submittedCommissionFee(), cmd.submittedTotalFee()
         );
 
-        
-        long buyerOwed = computeBuyerOwed(cmd.tradeMode(), cmd.itemPrice(), calculated, cmd.feePayer());
+
+        long buyerOwed = computeBuyerOwed(cmd.tradeMode(), resolvedItemPrice, calculated, cmd.feePayer());
         long sellerOwed = computeSellerOwed(calculated, cmd.feePayer());
         long initiatorShare = sellerOwed;
         long receiverShare = buyerOwed;
@@ -197,7 +217,7 @@ public class EscrowApplicationService {
                 cmd.requesterId(),
                 buyerId,
                 cmd.tradeMode(), cmd.feePayer(),
-                cmd.itemPrice(), cmd.itemDescription(),
+                resolvedItemPrice, cmd.itemDescription(),
                 cmd.pickupAddress(), cmd.pickupLat(), cmd.pickupLng(),
                 cmd.deliveryAddress(), cmd.deliveryLat(), cmd.deliveryLng(),
                 cmd.weight(), cmd.volume(), cmd.fragility(), cmd.deliveryNotes(),
@@ -205,18 +225,10 @@ public class EscrowApplicationService {
                 serializeImageUrls(cmd.imageUrls())
         );
         // PR2 — item.tradeType=대여 면 escrow 도 대여 lifecycle (사용중/반납중) 진입.
-        if (itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
+        if (isRental) {
             app.markAsRental();
-            // V43 — chatRoom 의 활성 대여 Transaction (buyer 가 /rental-request 로 사전 입력) 이 있으면
-            // 그 기간을 우선 사용. seller 는 다시 입력할 필요 없음. 없으면 cmd 값 사용.
-            java.util.Optional<com.sseulang.domain.transaction.application.TransactionApplicationService.RentalPeriod> existing =
-                    transactionApplicationService.findActiveRentalPeriodByChatRoom(cmd.chatRoomId());
-            java.time.LocalDateTime resolvedStart = existing.map(p -> p.start()).orElse(cmd.rentalStartAt());
-            java.time.LocalDateTime resolvedEnd = existing.map(p -> p.end()).orElse(cmd.rentalEndAt());
-            app.markRentalStart(resolvedStart);
-            app.markRentalEnd(resolvedEnd);
-            // V43 — itemPrice 위변조 차단. 백엔드가 item.rentalPrice × duration 으로 산정해 검증.
-            verifyRentalItemPrice(itemInfo, resolvedStart, resolvedEnd, cmd.itemPrice());
+            app.markRentalStart(resolvedRentalStart);
+            app.markRentalEnd(resolvedRentalEnd);
             // PR8 — 보증금 snapshot 저장. 결제 시 hold 대상.
             if (itemInfo.deposit() != null) {
                 app.setRentalDeposit(itemInfo.deposit(), itemInfo.depositOriginalPercent());
@@ -255,28 +267,39 @@ public class EscrowApplicationService {
 
         Long buyerId = chatRoomApplicationService.findOpponent(cmd.chatRoomId(), cmd.requesterId());
 
+        // V43 — 대여 한정. 자동 itemPrice = rentalPrice × duration. chatRoom 사전 신청 기간 우선.
+        boolean isRental = itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여);
+        java.time.LocalDateTime resolvedRentalStart = null;
+        java.time.LocalDateTime resolvedRentalEnd = null;
+        long resolvedItemPrice = cmd.itemPrice();
+        if (isRental) {
+            java.util.Optional<com.sseulang.domain.transaction.application.TransactionApplicationService.RentalPeriod> existing =
+                    transactionApplicationService.findActiveRentalPeriodByChatRoom(cmd.chatRoomId());
+            resolvedRentalStart = existing.map(p -> p.start()).orElse(cmd.rentalStartAt());
+            resolvedRentalEnd = existing.map(p -> p.end()).orElse(cmd.rentalEndAt());
+            if (resolvedRentalStart == null || resolvedRentalEnd == null) {
+                throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
+            }
+            if (itemInfo.rentalPrice() != null && itemInfo.rentalUnit() != null) {
+                resolvedItemPrice = com.sseulang.domain.escrow.domain.RentalDurationCalculator.expectedItemPrice(
+                        itemInfo.rentalPrice(), resolvedRentalStart, resolvedRentalEnd, itemInfo.rentalUnit()
+                );
+            }
+        }
+
         EscrowApplication app = EscrowApplication.createInternalDraft(
                 cmd.chatRoomId(),
                 cmd.requesterId(), buyerId,
                 cmd.tradeMode(), cmd.feePayer(),
-                cmd.itemPrice(), cmd.itemDescription(),
+                resolvedItemPrice, cmd.itemDescription(),
                 cmd.pickupAddress(), cmd.pickupLat(), cmd.pickupLng(),
                 cmd.weight(), cmd.volume(), cmd.fragility(), cmd.deliveryNotes(),
                 serializeImageUrls(cmd.imageUrls())
         );
-        // PR2 — item.tradeType=대여 면 escrow 도 대여 lifecycle (사용중/반납중) 진입.
-        if (itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
+        if (isRental) {
             app.markAsRental();
-            // V43 — chatRoom 의 활성 대여 Transaction (buyer 가 /rental-request 로 사전 입력) 이 있으면
-            // 그 기간을 우선 사용. seller 는 다시 입력할 필요 없음. 없으면 cmd 값 사용.
-            java.util.Optional<com.sseulang.domain.transaction.application.TransactionApplicationService.RentalPeriod> existing =
-                    transactionApplicationService.findActiveRentalPeriodByChatRoom(cmd.chatRoomId());
-            java.time.LocalDateTime resolvedStart = existing.map(p -> p.start()).orElse(cmd.rentalStartAt());
-            java.time.LocalDateTime resolvedEnd = existing.map(p -> p.end()).orElse(cmd.rentalEndAt());
-            app.markRentalStart(resolvedStart);
-            app.markRentalEnd(resolvedEnd);
-            // V43 — itemPrice 위변조 차단. 백엔드가 item.rentalPrice × duration 으로 산정해 검증.
-            verifyRentalItemPrice(itemInfo, resolvedStart, resolvedEnd, cmd.itemPrice());
+            app.markRentalStart(resolvedRentalStart);
+            app.markRentalEnd(resolvedRentalEnd);
             // PR8 — 보증금 snapshot 저장. 결제 시 hold 대상.
             if (itemInfo.deposit() != null) {
                 app.setRentalDeposit(itemInfo.deposit(), itemInfo.depositOriginalPercent());
@@ -616,29 +639,6 @@ public class EscrowApplicationService {
     }
 
 
-
-    /**
-     * V43 — 대여 itemPrice 위변조 차단.
-     *  expected = item.rentalPrice × ceil(duration / item.rentalUnit)
-     *  FE 가 보낸 itemPrice 가 expected 와 다르면 ESCROW_FORM_INVALID.
-     *  itemInfo.rentalPrice 또는 rentalUnit 이 비면 검증 skip (data inconsistency, 기존 item).
-     */
-    private void verifyRentalItemPrice(
-            com.sseulang.domain.item.application.dto.ItemForTransactionResult itemInfo,
-            java.time.LocalDateTime startAt,
-            java.time.LocalDateTime endAt,
-            long submittedItemPrice
-    ) {
-        if (itemInfo.rentalPrice() == null || itemInfo.rentalUnit() == null) {
-            return;
-        }
-        long expected = com.sseulang.domain.escrow.domain.RentalDurationCalculator.expectedItemPrice(
-                itemInfo.rentalPrice(), startAt, endAt, itemInfo.rentalUnit()
-        );
-        if (submittedItemPrice != expected) {
-            throw new BusinessException(ErrorCode.ESCROW_FORM_INVALID);
-        }
-    }
 
     private long computeBuyerOwed(TradeMode mode, long itemPrice, FeeBreakdown fee, FeePayer payer) {
         long feeTotal = fee.deliveryFee() + fee.commissionFee();

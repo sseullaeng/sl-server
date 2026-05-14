@@ -243,12 +243,16 @@ public class ChatRoomApplicationService {
             if (base == null) continue;
             var e = escrowMap.get(roomId);
             if (e != null) {
-                map.put(roomId, base.withEscrow(e.escrowApplicationId(), e.status(), e.deliveryId(), e.transactionId()));
+                map.put(roomId, base.withEscrow(
+                        e.escrowApplicationId(), e.status(), e.deliveryId(), e.transactionId(),
+                        e.rentalStartAt(), e.rentalEndAt()));
                 continue;
             }
             var t = txMap.get(roomId);
             if (t != null) {
-                map.put(roomId, base.withTransaction(t.transactionId(), t.status()));
+                map.put(roomId, base.withTransaction(
+                        t.transactionId(), t.status(),
+                        t.rentalStart(), t.rentalEnd()));
             }
         }
         return map;

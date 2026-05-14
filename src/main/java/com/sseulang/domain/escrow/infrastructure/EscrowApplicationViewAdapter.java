@@ -52,7 +52,8 @@ public class EscrowApplicationViewAdapter implements EscrowApplicationView {
         for (EscrowApplication a : apps) {
             map.put(a.getChatRoomId(),
                     new EscrowApplicationProjection(a.getId(), a.getStatus().name(),
-                            deliveryByApp.get(a.getId()), txByApp.get(a.getId())));
+                            deliveryByApp.get(a.getId()), txByApp.get(a.getId()),
+                            a.getRentalStartAt(), a.getRentalEndAt()));
         }
         return map;
     }

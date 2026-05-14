@@ -1,5 +1,6 @@
 package com.sseulang.domain.chat.domain;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Map;
 
@@ -8,5 +9,11 @@ public interface TransactionView {
 
     Map<Long, TransactionProjection> findActiveByChatRoomIds(Collection<Long> chatRoomIds);
 
-    record TransactionProjection(Long transactionId, String status) { }
+    // V43 — 대여 거래 한정. rentalStart/End 노출하여 FE 가 chat-rooms 응답만으로 기간 표시 가능.
+    record TransactionProjection(
+            Long transactionId,
+            String status,
+            LocalDateTime rentalStart,
+            LocalDateTime rentalEnd
+    ) { }
 }

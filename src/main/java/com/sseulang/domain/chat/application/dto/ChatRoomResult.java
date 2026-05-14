@@ -47,22 +47,29 @@ public record ChatRoomResult(
             // 활성 거래대행 — 없으면 null. INTERNAL 거래대행만.
             Long escrowApplicationId,
             String escrowStatus,
-            Long deliveryId
+            Long deliveryId,
+            // V43 — 대여 거래/거래대행 한정. 비대여 또는 기간 미입력은 null.
+            LocalDateTime rentalStart,
+            LocalDateTime rentalEnd
     ) {
         public static SystemCard from(com.sseulang.domain.chat.domain.ChatRoomCard c) {
             return new SystemCard("Item", c.getTradeMode(), c.getItemId(), c.getItemTitle(),
                     c.getThumbnailUrl(), c.getPrice(),
-                    null, null, null, null, null);
+                    null, null, null, null, null,
+                    null, null);
         }
 
-        public SystemCard withTransaction(Long txId, String status) {
+        public SystemCard withTransaction(Long txId, String status, LocalDateTime rentalStart, LocalDateTime rentalEnd) {
             return new SystemCard("Transaction", tradeMode, itemId, itemTitle, itemThumbnailUrl, price,
-                    txId, status, null, null, null);
+                    txId, status, null, null, null,
+                    rentalStart, rentalEnd);
         }
 
-        public SystemCard withEscrow(Long escrowId, String status, Long deliveryId, Long pairedTransactionId) {
+        public SystemCard withEscrow(Long escrowId, String status, Long deliveryId, Long pairedTransactionId,
+                                     LocalDateTime rentalStart, LocalDateTime rentalEnd) {
             return new SystemCard("EscrowApplication", tradeMode, itemId, itemTitle, itemThumbnailUrl, price,
-                    pairedTransactionId, status, escrowId, status, deliveryId);
+                    pairedTransactionId, status, escrowId, status, deliveryId,
+                    rentalStart, rentalEnd);
         }
     }
     

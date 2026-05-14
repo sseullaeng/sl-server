@@ -24,7 +24,10 @@ public class TransactionViewAdapter implements TransactionView {
         Map<Long, TransactionProjection> map = new HashMap<>();
         for (Transaction t : repository.findLatestNonCanceledByChatRoomIdIn(chatRoomIds)) {
             map.put(t.getChatRoomId(),
-                    new TransactionProjection(t.getId(), t.getStatus().name()));
+                    new TransactionProjection(
+                            t.getId(), t.getStatus().name(),
+                            t.getRentalStart(), t.getRentalEnd()
+                    ));
         }
         return map;
     }
