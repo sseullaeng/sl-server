@@ -237,6 +237,15 @@ public class EscrowApplicationService {
         // PR4 — paired Tx tradeType/보증금 lookup 위해 itemId 보존.
         app.linkItem(cmd.itemId());
         EscrowApplication saved = applicationRepository.save(app);
+
+        notificationApplicationService.notify(
+                buyerId,
+                com.sseulang.domain.notification.domain.NotificationType.거래,
+                "거래대행 draft가 생성되었어요",
+                "거래대행 #" + saved.getId() + " — 수령지를 입력해 주세요.",
+                "ESCROW",
+                saved.getId()
+        );
         return EscrowApplicationResult.from(saved, parseImageUrls(saved.getImageUrls()));
     }
 
@@ -795,6 +804,7 @@ public class EscrowApplicationService {
                     app.getAppliedDeliveryFee(),
                     app.getBuyerId()
             ));
+            notifyEscrowConfirmed(app);
         }
         return app.getStatus();
     }
@@ -833,6 +843,7 @@ public class EscrowApplicationService {
                     app.getAppliedDeliveryFee(),
                     app.getBuyerId()
             ));
+            notifyEscrowConfirmed(app);
         }
         return app.getStatus();
     }
@@ -966,6 +977,7 @@ public class EscrowApplicationService {
             transactionCascadeService.cascadeCompleteByChatRoom(
                     app.getChatRoomId(), app.getBuyerId(), app.getSellerId());
         }
+        notifyEscrowSettled(app);
     }
 
     // PR7 — 요청자가 본인 요청 [철회].
@@ -1056,6 +1068,7 @@ public class EscrowApplicationService {
             transactionCascadeService.cascadeCompleteByChatRoom(
                     app.getChatRoomId(), app.getBuyerId(), app.getSellerId());
         }
+        notifyEscrowSettled(app);
     }
 
     @Transactional
@@ -1069,6 +1082,13 @@ public class EscrowApplicationService {
         //   일반(판매/나눔) → 기존 settle (라이더 보상 + paired Tx + cascade).
         if (app.isRentalMode()) {
             app.enterUsing();
+            notifyIfDistinct(
+                    app.getSellerId(),
+                    app.getBuyerId(),
+                    "구매자가 수령을 확인했어요",
+                    "거래대행 #" + app.getId() + " — 사용중으로 전환됐어요.",
+                    app.getId()
+            );
             return;
         }
 
@@ -1080,6 +1100,7 @@ public class EscrowApplicationService {
             throw new BusinessException(ErrorCode.ESCROW_INVALID_STATE);
         }
         settle(app, riderId);
+        notifyEscrowSettled(app);
     }
 
     
@@ -1129,6 +1150,7 @@ public class EscrowApplicationService {
             transactionCascadeService.cascadeCompleteByChatRoom(
                     app.getChatRoomId(), app.getBuyerId(), app.getSellerId());
         }
+        notifyEscrowSettled(app);
     }
 
     private void createReturnDelivery(EscrowApplication app, LocalDateTime now) {
@@ -1154,6 +1176,49 @@ public class EscrowApplicationService {
                 body,
                 "ESCROW", app.getId()
         );
+    }
+
+    private void notifyEscrowConfirmed(EscrowApplication app) {
+        notifyIfDistinct(
+                app.getBuyerId(),
+                app.getSellerId(),
+                "거래대행 결제가 완료되었어요",
+                "거래대행 #" + app.getId() + " — 라이더 매칭을 진행해요.",
+                app.getId()
+        );
+    }
+
+    private void notifyEscrowSettled(EscrowApplication app) {
+        notifyIfDistinct(
+                app.getBuyerId(),
+                app.getSellerId(),
+                "거래대행이 완료되었어요",
+                "거래대행 #" + app.getId() + " — 정산이 완료되었어요.",
+                app.getId()
+        );
+    }
+
+    private void notifyIfDistinct(Long firstUserId, Long secondUserId, String title, String body, Long linkId) {
+        if (firstUserId != null) {
+            notificationApplicationService.notify(
+                    firstUserId,
+                    com.sseulang.domain.notification.domain.NotificationType.거래,
+                    title,
+                    body,
+                    "ESCROW",
+                    linkId
+            );
+        }
+        if (secondUserId != null && !secondUserId.equals(firstUserId)) {
+            notificationApplicationService.notify(
+                    secondUserId,
+                    com.sseulang.domain.notification.domain.NotificationType.거래,
+                    title,
+                    body,
+                    "ESCROW",
+                    linkId
+            );
+        }
     }
 
     

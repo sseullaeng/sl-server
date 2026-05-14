@@ -17,6 +17,7 @@ import com.sseulang.domain.escrow.domain.event.EscrowConfirmedEvent;
 import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.point.domain.PointHistoryType;
 import com.sseulang.domain.point.domain.PointReferenceType;
+import com.sseulang.domain.notification.application.NotificationApplicationService;
 import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.domain.user.domain.User;
 import com.sseulang.global.exception.BusinessException;
@@ -58,6 +59,7 @@ class EscrowApplicationServiceTest {
     private com.sseulang.domain.chat.application.ChatRoomApplicationService chatRoomService;
     private com.sseulang.domain.item.application.ItemApplicationService itemAppService;
     private com.sseulang.domain.transaction.application.TransactionApplicationService txAppService;
+    private NotificationApplicationService notificationService;
     private Clock clock;
     private List<Object> publishedEvents;
     private ApplicationEventPublisher eventPublisher;
@@ -89,8 +91,7 @@ class EscrowApplicationServiceTest {
         txAppService = mock(com.sseulang.domain.transaction.application.TransactionApplicationService.class);
         com.sseulang.domain.transaction.application.TransactionCascadeService txCascadeService =
                 mock(com.sseulang.domain.transaction.application.TransactionCascadeService.class);
-        com.sseulang.domain.notification.application.NotificationApplicationService notifService =
-                mock(com.sseulang.domain.notification.application.NotificationApplicationService.class);
+        notificationService = mock(NotificationApplicationService.class);
         overdueService = mock(com.sseulang.domain.overdue.application.OverdueApplicationService.class);
         when(transactionManager.getTransaction(any(TransactionDefinition.class)))
                 .thenReturn(new SimpleTransactionStatus());
@@ -99,7 +100,7 @@ class EscrowApplicationServiceTest {
         service = new EscrowApplicationService(
                 linkRepo, appRepo, settingsRepo,
                 userService, pointService, deliveryRepo, eventPublisher,
-                chatRoomService, itemAppService, txAppService, txCascadeService, notifService,
+                chatRoomService, itemAppService, txAppService, txCascadeService, notificationService,
                 overdueService,
                 transactionManager, clock, 24
         );
@@ -599,6 +600,14 @@ class EscrowApplicationServiceTest {
         assertThat(saved.getRentalStartAt()).isEqualTo(rentalStart);
         assertThat(saved.getRentalEndAt()).isEqualTo(rentalEnd);
         verify(chatRoomService).reopenForParticipant(33L, 11L);
+        verify(notificationService).notify(
+                eq(20L),
+                eq(com.sseulang.domain.notification.domain.NotificationType.거래),
+                eq("거래대행 신청이 도착했어요"),
+                eq("닉넴님이 거래대행을 신청했어요. 수령지를 입력해 주세요."),
+                eq("ESCROW"),
+                eq(result.id())
+        );
     }
 
     // ------------------------------- PR6 auto return -------------------------------
@@ -646,6 +655,22 @@ class EscrowApplicationServiceTest {
                 eq(app.getSellerId()), eq(app.getItemPrice()),
                 eq(PointHistoryType.판매정산), eq(PointReferenceType.ESCROW), eq(app.getId()),
                 contains("판매자 수령")
+        );
+        verify(notificationService).notify(
+                eq(app.getBuyerId()),
+                eq(com.sseulang.domain.notification.domain.NotificationType.거래),
+                eq("거래대행이 완료되었어요"),
+                eq("거래대행 #" + app.getId() + " — 정산이 완료되었어요."),
+                eq("ESCROW"),
+                eq(app.getId())
+        );
+        verify(notificationService).notify(
+                eq(app.getSellerId()),
+                eq(com.sseulang.domain.notification.domain.NotificationType.거래),
+                eq("거래대행이 완료되었어요"),
+                eq("거래대행 #" + app.getId() + " — 정산이 완료되었어요."),
+                eq("ESCROW"),
+                eq(app.getId())
         );
     }
 
