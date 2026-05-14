@@ -85,7 +85,11 @@ public class DeliveryRequest extends BaseEntity {
     @Column(name = "escrow_application_id")
     private Long escrowApplicationId;
 
-    
+    // 라운드 14 — 대여 거래대행 양방향. FORWARD=seller→buyer, RETURN=buyer→seller (반환).
+    @Enumerated(EnumType.STRING)
+    @Column(name = "direction", nullable = false)
+    private DeliveryDirection direction = DeliveryDirection.FORWARD;
+
     public static DeliveryRequest createFromEscrow(
             Long requesterId,
             Long escrowApplicationId,
@@ -95,9 +99,24 @@ public class DeliveryRequest extends BaseEntity {
             long fee,
             LocalDateTime now
     ) {
+        return createFromEscrow(requesterId, escrowApplicationId,
+                pickupAddress, dropoffAddress, itemDescription, fee, DeliveryDirection.FORWARD, now);
+    }
+
+    public static DeliveryRequest createFromEscrow(
+            Long requesterId,
+            Long escrowApplicationId,
+            String pickupAddress,
+            String dropoffAddress,
+            String itemDescription,
+            long fee,
+            DeliveryDirection direction,
+            LocalDateTime now
+    ) {
         DeliveryRequest d = create(requesterId, pickupAddress, dropoffAddress, itemDescription,
                 fee, null, null, now);
         d.escrowApplicationId = escrowApplicationId;
+        d.direction = direction == null ? DeliveryDirection.FORWARD : direction;
         return d;
     }
 

@@ -775,6 +775,48 @@ public class EscrowApplicationService {
         app.confirmHandoverBySeller(requesterId);
     }
 
+    // PR3 라운드 14 — 대여 거래대행 buyer [반납요청]. 사용중 → 반납중 + return delivery 자동 생성.
+    @Transactional
+    public void requestReturn(Long applicationId, Long requesterId) {
+        EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        app.requestReturnByBuyer(requesterId);
+        // return delivery 자동 생성 — pickup/dropoff 반대. fee = forward fee 와 동일 (대칭, PR4 에서 결제).
+        com.sseulang.domain.delivery.domain.DeliveryRequest returnDelivery =
+                com.sseulang.domain.delivery.domain.DeliveryRequest.createFromEscrow(
+                        app.getBuyerId(),                       // buyer 가 반환 발신자
+                        app.getId(),
+                        app.getDeliveryAddress(),               // pickup = forward 의 도착지 (buyer 위치)
+                        app.getPickupAddress(),                 // dropoff = forward 의 출발지 (seller 위치)
+                        "반납: " + app.getItemDescription(),
+                        app.getAppliedDeliveryFee() == null ? 0L : app.getAppliedDeliveryFee(),
+                        com.sseulang.domain.delivery.domain.DeliveryDirection.RETURN,
+                        java.time.LocalDateTime.now()
+                );
+        deliveryRepository.save(returnDelivery);
+
+        // seller 알림 — 반환 픽업 도착 안내.
+        notificationApplicationService.notify(
+                app.getSellerId(),
+                com.sseulang.domain.notification.domain.NotificationType.거래,
+                "반납 요청이 도착했어요",
+                "거래대행 #" + app.getId() + " — 라이더가 곧 반환 픽업하러 갑니다.",
+                "ESCROW", app.getId()
+        );
+    }
+
+    // PR3 stub — PR4 에서 보증금 환불/paired Tx/cascade 추가 예정. 현재는 상태 전이만.
+    @Transactional
+    public void confirmReturn(Long applicationId, Long requesterId) {
+        EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ESCROW_NOT_FOUND));
+        if (!app.getSellerId().equals(requesterId)) {
+            throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
+        }
+        app.markSettledAfterReturn();
+        // TODO PR4 — 보증금 환불, return 라이더 보상, paired Tx (대여) 생성, cascade.
+    }
+
     @Transactional
     public void confirmReceipt(Long applicationId, Long requesterId) {
         EscrowApplication app = applicationRepository.findByIdForUpdate(applicationId)

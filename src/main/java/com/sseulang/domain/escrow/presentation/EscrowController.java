@@ -222,4 +222,29 @@ public class EscrowController {
         service.confirmHandoverBySeller(id, userId);
         return ApiResponse.ok();
     }
+
+    @Operation(summary = "buyer 반납 요청 (라운드 14 — 대여 거래대행)",
+            description = "rentalMode 거래대행에서 buyer 만 호출. 사용중 → 반납중 + return delivery 모집 자동 생성. "
+                    + "라이더가 buyer 위치에서 픽업 → seller 위치로 배송. 에러: ESCROW_INVALID_STATE / ESCROW_FORBIDDEN.")
+    @PostMapping("/applications/{id}/request-return")
+    public ApiResponse<Void> requestReturn(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        service.requestReturn(id, userId);
+        return ApiResponse.ok();
+    }
+
+    @Operation(summary = "seller 회신 확인 (라운드 14 — 대여 거래대행)",
+            description = "rentalMode 거래대행에서 seller 만 호출. 반납중 + return delivery 완료 후 호출 가능. "
+                    + "보증금 환불 + return 라이더 보상 + paired Tx (대여) 생성 + cascade 거래완료. "
+                    + "에러: ESCROW_INVALID_STATE / ESCROW_FORBIDDEN.")
+    @PostMapping("/applications/{id}/confirm-return")
+    public ApiResponse<Void> confirmReturn(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        service.confirmReturn(id, userId);
+        return ApiResponse.ok();
+    }
 }
