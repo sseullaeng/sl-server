@@ -204,6 +204,10 @@ public class EscrowApplicationService {
         if (itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
             app.markAsRental();
             app.markRentalEnd(cmd.rentalEndAt());
+            // PR8 — 보증금 snapshot 저장. 결제 시 hold 대상.
+            if (itemInfo.deposit() != null) {
+                app.setRentalDeposit(itemInfo.deposit(), itemInfo.depositOriginalPercent());
+            }
         }
         // PR4 — paired Tx tradeType/보증금 lookup 위해 itemId 보존.
         app.linkItem(cmd.itemId());
@@ -251,6 +255,10 @@ public class EscrowApplicationService {
         if (itemInfo.tradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여)) {
             app.markAsRental();
             app.markRentalEnd(cmd.rentalEndAt());
+            // PR8 — 보증금 snapshot 저장. 결제 시 hold 대상.
+            if (itemInfo.deposit() != null) {
+                app.setRentalDeposit(itemInfo.deposit(), itemInfo.depositOriginalPercent());
+            }
         }
         // PR4 — paired Tx tradeType/보증금 lookup 위해 itemId 보존.
         app.linkItem(cmd.itemId());
@@ -718,7 +726,14 @@ public class EscrowApplicationService {
                 "거래대행 결제 — 본인 분담분"
         );
 
-        
+        // PR8 — 대여 보증금: buyer 가 결제하는 시점에 추가 hold (point_balance → point_hold).
+        // confirmReturn 시 refundHold 로 환원. 사용중 cancel 시 (PR10) 도 환원.
+        if (app.isRentalMode() && app.getDepositAmount() != null && app.getDepositAmount() > 0
+                && payerId.equals(app.getBuyerId())) {
+            userApplicationService.holdForEscrow(app.getBuyerId(), app.getDepositAmount());
+        }
+
+
         if (payerId.equals(app.getInitiatorId())) {
             app.markInitiatorPaid();
         } else {
@@ -757,7 +772,13 @@ public class EscrowApplicationService {
         } else {
             throw new BusinessException(ErrorCode.ESCROW_FORBIDDEN);
         }
-        
+
+        // PR8 — 외부 결제(토스 등) 경유 buyer 결제 시도 보증금 hold.
+        if (app.isRentalMode() && app.getDepositAmount() != null && app.getDepositAmount() > 0
+                && payerId.equals(app.getBuyerId())) {
+            userApplicationService.holdForEscrow(app.getBuyerId(), app.getDepositAmount());
+        }
+
         if (app.getStatus() == EscrowApplicationStatus.결제완료) {
             eventPublisher.publishEvent(new EscrowConfirmedEvent(
                     app.getId(),
@@ -943,6 +964,11 @@ public class EscrowApplicationService {
                 app.getSettledAt() != null ? app.getSettledAt() : java.time.LocalDateTime.now(),
                 paired, deposit, depositPct, null, null
         );
+
+        // PR8 — 보증금 환불 (point_hold → point_balance 복원). atomic UPDATE 한 번.
+        if (app.getDepositAmount() != null && app.getDepositAmount() > 0) {
+            userApplicationService.refundHold(app.getBuyerId(), app.getDepositAmount());
+        }
 
         // cascade — 같은 chatRoom 의 활성 직거래 자동 정리. 대여 직거래는 도메인 가드로 자동 스킵 (반납 흐름 보존).
         if (app.getChatRoomId() != null) {

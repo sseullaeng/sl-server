@@ -172,6 +172,32 @@ class EscrowApplicationTest {
     }
 
     @Test
+    @DisplayName("setRentalDeposit 정상 — rentalMode + 결제 전")
+    void setRentalDeposit_정상() {
+        EscrowApplication a = readyForRentalDraft();
+        a.setRentalDeposit(36_000L, 30);
+        assertThat(a.getDepositAmount()).isEqualTo(36_000L);
+        assertThat(a.getDepositOriginalPercent()).isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("setRentalDeposit rentalMode 아님_IllegalState")
+    void setRentalDeposit_일반거래_거부() {
+        EscrowApplication a = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, 1_062_000L, 0L);
+        assertThatThrownBy(() -> a.setRentalDeposit(36_000L, 30))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("setRentalDeposit 결제 진행 후_IllegalState")
+    void setRentalDeposit_결제후_거부() {
+        EscrowApplication a = readyForUsing();  // 결제 후 진행중
+        assertThatThrownBy(() -> a.setRentalDeposit(36_000L, 30))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     @DisplayName("markRentalEnd rentalMode 아님_거부")
     void markRentalEnd_일반거래_거부() {
         EscrowApplication a = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.buyer,

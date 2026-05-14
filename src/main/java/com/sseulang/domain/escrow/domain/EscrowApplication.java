@@ -203,12 +203,31 @@ public class EscrowApplication extends BaseEntity {
     @Column(name = "item_id")
     private Long itemId;
 
+    // 라운드 14 PR8 — 대여 보증금 snapshot. 결제 시 buyer point_hold 로, confirmReturn 시 환불.
+    @Column(name = "deposit_amount")
+    private Long depositAmount;
+
+    @Column(name = "deposit_original_percent")
+    private Integer depositOriginalPercent;
+
     // INTERNAL escrow 생성 시 호출. EXTERNAL 은 호출 안 함.
     public void linkItem(Long itemId) {
         if (itemId == null || itemId <= 0) {
             throw new IllegalArgumentException("itemId 는 양수여야 합니다");
         }
         this.itemId = itemId;
+    }
+
+    // PR8 — 대여 보증금 snapshot. createInternal 시 Item.computeDepositAmount 결과 저장.
+    public void setRentalDeposit(Long depositAmount, Integer depositOriginalPercent) {
+        if (!this.rentalMode) {
+            throw new IllegalStateException("rentalMode 만 보증금 설정 가능");
+        }
+        if (this.status.isAfterMatching()) {
+            throw new IllegalStateException("결제 진행 후엔 보증금 변경 불가");
+        }
+        this.depositAmount = depositAmount;
+        this.depositOriginalPercent = depositOriginalPercent;
     }
 
     
