@@ -291,6 +291,7 @@ public class User extends BaseEntity {
     
     public UserStatus derivedStatus(LocalDateTime now, int dormantThresholdDays) {
         if (deleted) return UserStatus.WITHDRAWN;
+        if (blocked) return UserStatus.BLOCKED;
         if (isSuspendedAt(now)) return UserStatus.SUSPENDED;
         if (isDormantAt(now, dormantThresholdDays)) return UserStatus.DORMANT;
         return UserStatus.ACTIVE;

@@ -104,18 +104,23 @@ interface UserJpaRepository extends JpaRepository<User, Long> {
                AND (:before IS NULL OR u.created_at <= :before)
                AND (:status IS NULL
                     OR (:status = 'WITHDRAWN' AND u.is_deleted = TRUE)
+                    OR (:status = 'BLOCKED'   AND u.is_deleted = FALSE
+                                              AND u.is_blocked = TRUE)
                     OR (:status = 'SUSPENDED' AND u.is_deleted = FALSE
+                                              AND u.is_blocked = FALSE
                                               AND u.suspended_at IS NOT NULL
                                               AND u.suspend_days IS NOT NULL
                                               AND u.suspend_days > 0
                                               AND DATE_ADD(u.suspended_at, INTERVAL u.suspend_days DAY) > :now)
                     OR (:status = 'DORMANT'   AND u.is_deleted = FALSE
+                                              AND u.is_blocked = FALSE
                                               AND (u.suspended_at IS NULL
                                                    OR u.suspend_days IS NULL
                                                    OR u.suspend_days <= 0
                                                    OR DATE_ADD(u.suspended_at, INTERVAL u.suspend_days DAY) <= :now)
                                               AND COALESCE(u.last_login_at, u.created_at) <= :dormantThreshold)
                     OR (:status = 'ACTIVE'    AND u.is_deleted = FALSE
+                                              AND u.is_blocked = FALSE
                                               AND (u.suspended_at IS NULL
                                                    OR u.suspend_days IS NULL
                                                    OR u.suspend_days <= 0
@@ -131,18 +136,23 @@ interface UserJpaRepository extends JpaRepository<User, Long> {
                AND (:before IS NULL OR u.created_at <= :before)
                AND (:status IS NULL
                     OR (:status = 'WITHDRAWN' AND u.is_deleted = TRUE)
+                    OR (:status = 'BLOCKED'   AND u.is_deleted = FALSE
+                                              AND u.is_blocked = TRUE)
                     OR (:status = 'SUSPENDED' AND u.is_deleted = FALSE
+                                              AND u.is_blocked = FALSE
                                               AND u.suspended_at IS NOT NULL
                                               AND u.suspend_days IS NOT NULL
                                               AND u.suspend_days > 0
                                               AND DATE_ADD(u.suspended_at, INTERVAL u.suspend_days DAY) > :now)
                     OR (:status = 'DORMANT'   AND u.is_deleted = FALSE
+                                              AND u.is_blocked = FALSE
                                               AND (u.suspended_at IS NULL
                                                    OR u.suspend_days IS NULL
                                                    OR u.suspend_days <= 0
                                                    OR DATE_ADD(u.suspended_at, INTERVAL u.suspend_days DAY) <= :now)
                                               AND COALESCE(u.last_login_at, u.created_at) <= :dormantThreshold)
                     OR (:status = 'ACTIVE'    AND u.is_deleted = FALSE
+                                              AND u.is_blocked = FALSE
                                               AND (u.suspended_at IS NULL
                                                    OR u.suspend_days IS NULL
                                                    OR u.suspend_days <= 0

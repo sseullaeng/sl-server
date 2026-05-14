@@ -138,4 +138,37 @@ class UserTest {
         assertThat(u.isDeleted()).isTrue();
         assertThat(u.isAutoWithdrawTarget()).isFalse();
     }
+
+    @Test
+    @DisplayName("derivedStatus_priority_WITHDRAWN > BLOCKED > SUSPENDED > DORMANT > ACTIVE")
+    void derivedStatus_priority() {
+        LocalDateTime now = LocalDateTime.now();
+        int dormantDays = 90;
+
+        User active = User.createSocialUser(SocialProvider.KAKAO, "k-a", EMAIL, "n", null);
+        active.recordLogin(now);
+        assertThat(active.derivedStatus(now, dormantDays)).isEqualTo(com.sseulang.domain.user.domain.UserStatus.ACTIVE);
+
+        User dormant = User.createSocialUser(SocialProvider.KAKAO, "k-d", EMAIL, "n", null);
+        dormant.recordLogin(now.minusDays(100));
+        assertThat(dormant.derivedStatus(now, dormantDays)).isEqualTo(com.sseulang.domain.user.domain.UserStatus.DORMANT);
+
+        User suspended = User.createSocialUser(SocialProvider.KAKAO, "k-s", EMAIL, "n", null);
+        suspended.suspend(7, now);
+        assertThat(suspended.derivedStatus(now, dormantDays)).isEqualTo(com.sseulang.domain.user.domain.UserStatus.SUSPENDED);
+
+        User blocked = User.createSocialUser(SocialProvider.KAKAO, "k-b", EMAIL, "n", null);
+        blocked.suspend(7, now);
+        blocked.block();
+        assertThat(blocked.derivedStatus(now, dormantDays))
+                .as("BLOCKED 가 SUSPENDED 보다 우선")
+                .isEqualTo(com.sseulang.domain.user.domain.UserStatus.BLOCKED);
+
+        User withdrawn = User.createSocialUser(SocialProvider.KAKAO, "k-w", EMAIL, "n", null);
+        withdrawn.block();
+        withdrawn.markWithdrawn();
+        assertThat(withdrawn.derivedStatus(now, dormantDays))
+                .as("WITHDRAWN 이 BLOCKED 보다 우선")
+                .isEqualTo(com.sseulang.domain.user.domain.UserStatus.WITHDRAWN);
+    }
 }
