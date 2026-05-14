@@ -84,6 +84,15 @@ public class ItemApplicationService {
         return ItemDetailResult.from(item);
     }
 
+    public String findThumbnailUrl(Long itemId) {
+        if (itemId == null) {
+            return null;
+        }
+        return itemRepository.findById(itemId)
+                .map(Item::getThumbnailUrl)
+                .orElse(null);
+    }
+
     
 
     public Page<ItemSummaryResult> search(ItemSearchCriteria criteria, Pageable pageable, Long viewerId) {

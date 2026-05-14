@@ -6,6 +6,7 @@ import com.sseulang.domain.item.application.dto.ItemForTransactionResult;
 import com.sseulang.domain.point.application.PointApplicationService;
 import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.domain.transaction.application.dto.PendingReviewableResult;
+import com.sseulang.domain.transaction.application.dto.ReviewCardItemResult;
 import com.sseulang.domain.transaction.application.dto.ReviewableTransactionResult;
 import com.sseulang.domain.transaction.application.dto.TransactionCreateCommand;
 import com.sseulang.domain.transaction.application.dto.TransactionResult;
@@ -276,6 +277,12 @@ public class TransactionApplicationService {
         return new ReviewableTransactionResult(tx.getId(), requesterId, revieweeId, tx.getCompletedAt());
     }
 
+    public ReviewCardItemResult findReviewCardItem(Long transactionId) {
+        Transaction tx = findOrThrow(transactionId);
+        String thumbnailUrl = itemApplicationService.findThumbnailUrl(tx.getItemId());
+        return new ReviewCardItemResult(tx.getItemId(), thumbnailUrl);
+    }
+
     
     public java.util.List<com.sseulang.domain.transaction.domain.TransactionRepository.TradeTypeCount>
             countByTradeTypeBetween(java.time.LocalDateTime from, java.time.LocalDateTime to) {
@@ -479,6 +486,7 @@ public class TransactionApplicationService {
         return transactionRepository.findPendingReviewable(userId, since, pageable)
                 .map(tx -> {
                     Long revieweeId = tx.isSeller(userId) ? tx.getBuyerId() : tx.getSellerId();
+                    String thumbnailUrl = itemApplicationService.findThumbnailUrl(tx.getItemId());
                     return new PendingReviewableResult(
                             tx.getId(),
                             tx.getItemId(),
@@ -486,7 +494,8 @@ public class TransactionApplicationService {
                             tx.getTradeType(),
                             tx.getPrice(),
                             tx.getCompletedAt(),
-                            tx.getCompletedAt().plusDays(7)
+                            tx.getCompletedAt().plusDays(7),
+                            thumbnailUrl
                     );
                 });
     }

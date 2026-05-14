@@ -11,5 +11,6 @@ public record PendingReviewableResult(
         TradeType tradeType,
         long price,
         LocalDateTime completedAt,
-        LocalDateTime deadline
+        LocalDateTime deadline,
+        String itemThumbnailUrl
 ) {}

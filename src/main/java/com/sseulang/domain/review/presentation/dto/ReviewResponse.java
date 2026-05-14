@@ -16,6 +16,8 @@ public record ReviewResponse(
         @Schema(example = "5", description = "1~5 — 항상 공개") int rating,
         @Schema(example = "친절하고 빠른 거래", description = "한줄평. 비공개 처리됐고 본인이 아니면 null", nullable = true) String comment,
         @Schema(example = "true", description = "대상자(reviewee)가 토글한 공개 상태. 마스킹된 응답이라도 이 flag 는 원본 그대로 — 본인이 자기 페이지에서 토글 UI 표시용") boolean contentVisible,
+        @Schema(example = "https://...", description = "리뷰 대상 거래의 물품 썸네일 URL", nullable = true)
+        String itemThumbnailUrl,
         LocalDateTime createdAt
 ) {
     public static ReviewResponse from(ReviewResult r) {
@@ -24,6 +26,7 @@ public record ReviewResponse(
                 r.reviewerId(), r.revieweeId(),
                 r.rating(), r.comment(),
                 r.contentVisible(),
+                r.itemThumbnailUrl(),
                 r.createdAt()
         );
     }

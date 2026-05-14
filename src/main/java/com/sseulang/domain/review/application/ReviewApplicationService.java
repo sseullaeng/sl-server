@@ -74,7 +74,10 @@ public class ReviewApplicationService {
 
     public Page<ReviewResult> listReceived(Long revieweeId, Long requesterId, Pageable pageable) {
         return reviewRepository.findByRevieweeId(revieweeId, pageable)
-                .map(ReviewResult::from)
+                .map(review -> ReviewResult.from(
+                        review,
+                        transactionApplicationService.findReviewCardItem(review.getTransactionId()).thumbnailUrl()
+                ))
                 .map(r -> r.masked(requesterId));
     }
 

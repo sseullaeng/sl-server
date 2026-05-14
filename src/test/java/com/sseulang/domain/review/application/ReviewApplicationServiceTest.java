@@ -65,6 +65,7 @@ class ReviewApplicationServiceTest {
         Item item = itemRepo.save(Item.create(
                 SELLER, null, "물건", "설명", 50_000L, null, null, TradeType.판매, null
         ));
+        item.addImage("https://img.test/item-1.jpg", 1, true);
         completedTxId = persistCompletedTransaction(item.getId(), LocalDateTime.now().minusDays(1));
     }
 
@@ -155,6 +156,7 @@ class ReviewApplicationServiceTest {
                 .containsExactlyInAnyOrder(completedTxId);
         // 상대방(reviewee) 는 BUYER
         assertThat(sellerPending.getContent().get(0).revieweeId()).isEqualTo(BUYER);
+        assertThat(sellerPending.getContent().get(0).itemThumbnailUrl()).isEqualTo("https://img.test/item-1.jpg");
     }
 
     @Test
@@ -179,6 +181,7 @@ class ReviewApplicationServiceTest {
         assertThat(pending.getContent()).hasSize(1);
         com.sseulang.domain.transaction.application.dto.PendingReviewableResult r = pending.getContent().get(0);
         assertThat(r.deadline()).isEqualTo(r.completedAt().plusDays(7));
+        assertThat(r.itemThumbnailUrl()).isEqualTo("https://img.test/item-1.jpg");
     }
 
     @Test
@@ -231,14 +234,17 @@ class ReviewApplicationServiceTest {
         var thirdParty = service.listReceived(SELLER, OUTSIDER, org.springframework.data.domain.PageRequest.of(0, 10));
         assertThat(thirdParty.getContent().get(0).comment()).isNull();
         assertThat(thirdParty.getContent().get(0).contentVisible()).isFalse();
+        assertThat(thirdParty.getContent().get(0).itemThumbnailUrl()).isEqualTo("https://img.test/item-1.jpg");
 
         // 작성자(reviewer) view — 항상 원본
         var reviewer = service.listReceived(SELLER, BUYER, org.springframework.data.domain.PageRequest.of(0, 10));
         assertThat(reviewer.getContent().get(0).comment()).isEqualTo("친절");
+        assertThat(reviewer.getContent().get(0).itemThumbnailUrl()).isEqualTo("https://img.test/item-1.jpg");
 
         // 대상자(reviewee) view — 항상 원본
         var reviewee = service.listReceived(SELLER, SELLER, org.springframework.data.domain.PageRequest.of(0, 10));
         assertThat(reviewee.getContent().get(0).comment()).isEqualTo("친절");
+        assertThat(reviewee.getContent().get(0).itemThumbnailUrl()).isEqualTo("https://img.test/item-1.jpg");
     }
 
     private Long persistCompletedTransaction(Long itemId, LocalDateTime completedAt) {

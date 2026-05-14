@@ -12,7 +12,8 @@ public record ReviewResult(
         int rating,
         String comment,
         boolean contentVisible,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String itemThumbnailUrl
 ) {
     public static ReviewResult from(Review r) {
         return new ReviewResult(
@@ -20,7 +21,19 @@ public record ReviewResult(
                 r.getReviewerId(), r.getRevieweeId(),
                 r.getRating(), r.getComment(),
                 r.isContentVisible(),
-                r.getCreatedAt()
+                r.getCreatedAt(),
+                null
+        );
+    }
+
+    public static ReviewResult from(Review r, String itemThumbnailUrl) {
+        return new ReviewResult(
+                r.getId(), r.getTransactionId(),
+                r.getReviewerId(), r.getRevieweeId(),
+                r.getRating(), r.getComment(),
+                r.isContentVisible(),
+                r.getCreatedAt(),
+                itemThumbnailUrl
         );
     }
 
@@ -31,6 +44,6 @@ public record ReviewResult(
         if (isParty || contentVisible) {
             return this;
         }
-        return new ReviewResult(id, transactionId, reviewerId, revieweeId, rating, null, contentVisible, createdAt);
+        return new ReviewResult(id, transactionId, reviewerId, revieweeId, rating, null, contentVisible, createdAt, itemThumbnailUrl);
     }
 }

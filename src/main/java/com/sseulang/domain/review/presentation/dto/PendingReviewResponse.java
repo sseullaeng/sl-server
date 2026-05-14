@@ -14,7 +14,9 @@ public record PendingReviewResponse(
         TradeType tradeType,
         @Schema(example = "1200000") long price,
         LocalDateTime completedAt,
-        @Schema(description = "완료일 + 7일. 이 시간 지나면 작성 불가") LocalDateTime deadline
+        @Schema(description = "완료일 + 7일. 이 시간 지나면 작성 불가") LocalDateTime deadline,
+        @Schema(example = "https://...", description = "리뷰 대상 거래의 물품 썸네일 URL", nullable = true)
+        String itemThumbnailUrl
 ) {
     public static PendingReviewResponse from(PendingReviewableResult r) {
         return new PendingReviewResponse(
@@ -24,7 +26,8 @@ public record PendingReviewResponse(
                 r.tradeType(),
                 r.price(),
                 r.completedAt(),
-                r.deadline()
+                r.deadline(),
+                r.itemThumbnailUrl()
         );
     }
 }

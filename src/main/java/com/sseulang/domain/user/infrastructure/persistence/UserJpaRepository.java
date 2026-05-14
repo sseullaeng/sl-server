@@ -19,7 +19,7 @@ interface UserJpaRepository extends JpaRepository<User, Long> {
 
     
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = """
         UPDATE users
         SET review_count = review_count + 1,
