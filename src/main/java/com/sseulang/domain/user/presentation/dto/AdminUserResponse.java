@@ -29,6 +29,8 @@ public record AdminUserResponse(
         @Schema(description = "회원 상태 (derived). WITHDRAWN > SUSPENDED > DORMANT > ACTIVE 우선순위.") UserStatus status,
         @Schema(example = "5", description = "이 회원이 buyer 또는 seller 로 참여한 거래 횟수") long tradeCount,
         @Schema(example = "0", description = "이 회원이 신고당한 횟수") long reportCount,
+        @Schema(example = "0", description = "현재 누적 연체 채무 (원). 0 이면 채무 없음.") long overdueDebt,
+        @Schema(description = "진행중/법적조치중 연체 record id. 없으면 null.", nullable = true) Long activeOverdueRecordId,
         LocalDateTime createdAt
 ) {
     public static AdminUserResponse from(AdminUserResult r) {
@@ -38,11 +40,12 @@ public record AdminUserResponse(
                 r.lastLoginAt(), r.suspendedAt(), r.suspendDays(), r.suspendedUntil(),
                 r.dormant(), r.status(),
                 r.tradeCount(), r.reportCount(),
+                r.overdueDebt(), r.activeOverdueRecordId(),
                 r.createdAt()
         );
     }
 
-    
+
 
     @Deprecated
     public static AdminUserResponse from(User u) {
@@ -52,6 +55,7 @@ public record AdminUserResponse(
                 u.getLastLoginAt(), u.getSuspendedAt(), u.getSuspendDays(), null,
                 false, UserStatus.ACTIVE,
                 0L, 0L,
+                0L, null,
                 u.getCreatedAt()
         );
     }
