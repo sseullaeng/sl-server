@@ -113,6 +113,21 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     @Override
+    public int incrementOverdueDebt(Long userId, long amount) {
+        return jpa.incrementOverdueDebt(userId, amount);
+    }
+
+    @Override
+    public int decrementOverdueDebt(Long userId, long amount) {
+        return jpa.decrementOverdueDebt(userId, amount);
+    }
+
+    @Override
+    public Long findOverdueDebtBalance(Long userId) {
+        return jpa.findOverdueDebtBalanceById(userId);
+    }
+
+    @Override
     public long countAll() {
         return jpa.count();
     }

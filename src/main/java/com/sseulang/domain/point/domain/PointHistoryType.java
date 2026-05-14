@@ -9,5 +9,7 @@ public enum PointHistoryType {
     배달결제,
     배달정산,
     거래보관,
-    거래환불
+    거래환불,
+    연체몰수,
+    연체채무상환
 }

@@ -26,6 +26,8 @@ public record AdminUserResult(
         UserStatus status,
         long tradeCount,
         long reportCount,
+        long overdueDebt,
+        Long activeOverdueRecordId,
         LocalDateTime createdAt
 ) {
     public static AdminUserResult from(
@@ -34,6 +36,17 @@ public record AdminUserResult(
             int dormantThresholdDays,
             long tradeCount,
             long reportCount
+    ) {
+        return from(u, now, dormantThresholdDays, tradeCount, reportCount, null);
+    }
+
+    public static AdminUserResult from(
+            User u,
+            LocalDateTime now,
+            int dormantThresholdDays,
+            long tradeCount,
+            long reportCount,
+            Long activeOverdueRecordId
     ) {
         LocalDateTime suspendedUntil = (u.getSuspendedAt() != null && u.getSuspendDays() != null && u.getSuspendDays() > 0)
                 ? u.getSuspendedAt().plusDays(u.getSuspendDays())
@@ -57,6 +70,8 @@ public record AdminUserResult(
                 u.derivedStatus(now, dormantThresholdDays),
                 tradeCount,
                 reportCount,
+                u.getOverdueDebtBalance(),
+                activeOverdueRecordId,
                 u.getCreatedAt()
         );
     }

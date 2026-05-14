@@ -66,6 +66,11 @@ public class EscrowApplicationRepositoryImpl implements EscrowApplicationReposit
     }
 
     @Override
+    public List<EscrowApplication> findOverdueCandidates(LocalDateTime cutoff) {
+        return jpa.findOverdueCandidates(cutoff);
+    }
+
+    @Override
     public long countInProgress() {
         return jpa.countInProgress();
     }

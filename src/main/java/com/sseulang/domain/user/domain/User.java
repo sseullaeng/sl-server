@@ -103,6 +103,9 @@ public class User extends BaseEntity {
     @Column(name = "point_hold", nullable = false)
     private long pointHold;
 
+    @Column(name = "overdue_debt_balance", nullable = false)
+    private long overdueDebtBalance;
+
     
 
     @Version
@@ -301,5 +304,22 @@ public class User extends BaseEntity {
 
     public boolean isAccessibleAt(LocalDateTime now) {
         return !blocked && !deleted && !isSuspendedAt(now);
+    }
+
+    public void increaseOverdueDebt(long amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount 는 양수여야 합니다");
+        }
+        this.overdueDebtBalance = Math.addExact(this.overdueDebtBalance, amount);
+    }
+
+    public void decreaseOverdueDebt(long amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount 는 양수여야 합니다");
+        }
+        if (this.overdueDebtBalance < amount) {
+            throw new IllegalStateException("연체 채무 잔액보다 큰 금액은 차감할 수 없습니다");
+        }
+        this.overdueDebtBalance -= amount;
     }
 }

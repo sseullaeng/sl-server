@@ -65,6 +65,12 @@ public interface UserRepository {
 
     record PointSnapshot(long balance, long hold) { }
 
+    int incrementOverdueDebt(Long userId, long amount);
+
+    int decrementOverdueDebt(Long userId, long amount);
+
+    Long findOverdueDebtBalance(Long userId);
+
     
 
     

@@ -86,6 +86,17 @@ public class InMemoryFakeEscrowApplicationRepository implements EscrowApplicatio
     }
 
     @Override
+    public List<EscrowApplication> findOverdueCandidates(LocalDateTime cutoff) {
+        return store.values().stream()
+                .filter(EscrowApplication::isRentalMode)
+                .filter(a -> a.getStatus() == EscrowApplicationStatus.사용중
+                        || a.getStatus() == EscrowApplicationStatus.반납중)
+                .filter(a -> a.getRentalEndAt() != null && !a.getRentalEndAt().isAfter(cutoff))
+                .sorted(java.util.Comparator.comparing(EscrowApplication::getRentalEndAt))
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public long countInProgress() {
         return store.values().stream()
                 .filter(a -> a.getStatus() != EscrowApplicationStatus.완료 && a.getStatus() != EscrowApplicationStatus.취소)

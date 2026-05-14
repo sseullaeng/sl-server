@@ -127,6 +127,29 @@ public class InMemoryFakeUserRepository implements UserRepository {
     }
 
     @Override
+    public synchronized int incrementOverdueDebt(Long userId, long amount) {
+        User user = store.get(userId);
+        if (user == null) return 0;
+        ReflectionTestUtils.setField(user, "overdueDebtBalance", user.getOverdueDebtBalance() + amount);
+        return 1;
+    }
+
+    @Override
+    public synchronized int decrementOverdueDebt(Long userId, long amount) {
+        User user = store.get(userId);
+        if (user == null) return 0;
+        if (user.getOverdueDebtBalance() < amount) return 0;
+        ReflectionTestUtils.setField(user, "overdueDebtBalance", user.getOverdueDebtBalance() - amount);
+        return 1;
+    }
+
+    @Override
+    public Long findOverdueDebtBalance(Long userId) {
+        User user = store.get(userId);
+        return user == null ? null : user.getOverdueDebtBalance();
+    }
+
+    @Override
     public Page<User> findAllForAdmin(Pageable pageable) {
         List<User> all = store.values().stream()
                 .sorted(Comparator.comparing(User::getId).reversed())

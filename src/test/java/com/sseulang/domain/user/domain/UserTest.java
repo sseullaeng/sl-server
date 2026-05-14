@@ -171,4 +171,47 @@ class UserTest {
                 .as("WITHDRAWN 이 BLOCKED 보다 우선")
                 .isEqualTo(com.sseulang.domain.user.domain.UserStatus.WITHDRAWN);
     }
+
+    @Test
+    @DisplayName("increaseOverdueDebt_정상_누적")
+    void increaseOverdueDebt_정상() {
+        User u = User.createSocialUser(SocialProvider.KAKAO, "k-overdue-1", EMAIL, "n", null);
+
+        u.increaseOverdueDebt(10_000L);
+        u.increaseOverdueDebt(5_000L);
+
+        assertThat(u.getOverdueDebtBalance()).isEqualTo(15_000L);
+    }
+
+    @Test
+    @DisplayName("decreaseOverdueDebt_정상_차감")
+    void decreaseOverdueDebt_정상() {
+        User u = User.createSocialUser(SocialProvider.KAKAO, "k-overdue-2", EMAIL, "n", null);
+        u.increaseOverdueDebt(15_000L);
+
+        u.decreaseOverdueDebt(10_000L);
+
+        assertThat(u.getOverdueDebtBalance()).isEqualTo(5_000L);
+    }
+
+    @Test
+    @DisplayName("overdueDebt_0이하_금액_거부")
+    void overdueDebt_invalid_amount() {
+        User u = User.createSocialUser(SocialProvider.KAKAO, "k-overdue-3", EMAIL, "n", null);
+
+        assertThatThrownBy(() -> u.increaseOverdueDebt(0L))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> u.decreaseOverdueDebt(0L))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("decreaseOverdueDebt_잔액초과_거부")
+    void decreaseOverdueDebt_over_balance() {
+        User u = User.createSocialUser(SocialProvider.KAKAO, "k-overdue-4", EMAIL, "n", null);
+        u.increaseOverdueDebt(5_000L);
+
+        assertThatThrownBy(() -> u.decreaseOverdueDebt(5_001L))
+                .isInstanceOf(IllegalStateException.class);
+    }
 }
