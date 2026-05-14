@@ -1105,9 +1105,10 @@ public class EscrowApplicationService {
 
     private void settle(EscrowApplication app, Long riderId) {
         settleSellerItemPrice(app);
-        if (riderId != null && app.getAppliedDeliveryFee() > 0) {
+        Long appliedDeliveryFee = app.getAppliedDeliveryFee();
+        if (riderId != null && appliedDeliveryFee != null && appliedDeliveryFee > 0) {
             pointApplicationService.credit(
-                    riderId, app.getAppliedDeliveryFee(),
+                    riderId, appliedDeliveryFee,
                     PointHistoryType.배달정산, PointReferenceType.ESCROW, app.getId(),
                     "거래대행 정산 — 라이더 보상"
             );

@@ -664,6 +664,32 @@ class EscrowApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("confirmReceipt_일반거래대행_배달료없음_500 없이 완료")
+    void confirmReceipt_regular_internal_no_delivery_fee() {
+        EscrowApplication app = build(InitiatorRole.buyer, TradeMode.INTERNAL, FeePayer.buyer,
+                1_000_000L, 1_062_000L, 0L);
+        app.markInitiatorPaid();
+        app.markInProgress();
+        appRepo.save(app);
+        com.sseulang.domain.delivery.domain.DeliveryRequest delivery =
+                com.sseulang.domain.delivery.domain.DeliveryRequest.createFromEscrow(
+                app.getBuyerId(), app.getId(),
+                "픽업", "도착", "설명", 12_000L, LocalDateTime.now(clock)
+        );
+        delivery.acceptBy(30L, LocalDateTime.now(clock));
+        deliveryRepo.save(delivery);
+
+        service.confirmReceipt(app.getId(), app.getBuyerId());
+
+        assertThat(app.getStatus()).isEqualTo(EscrowApplicationStatus.완료);
+        verify(pointService).credit(
+                eq(app.getSellerId()), eq(app.getItemPrice()),
+                eq(PointHistoryType.판매정산), eq(PointReferenceType.ESCROW), eq(app.getId()),
+                contains("판매자 수령")
+        );
+    }
+
+    @Test
     @DisplayName("autoTriggerReturn_사용중아님_BUSINESS_EXCEPTION")
     void autoTriggerReturn_invalid_state_throws() {
         EscrowApplication app = rentalDraftApplication(LocalDateTime.of(2026, 5, 13, 8, 0));
