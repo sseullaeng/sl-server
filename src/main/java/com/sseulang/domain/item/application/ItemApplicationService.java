@@ -327,6 +327,20 @@ public class ItemApplicationService {
         if (item.getStatus() != ItemStatus.판매중) {
             throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
         }
+        return toTransactionResult(item);
+    }
+
+    @Transactional
+    public ItemForTransactionResult findForInternalEscrow(Long itemId) {
+        Item item = itemRepository.findByIdForUpdate(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND));
+        if (item.getStatus() != ItemStatus.판매중 && item.getStatus() != ItemStatus.예약) {
+            throw new BusinessException(ErrorCode.ITEM_INVALID_STATE);
+        }
+        return toTransactionResult(item);
+    }
+
+    private ItemForTransactionResult toTransactionResult(Item item) {
         boolean isRental = item.getTradeTypes().contains(com.sseulang.domain.item.domain.TradeType.대여);
         Integer depositOriginalPercent = (isRental
                 && item.getDepositType() == com.sseulang.domain.item.domain.DepositType.PERCENT

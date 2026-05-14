@@ -161,7 +161,7 @@ public class EscrowApplicationService {
         }
 
         
-        var itemInfo = itemApplicationService.findActiveForTransaction(cmd.itemId());
+        var itemInfo = itemApplicationService.findForInternalEscrow(cmd.itemId());
         if (!itemInfo.sellerId().equals(cmd.requesterId())) {
             throw new BusinessException(ErrorCode.ESCROW_SELLER_ONLY);
         }
@@ -257,7 +257,7 @@ public class EscrowApplicationService {
         }
 
         
-        var itemInfo = itemApplicationService.findActiveForTransaction(cmd.itemId());
+        var itemInfo = itemApplicationService.findForInternalEscrow(cmd.itemId());
         if (!itemInfo.sellerId().equals(cmd.requesterId())) {
             throw new BusinessException(ErrorCode.ESCROW_SELLER_ONLY);
         }

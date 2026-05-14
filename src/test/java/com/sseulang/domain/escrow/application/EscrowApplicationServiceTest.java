@@ -533,7 +533,7 @@ class EscrowApplicationServiceTest {
                 .thenReturn(new com.sseulang.domain.chat.application.ChatRoomApplicationService.ChatRoomMeta(
                         7L, 123L, com.sseulang.domain.item.domain.TradeType.판매, false, false));
         when(chatRoomService.findOpponent(7L, 11L)).thenReturn(20L);
-        when(itemAppService.findActiveForTransaction(123L))
+        when(itemAppService.findForInternalEscrow(123L))
                 .thenReturn(new com.sseulang.domain.item.application.dto.ItemForTransactionResult(
                         123L, 11L,
                         java.util.EnumSet.of(com.sseulang.domain.item.domain.TradeType.판매,
@@ -572,7 +572,7 @@ class EscrowApplicationServiceTest {
                 .thenReturn(new com.sseulang.domain.chat.application.ChatRoomApplicationService.ChatRoomMeta(
                         33L, 48L, com.sseulang.domain.item.domain.TradeType.대여, false, false));
         when(chatRoomService.findOpponent(33L, 11L)).thenReturn(20L);
-        when(itemAppService.findActiveForTransaction(48L))
+        when(itemAppService.findForInternalEscrow(48L))
                 .thenReturn(new com.sseulang.domain.item.application.dto.ItemForTransactionResult(
                         48L, 11L,
                         java.util.EnumSet.of(com.sseulang.domain.item.domain.TradeType.대여),

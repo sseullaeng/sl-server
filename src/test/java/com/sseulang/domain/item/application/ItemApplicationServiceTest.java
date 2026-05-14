@@ -233,6 +233,43 @@ class ItemApplicationServiceTest {
         ))).isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    @DisplayName("findForInternalEscrow 예약 item 허용")
+    void findForInternalEscrow_reserved_allowed() {
+        Long id = registerSimple();
+        service.markItemAsReserved(id);
+
+        var result = service.findForInternalEscrow(id);
+
+        assertThat(result.itemId()).isEqualTo(id);
+        assertThat(result.sellerId()).isEqualTo(SELLER);
+    }
+
+    @Test
+    @DisplayName("findActiveForTransaction 예약 item 거부")
+    void findActiveForTransaction_reserved_rejected() {
+        Long id = registerSimple();
+        service.markItemAsReserved(id);
+
+        assertThatThrownBy(() -> service.findActiveForTransaction(id))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("findForInternalEscrow 거래완료 item 거부")
+    void findForInternalEscrow_sold_rejected() {
+        Long id = registerSimple();
+        service.markItemAsReserved(id);
+        service.markItemAsSold(id);
+
+        assertThatThrownBy(() -> service.findForInternalEscrow(id))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
+    }
+
     private Long registerSimple() {
         return service.register(ItemRegisterCommand.legacy(
                 SELLER, categoryId, "t", "d", 1_000L, null, null, TradeType.판매, null, null, null
