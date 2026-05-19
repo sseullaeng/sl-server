@@ -36,5 +36,19 @@ jobs:
       - name: Build with Gradle (no tests requiring infra)
         run: ./gradlew clean build -x test --no-daemon
 
-      - name: Run unit tests
-        run: ./gradlew test --no-daemon
+      - name: Run unit tests + Jacoco report
+        run: ./gradlew test jacocoTestReport --no-daemon
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: build/reports/tests/test/
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: build/reports/jacoco/test/

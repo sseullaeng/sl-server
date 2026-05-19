@@ -43,6 +43,7 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+!.env.prod.example
 application-secret.yml
 application-local-secret.yml
 
@@ -51,6 +52,7 @@ application-local-secret.yml
 
 # =============== 로그 ===============
 logs/
+.logs/
 *.log
 
 # =============== Docker ===============

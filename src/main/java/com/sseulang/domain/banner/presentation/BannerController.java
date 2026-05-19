@@ -1,0 +1,33 @@
+package com.sseulang.domain.banner.presentation;
+
+import com.sseulang.domain.banner.application.BannerApplicationService;
+import com.sseulang.domain.banner.presentation.dto.BannerResponse;
+import com.sseulang.global.common.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@Tag(name = "Banner", description = "배너 조회 (공개)")
+@RestController
+@RequestMapping("/api/v1/banners")
+public class BannerController {
+
+    private final BannerApplicationService bannerService;
+
+    public BannerController(BannerApplicationService bannerService) {
+        this.bannerService = bannerService;
+    }
+
+    @Operation(summary = "활성 배너 목록 (공개)",
+            description = "active=true + 노출 윈도우 통과한 배너. sortOrder 오름차순.")
+    @GetMapping
+    public ApiResponse<List<BannerResponse>> list() {
+        return ApiResponse.ok(bannerService.findVisible().stream()
+                .map(BannerResponse::from)
+                .toList());
+    }
+}

@@ -1,0 +1,48 @@
+package com.sseulang.domain.user.presentation.dto;
+
+import com.sseulang.domain.user.domain.SocialProvider;
+import com.sseulang.domain.user.domain.User;
+import io.swagger.v3.oas.annotations.media.Schema;
+
+import java.math.BigDecimal;
+
+@Schema(description = "본인 사용자 정보 (헤더/스토어 초기화용).")
+public record MeResponse(
+        @Schema(example = "42") Long id,
+        @Schema(example = "alice@sseulang.test") String email,
+        @Schema(example = "쓸랭이") String nickname,
+        @Schema(description = "프로필 이미지 URL (없으면 null)") String profileImage,
+        @Schema(description = "LOCAL / KAKAO / GOOGLE — 마지막 연결된 provider. LOCAL+OAuth 듀얼 로그인 가능 여부 판정에는 hasPassword 도 같이 사용.")
+        SocialProvider socialProvider,
+        @Schema(example = "true",
+                description = "LOCAL 비밀번호 보유 여부. true 면 이메일/비밀번호 로그인 가능. socialProvider 가 KAKAO/GOOGLE 이어도 hasPassword=true 면 양쪽 로그인 모두 가능 (명시 연결 후).")
+        boolean hasPassword,
+        @Schema(example = "true", description = "이메일 인증 여부 — false 면 자금/거래 API 가 403") boolean emailVerified,
+        @Schema(example = "50000", description = "즉시 사용 가능 포인트 (KRW). 라운드 11 부터 거래 hold 분 제외.") long pointBalance,
+        @Schema(example = "10000", description = "거래 hold 잔액 (라운드 11). 헤더/카드에 작은 텍스트 안내용.") long pointHold,
+        @Schema(example = "4.7", description = "리뷰 평균. 리뷰 0건이면 null") BigDecimal trustScore,
+        @Schema(example = "12") int reviewCount,
+        @Schema(example = "USER",
+                description = "현재 세션의 권한 — \"USER\" 또는 \"ADMIN\". 프론트가 마이페이지 → 관리 페이지 redirect 분기 결정용. "
+                        + "JWT role claim 그대로 노출.",
+                allowableValues = {"USER", "ADMIN"})
+        String role
+) {
+
+    public static MeResponse from(User u, String role) {
+        return new MeResponse(
+                u.getId(),
+                u.getEmail(),
+                u.getNickname(),
+                u.getProfileImage(),
+                u.getSocialProvider(),
+                u.hasPassword(),
+                u.isEmailVerified(),
+                u.getPointBalance(),
+                u.getPointHold(),
+                u.getTrustScore(),
+                u.getReviewCount(),
+                (role == null || role.isBlank()) ? "USER" : role
+        );
+    }
+}

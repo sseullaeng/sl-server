@@ -1,0 +1,460 @@
+package com.sseulang.domain.item.domain;
+
+import com.sseulang.global.exception.BusinessException;
+import com.sseulang.global.exception.ErrorCode;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class ItemTest {
+
+    private static final long SELLER = 1L;
+    private static final long CATEGORY = 7L;
+
+    @Test
+    @DisplayName("create 판매_정상_status=판매중, viewCount=0")
+    void create_판매_정상() {
+        Item item = Item.create(SELLER, CATEGORY, "title", "desc", 10_000L, null, null, TradeType.판매, "서울");
+
+        assertThat(item.getSellerId()).isEqualTo(SELLER);
+        assertThat(item.getCategoryId()).isEqualTo(CATEGORY);
+        assertThat(item.getTitle()).isEqualTo("title");
+        assertThat(item.getPrice()).isEqualTo(10_000L);
+        assertThat(item.getDeposit()).isNull();
+        assertThat(item.getRentalUnit()).isNull();
+        assertThat(item.getTradeType()).isEqualTo(TradeType.판매);
+        assertThat(item.getStatus()).isEqualTo(ItemStatus.판매중);
+        assertThat(item.getViewCount()).isZero();
+        assertThat(item.getImages()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("create 나눔_정상_price=0")
+    void create_나눔_정상() {
+        Item item = Item.create(SELLER, CATEGORY, "t", "d", 0L, null, null, TradeType.나눔, null);
+        assertThat(item.getTradeType()).isEqualTo(TradeType.나눔);
+        assertThat(item.getPrice()).isZero();
+    }
+
+    @Test
+    @DisplayName("create 대여_정상_deposit/rentalUnit 박힘")
+    void create_대여_정상() {
+        Item item = Item.create(SELLER, CATEGORY, "t", "d", 5_000L, 50_000L, RentalUnit.일, TradeType.대여, null);
+        assertThat(item.getDeposit()).isEqualTo(50_000L);
+        assertThat(item.getDepositType()).isEqualTo(DepositType.AMOUNT);
+        assertThat(item.getRentalUnit()).isEqualTo(RentalUnit.일);
+    }
+
+    @Test
+    @DisplayName("computeDepositAmount AMOUNT_그대로")
+    void computeDepositAmount_amount() {
+        Item item = Item.create(SELLER, CATEGORY, "t", "d", 99_997L, 50_000L, DepositType.AMOUNT, RentalUnit.일, TradeType.대여, null);
+        assertThat(item.computeDepositAmount()).isEqualTo(50_000L);
+    }
+
+    @Test
+    @DisplayName("computeDepositAmount PERCENT_1원 단위 올림")
+    void computeDepositAmount_percent_ceil() {
+        Item item = Item.create(SELLER, CATEGORY, "t", "d", 99_997L, 30L, DepositType.PERCENT, RentalUnit.일, TradeType.대여, null);
+        assertThat(item.computeDepositAmount()).isEqualTo(30_000L);
+    }
+
+    @Test
+    @DisplayName("create 대여 PERCENT 범위 밖_거부")
+    void create_대여_percent_범위_거부() {
+        assertThatThrownBy(() ->
+                Item.create(SELLER, CATEGORY, "t", "d", 1_000L, 0L, DepositType.PERCENT, RentalUnit.일, TradeType.대여, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() ->
+                Item.create(SELLER, CATEGORY, "t", "d", 1_000L, 101L, DepositType.PERCENT, RentalUnit.일, TradeType.대여, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("create 대여인데 deposit 누락_거부")
+    void create_대여_deposit_누락_거부() {
+        assertThatThrownBy(() ->
+                Item.create(SELLER, CATEGORY, "t", "d", 1_000L, null, RentalUnit.일, TradeType.대여, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("create 대여인데 rentalUnit 누락_거부")
+    void create_대여_rentalUnit_누락_거부() {
+        assertThatThrownBy(() ->
+                Item.create(SELLER, CATEGORY, "t", "d", 1_000L, 10_000L, null, TradeType.대여, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("create 판매인데 deposit 박으면_거부")
+    void create_판매_deposit_박으면_거부() {
+        assertThatThrownBy(() ->
+                Item.create(SELLER, CATEGORY, "t", "d", 1_000L, 5_000L, null, TradeType.판매, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("create 빈 title_거부")
+    void create_빈_title_거부() {
+        assertThatThrownBy(() ->
+                Item.create(SELLER, CATEGORY, "", "d", 1_000L, null, null, TradeType.판매, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() ->
+                Item.create(SELLER, CATEGORY, null, "d", 1_000L, null, null, TradeType.판매, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("create title 200자 초과_거부")
+    void create_title_길이초과_거부() {
+        String tooLong = "가".repeat(201);
+        assertThatThrownBy(() ->
+                Item.create(SELLER, CATEGORY, tooLong, "d", 1_000L, null, null, TradeType.판매, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("create 음수 price_거부")
+    void create_음수_price_거부() {
+        assertThatThrownBy(() ->
+                Item.create(SELLER, CATEGORY, "t", "d", -1L, null, null, TradeType.판매, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("create null sellerId_거부")
+    void create_null_sellerId_거부() {
+        assertThatThrownBy(() ->
+                Item.create(null, CATEGORY, "t", "d", 1_000L, null, null, TradeType.판매, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("addImage 1~10장 정상")
+    void addImage_10장_정상() {
+        Item item = saleItem();
+        for (int i = 1; i <= 10; i++) {
+            item.addImage("https://img/" + i, i, i == 1);
+        }
+        assertThat(item.getImages()).hasSize(10);
+        assertThat(item.getImages().get(0).isThumbnail()).isTrue();
+    }
+
+    @Test
+    @DisplayName("addImage 11번째_ITEM_IMAGE_LIMIT_EXCEEDED")
+    void addImage_11장_거부() {
+        Item item = saleItem();
+        for (int i = 1; i <= 10; i++) {
+            item.addImage("https://img/" + i, i, false);
+        }
+        assertThatThrownBy(() -> item.addImage("https://img/11", 11, false))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_IMAGE_LIMIT_EXCEEDED);
+    }
+
+    @Test
+    @DisplayName("updateInfo 판매중_정상")
+    void updateInfo_판매중_정상() {
+        Item item = saleItem();
+        item.updateInfo("new title", "new desc", 20_000L, null, null, "부산");
+
+        assertThat(item.getTitle()).isEqualTo("new title");
+        assertThat(item.getPrice()).isEqualTo(20_000L);
+        assertThat(item.getRegion()).isEqualTo("부산");
+    }
+
+    @Test
+    @DisplayName("updateInfo 삭제 상태_ITEM_INVALID_STATE")
+    void updateInfo_삭제_상태_거부() {
+        Item item = saleItem();
+        item.markAsDeleted();
+        assertThatThrownBy(() ->
+                item.updateInfo("x", "y", 1L, null, null, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("markAsHidden / restore 상태 전이")
+    void hidden_restore() {
+        Item item = saleItem();
+        item.markAsHidden();
+        assertThat(item.getStatus()).isEqualTo(ItemStatus.비공개);
+        item.restore();
+        assertThat(item.getStatus()).isEqualTo(ItemStatus.판매중);
+    }
+
+    @Test
+    @DisplayName("markAsDeleted 후 restore_ITEM_INVALID_STATE")
+    void markAsDeleted_후_restore_거부() {
+        Item item = saleItem();
+        item.markAsDeleted();
+        assertThatThrownBy(item::restore)
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("incrementViewCount")
+    void incrementViewCount() {
+        Item item = saleItem();
+        item.incrementViewCount();
+        item.incrementViewCount();
+        assertThat(item.getViewCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("isOwnedBy")
+    void isOwnedBy() {
+        Item item = saleItem();
+        assertThat(item.isOwnedBy(SELLER)).isTrue();
+        assertThat(item.isOwnedBy(SELLER + 1)).isFalse();
+        assertThat(item.isOwnedBy(null)).isFalse();
+    }
+
+    @Test
+    @DisplayName("addHashtag 정상_3개")
+    void addHashtag_정상() {
+        Item item = saleItem();
+        item.addHashtag("아이폰");
+        item.addHashtag("미개봉");
+        item.addHashtag("정품");
+        assertThat(item.getHashtags()).extracting("tag")
+                .containsExactly("아이폰", "미개봉", "정품");
+    }
+
+    @Test
+    @DisplayName("addHashtag 중복_무시")
+    void addHashtag_중복_무시() {
+        Item item = saleItem();
+        item.addHashtag("아이폰");
+        item.addHashtag("아이폰");
+        item.addHashtag("  아이폰  ");  // 공백 정규화 후 동일
+        assertThat(item.getHashtags()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("addHashtag 빈 태그_거부")
+    void addHashtag_빈_거부() {
+        Item item = saleItem();
+        assertThatThrownBy(() -> item.addHashtag(""))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> item.addHashtag(null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> item.addHashtag("   "))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("addHashtag 50자 초과_거부")
+    void addHashtag_길이초과_거부() {
+        Item item = saleItem();
+        String tooLong = "가".repeat(51);
+        assertThatThrownBy(() -> item.addHashtag(tooLong))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("clearHashtags")
+    void clearHashtags() {
+        Item item = saleItem();
+        item.addHashtag("a");
+        item.addHashtag("b");
+        item.clearHashtags();
+        assertThat(item.getHashtags()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("markAsReserved 정상_판매중→예약")
+    void markAsReserved_정상() {
+        Item item = saleItem();
+        item.markAsReserved();
+        assertThat(item.getStatus()).isEqualTo(ItemStatus.예약);
+    }
+
+    @Test
+    @DisplayName("markAsReserved 이미 예약_TRANSACTION_RESERVED_BY_OTHER")
+    void markAsReserved_이미_예약_거부() {
+        Item item = saleItem();
+        item.markAsReserved();
+        assertThatThrownBy(item::markAsReserved)
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.TRANSACTION_RESERVED_BY_OTHER);
+    }
+
+    @Test
+    @DisplayName("markAsReserved 비공개/삭제_ITEM_INVALID_STATE")
+    void markAsReserved_비활성_거부() {
+        Item hidden = saleItem();
+        hidden.markAsHidden();
+        assertThatThrownBy(hidden::markAsReserved)
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
+
+        Item deleted = saleItem();
+        deleted.markAsDeleted();
+        assertThatThrownBy(deleted::markAsReserved)
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("markAsSold 예약→거래완료")
+    void markAsSold_정상() {
+        Item item = saleItem();
+        item.markAsReserved();
+        item.markAsSold();
+        assertThat(item.getStatus()).isEqualTo(ItemStatus.거래완료);
+    }
+
+    @Test
+    @DisplayName("markAsSold 판매중에서 직행_ITEM_INVALID_STATE")
+    void markAsSold_판매중에서_거부() {
+        Item item = saleItem();
+        assertThatThrownBy(item::markAsSold)
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
+    }
+
+    @Test
+    @DisplayName("restoreFromReserved 예약→판매중")
+    void restoreFromReserved_정상() {
+        Item item = saleItem();
+        item.markAsReserved();
+        item.restoreFromReserved();
+        assertThat(item.getStatus()).isEqualTo(ItemStatus.판매중);
+    }
+
+    @Test
+    @DisplayName("restoreFromReserved 판매중에서_ITEM_INVALID_STATE")
+    void restoreFromReserved_거부() {
+        Item item = saleItem();
+        assertThatThrownBy(item::restoreFromReserved)
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ITEM_INVALID_STATE);
+    }
+
+    private static Item saleItem() {
+        return Item.create(SELLER, CATEGORY, "t", "d", 10_000L, null, null, TradeType.판매, "서울");
+    }
+
+    // ───────── V25 라운드 12 PR-D 잔여 — 판매/대여 이중 등록 ─────────
+
+    @Test
+    @DisplayName("createMulti 판매+대여_정상_salePrice/rentalPrice/deposit 모두 박힘")
+    void createMulti_판매대여_정상() {
+        Item item = Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.of(TradeType.판매, TradeType.대여),
+                100_000L, 5_000L, 30_000L, RentalUnit.일, "서울"
+        );
+
+        assertThat(item.getTradeTypes()).containsExactlyInAnyOrder(TradeType.판매, TradeType.대여);
+        assertThat(item.getTradeType()).isEqualTo(TradeType.판매);  // primary
+        assertThat(item.getSalePrice()).isEqualTo(100_000L);
+        assertThat(item.getRentalPrice()).isEqualTo(5_000L);
+        assertThat(item.getDeposit()).isEqualTo(30_000L);
+        assertThat(item.getRentalUnit()).isEqualTo(RentalUnit.일);
+        // legacy price = primary 모드 가격
+        assertThat(item.getPrice()).isEqualTo(100_000L);
+    }
+
+    @Test
+    @DisplayName("createMulti 대여 단독_salePrice null")
+    void createMulti_대여만() {
+        Item item = Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 30_000L, RentalUnit.일, null
+        );
+        assertThat(item.getSalePrice()).isNull();
+        assertThat(item.getRentalPrice()).isEqualTo(5_000L);
+        assertThat(item.getTradeType()).isEqualTo(TradeType.대여);
+    }
+
+    @Test
+    @DisplayName("createMulti 판매 모드인데 salePrice null_거부")
+    void createMulti_판매_salePrice_없으면_거부() {
+        assertThatThrownBy(() -> Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.of(TradeType.판매),
+                null, null, null, null, null
+        )).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("createMulti 대여 모드인데 rentalUnit 누락_거부")
+    void createMulti_대여_rentalUnit_없으면_거부() {
+        assertThatThrownBy(() -> Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, 30_000L, null, null
+        )).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("createMulti 대여 모드인데 deposit 누락_거부")
+    void createMulti_대여_deposit_없으면_거부() {
+        assertThatThrownBy(() -> Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.of(TradeType.대여),
+                null, 5_000L, null, RentalUnit.일, null
+        )).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("createMulti tradeTypes 비어있으면_거부")
+    void createMulti_빈tradeTypes_거부() {
+        assertThatThrownBy(() -> Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.noneOf(TradeType.class),
+                100L, null, null, null, null
+        )).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("priceFor 판매+대여 모드_모드별 정확한 가격 반환")
+    void priceFor_정확() {
+        Item item = Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.of(TradeType.판매, TradeType.대여),
+                100_000L, 5_000L, 30_000L, RentalUnit.일, null
+        );
+        assertThat(item.priceFor(TradeType.판매)).isEqualTo(100_000L);
+        assertThat(item.priceFor(TradeType.대여)).isEqualTo(5_000L);
+        assertThat(item.priceFor(TradeType.나눔)).isZero();
+        assertThat(item.priceFor(null)).isNull();
+    }
+
+    @Test
+    @DisplayName("updateInfoMulti 판매→판매+대여 변경_가격 모두 박힘")
+    void updateInfoMulti_변경() {
+        Item item = Item.createMulti(
+                SELLER, CATEGORY, "t", "d",
+                java.util.EnumSet.of(TradeType.판매), 50_000L, null, null, null, null
+        );
+
+        item.updateInfoMulti(
+                "new", "new desc",
+                java.util.EnumSet.of(TradeType.판매, TradeType.대여),
+                60_000L, 3_000L, 10_000L, RentalUnit.시간, null
+        );
+
+        assertThat(item.getSalePrice()).isEqualTo(60_000L);
+        assertThat(item.getRentalPrice()).isEqualTo(3_000L);
+        assertThat(item.getDeposit()).isEqualTo(10_000L);
+        assertThat(item.getRentalUnit()).isEqualTo(RentalUnit.시간);
+        assertThat(item.getTradeTypes()).containsExactlyInAnyOrder(TradeType.판매, TradeType.대여);
+    }
+}

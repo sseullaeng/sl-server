@@ -30,16 +30,32 @@ spring:
       password: ${REDIS_PASSWORD:}
     mongodb:
       uri: ${MONGO_URI}
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
 
 app:
   jwt:
     secret: ${JWT_SECRET}
-    access-token-validity-seconds: 1800
-    refresh-token-validity-seconds: 604800
+    access-token-validity-seconds: 3600
+    refresh-token-validity-seconds: 1209600
   cookie:
     domain: ${COOKIE_DOMAIN}
     secure: true
-    same-site: Strict
+    # cross-site 쿠키 허용 — 프론트 (vercel.app) 와 백엔드 (duckdns.org 등) 가 다른 site 일 때 None 필수.
+    # 같은 eTLD+1 으로 합쳐지면 Strict / Lax 로 강화. CSRF 방어는 X-XSRF-TOKEN 헤더 + Secure 가 1차.
+    same-site: ${COOKIE_SAME_SITE:None}
   oauth2:
     kakao:
       client-id: ${KAKAO_REST_API_KEY}
@@ -58,8 +74,40 @@ app:
     client-key: ${TOSS_CLIENT_KEY}
     secret-key: ${TOSS_SECRET_KEY}
     base-url: https://api.tosspayments.com
+    # Webhook 검증 — 토스 콘솔에서 webhook secret 발급 후 주입. 미주입 시 시그니처 검증 비활성 (위험).
+    webhook-secret: ${TOSS_WEBHOOK_SECRET:}
+    webhook-replay-tolerance-seconds: ${TOSS_WEBHOOK_REPLAY_TOLERANCE:300}
+    # !!! 운영 절대 false 유지 !!! — confirm 단의 토스 lookup 검증 우회. dev/QA 환경에서 시크릿 키
+    # 미발급 상태로 결제 흐름 검증용. 활성 시 부팅 WARN + confirm 호출마다 WARN.
+    skip-verify: ${TOSS_SKIP_VERIFY:false}
+  admin:
+    # OAuth 로그인 시 role=ADMIN JWT 를 발급할 email 화이트리스트 (콤마구분, lowercase 비교).
+    # 빈 값이면 모두 USER. 활성 시 부팅 WARN + 로그인마다 WARN.
+    user-emails: ${ADMIN_USER_EMAILS:}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  email:
+    # prod 는 SMTP 강제. SmtpEmailSender 만 활성화 — env 미주입 시 SmtpEmailSender 가 부팅에서 실패.
+    smtp-enabled: ${APP_EMAIL_SMTP_ENABLED:true}
+    from: ${MAIL_FROM:noreply@sseulang.test}
+    verification-url-base: ${APP_EMAIL_VERIFICATION_URL_BASE:https://sseulang.com/auth/verify-email}
+  delivery:
+    # 시연/QA 용 — 0 이거나 미설정이면 자동 매칭 X. 양수면 EscrowConfirmedEvent 발행 시 그 user 로 즉시 accept.
+    auto-accept-rider-id: ${APP_DELIVERY_AUTO_ACCEPT_RIDER_ID:0}
+  overdue:
+    phase3-amount-krw: ${APP_OVERDUE_PHASE3_AMOUNT_KRW:50000}
+    phase3-days-threshold: ${APP_OVERDUE_PHASE3_DAYS_THRESHOLD:14}
+    phase4-days-after-suspend: ${APP_OVERDUE_PHASE4_DAYS_AFTER_SUSPEND:7}
+    phase2-daily-rate-percent: ${APP_OVERDUE_PHASE2_DAILY_RATE_PERCENT:20}
+
+# Swagger prod 노출 정책 — default 비활성. 외부 API 검수 / 응급 디버그 시에만 일시 true 로.
+# false 시 /swagger-ui.html, /v3/api-docs/** 가 404. Spring Security PUBLIC chain 도 막혀
+# enabled=true 로 켜야 보임.
+springdoc:
+  api-docs:
+    enabled: ${APP_SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${APP_SWAGGER_ENABLED:false}
 
 logging:
   level:

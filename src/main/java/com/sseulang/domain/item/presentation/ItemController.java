@@ -1,0 +1,162 @@
+package com.sseulang.domain.item.presentation;
+
+import com.sseulang.domain.item.application.ItemApplicationService;
+import com.sseulang.domain.item.application.dto.ItemSearchCriteria;
+import com.sseulang.domain.item.domain.TradeType;
+import com.sseulang.domain.item.presentation.dto.ItemDetailResponse;
+import com.sseulang.domain.item.presentation.dto.ItemIdResponse;
+import com.sseulang.domain.item.presentation.dto.ItemImagesAppendRequest;
+import com.sseulang.domain.item.presentation.dto.ItemImagesReorderRequest;
+import com.sseulang.domain.item.presentation.dto.ItemImagesResponse;
+import com.sseulang.domain.item.presentation.dto.ItemRegisterRequest;
+import com.sseulang.domain.item.presentation.dto.ItemSummaryResponse;
+import com.sseulang.domain.item.presentation.dto.ItemUpdateRequest;
+import com.sseulang.global.common.ApiResponse;
+import com.sseulang.global.common.PageResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@Tag(name = "Item", description = "물품 등록·검색·수정·삭제·예약 상태 조회")
+@RestController
+@RequestMapping("/api/v1/items")
+public class ItemController {
+
+    private static final int MAX_PAGE_SIZE = 100;
+
+    private final ItemApplicationService itemService;
+
+    public ItemController(ItemApplicationService itemService) {
+        this.itemService = itemService;
+    }
+
+    @Operation(summary = "물품 등록",
+            description = "이메일 인증 필수. imageUrls 의 임시 폴더(items/{userId}/) 가 등록 후 정식 폴더(items/{itemId}/) 로 자동 promote.")
+    @PostMapping
+    public ResponseEntity<ApiResponse<ItemIdResponse>> register(
+            @AuthenticationPrincipal Long sellerId,
+            @Valid @RequestBody ItemRegisterRequest request
+    ) {
+        Long id = itemService.register(request.toCommand(sellerId));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok(new ItemIdResponse(id)));
+    }
+
+    @Operation(summary = "물품 검색·페이징 (공개)",
+            description = "FULLTEXT(ngram) 검색. q 1글자는 LIKE 폴백. categoryId/tradeType/minPrice/maxPrice/tag 조합 필터. "
+                    + "sort 옵션: latest(default) / price_asc / price_desc / view_desc / wishlist_desc / completed_last. "
+                    + "CSV 다중 정렬 지원 — 예: sort=wishlist_desc,view_desc,latest. id desc tiebreak 자동. 인증 불필요.")
+    @GetMapping
+    public ApiResponse<PageResponse<ItemSummaryResponse>> list(
+            @AuthenticationPrincipal(errorOnInvalidType = false) Long viewerId,
+            @RequestParam(name = "q", required = false) String q,
+            @RequestParam(name = "categoryId", required = false) Long categoryId,
+            @RequestParam(name = "tradeType", required = false) TradeType tradeType,
+            @RequestParam(name = "minPrice", required = false) Long minPrice,
+            @RequestParam(name = "maxPrice", required = false) Long maxPrice,
+            @RequestParam(name = "tag", required = false) String tag,
+            @RequestParam(name = "sellerId", required = false) Long sellerId,
+            @RequestParam(name = "sort", required = false) String sort,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        int safePage = Math.max(page, 0);
+        Pageable pageable = PageRequest.of(safePage, safeSize);
+        ItemSearchCriteria criteria = new ItemSearchCriteria(
+                q, categoryId, tradeType, minPrice, maxPrice, tag, sellerId,
+                com.sseulang.domain.item.application.dto.ItemSort.parseList(sort));
+
+        
+        Page<ItemSummaryResponse> result = itemService.search(criteria, pageable, viewerId)
+                .map(ItemSummaryResponse::from);
+        return ApiResponse.ok(PageResponse.from(result));
+    }
+
+    @Operation(summary = "물품 상세 조회 (공개)",
+            description = "조회 시 viewCount 1 증가. 삭제된 물품은 404. 인증 불필요.")
+    @GetMapping("/{id}")
+    public ApiResponse<ItemDetailResponse> getOne(@PathVariable("id") Long id) {
+        return ApiResponse.ok(ItemDetailResponse.from(itemService.getById(id)));
+    }
+
+    @Operation(summary = "물품 수정",
+            description = "본인 물품만. imageUrls non-null 이면 전체 교체 + 임시→정식 promote. hashtags non-null 이면 전체 교체.")
+    @PatchMapping("/{id}")
+    public ApiResponse<Void> update(
+            @AuthenticationPrincipal Long requesterId,
+            @PathVariable("id") Long id,
+            @Valid @RequestBody ItemUpdateRequest request
+    ) {
+        itemService.update(id, requesterId, request.toCommand());
+        return ApiResponse.ok();
+    }
+
+    @Operation(summary = "물품 삭제 (soft delete)",
+            description = "본인 물품만. status=삭제 로 전환. 관련 거래/채팅방은 유지.")
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(
+            @AuthenticationPrincipal Long requesterId,
+            @PathVariable("id") Long id
+    ) {
+        itemService.delete(id, requesterId);
+        return ApiResponse.ok();
+    }
+
+    @Operation(summary = "물품 이미지 부분 추가",
+            description = "본인 + 이메일 인증 필수. 합산 10장 한도. 임시 폴더(items/{userId}/) 자동 promote. "
+                    + "기존이 비었으면 첫 번째 새 url 이 썸네일. PATCH 전체교체보다 효율적.")
+    @PostMapping("/{id}/images")
+    public ApiResponse<ItemImagesResponse> appendImages(
+            @AuthenticationPrincipal Long requesterId,
+            @PathVariable("id") Long id,
+            @Valid @RequestBody ItemImagesAppendRequest request
+    ) {
+        return ApiResponse.ok(ItemImagesResponse.of(
+                itemService.appendImages(id, requesterId, request.imageUrls())
+        ));
+    }
+
+    @Operation(summary = "물품 이미지 단건 제거",
+            description = "본인 + 이메일 인증 필수. 미존재 url 은 404 ITEM_IMAGE_NOT_FOUND. "
+                    + "제거 후 sortOrder 1..N 재정렬 + 첫 번째를 새 썸네일로 자동 지정. S3 best-effort delete.")
+    @DeleteMapping("/{id}/images")
+    public ApiResponse<ItemImagesResponse> removeImage(
+            @AuthenticationPrincipal Long requesterId,
+            @PathVariable("id") Long id,
+            @RequestParam("imageUrl") String imageUrl
+    ) {
+        return ApiResponse.ok(ItemImagesResponse.of(
+                itemService.removeImage(id, requesterId, imageUrl)
+        ));
+    }
+
+    @Operation(summary = "물품 이미지 순서 변경",
+            description = "본인 + 이메일 인증 필수. imageUrls 가 기존 set 과 정확히 일치해야 함 (중복/누락 X). "
+                    + "다르면 400 ITEM_IMAGE_ORDER_MISMATCH. 첫 번째가 새 썸네일.")
+    @PatchMapping("/{id}/images/order")
+    public ApiResponse<ItemImagesResponse> reorderImages(
+            @AuthenticationPrincipal Long requesterId,
+            @PathVariable("id") Long id,
+            @Valid @RequestBody ItemImagesReorderRequest request
+    ) {
+        return ApiResponse.ok(ItemImagesResponse.of(
+                itemService.reorderImages(id, requesterId, request.imageUrls())
+        ));
+    }
+}

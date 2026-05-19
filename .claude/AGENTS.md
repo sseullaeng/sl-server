@@ -143,31 +143,58 @@ springdoc-openapi (Swagger)
 - 호출 timeout 설정 누락 (기본값에 의존하면 위험)
 - 외부 응답을 그대로 사용자에게 노출하지 않는가 (정보 누출)
 
-### 3.11 테스트 전략
+### 3.11 테스트 전략 (TDD)
 
-- 핵심 영역(결제, 거래 상태 전이, 포인트 동시성, JWT 검증, 토큰 Rotation) **단위 테스트 누락 시 Critical**
-- Slice 테스트(`@WebMvcTest`, `@DataJpaTest`) 가능한데 `@SpringBootTest` 남발하는가
-- Testcontainers(MySQL, MongoDB) 대신 로컬 인스턴스 의존 — 재현성 떨어짐
-- 테스트 메서드명: `대상메서드_상황_기대결과` 패턴 준수
+**RED → GREEN → REFACTOR 사이클 준수 여부 검토.**
+
+영역별 강도:
+| 영역 | 강도 | 위반 시 |
+|---|---|---|
+| 보안 / 결제 / 포인트 / 거래 상태 전이 / JWT / 토큰 Rotation / 동시성 | 🔒 **테스트 먼저 필수** | **Critical** — 리뷰 거부, 구현 전 RED 요구 |
+| 일반 도메인 (Aggregate, DomainService, ApplicationService, ValueObject) | TDD 권장 | Warning |
+| 트리비얼 어댑터 (Controller 라우팅, JPA Repository, DTO) | 통합 테스트로 갈음 OK | — |
+
+체크 항목:
+- 핵심 영역에 단위 테스트 누락 — **Critical**
+- `domain/` layer 테스트가 Spring 컨텍스트 띄우는지 — 순수 단위로 가능해야 함
+- Slice 테스트(`@WebMvcTest`, `@DataJpaTest`) 가능한데 `@SpringBootTest` 남발 — 느림 + TDD 사이클 깨짐
+- Testcontainers(MySQL, MongoDB) 대신 로컬 인스턴스 의존 — 재현성 ↓
+- 테스트 메서드명: `대상_상황_기대결과` (예: `차감_잔액부족_예외발생`)
 - 동시성 테스트: 여러 스레드/CompletableFuture로 race 시나리오 재현되는가
+- Jacoco 커버리지 리포트 확인 (CI artifact `jacoco-report`) — 보안·결제·포인트 패키지가 비어 있으면 Critical
 
-## 4. 코딩 컨벤션 (검토 시 적용)
+## 4. 코딩 컨벤션 (검토 시 적용) — DDD-lite
 
 ### 4.1 패키지 / 명명
 - 패키지: 소문자, 단수형 (`item` ✅ / `items` ❌)
-- DTO: `Request`, `Response` 접미사
-- Entity = 테이블명 단수 PascalCase
+- DTO: `Request`, `Response` 접미사 (Presentation), `Command`/`Query`/`Result` (Application 내부)
+- Entity = 테이블명 단수 PascalCase, Aggregate Root는 도메인 명사
+- ValueObject는 불변 + 자가 검증 (`Money`, `Email`, `Phone`, `PointBalance`)
 - 테스트 메서드: `대상_상황_기대결과`
 
-### 4.2 레이어 분리
-- Controller → Service → Repository (역방향 호출 X)
-- Service 간 호출은 다른 도메인 Service를 통해 (Repository 직접 X)
-- Entity Setter X → 비즈니스 메서드로 상태 변경
-- Service에 HttpServletRequest 받지 않기
+### 4.2 패키지 구조 (4-layer)
+```
+domain/{도메인}/
+├── application/        # UseCase, ApplicationService (트랜잭션 경계), dto/
+├── domain/             # Aggregate, ValueObject, DomainService,
+│                       # Repository(인터페이스), DomainEvent (event/)
+├── infrastructure/     # JPA RepositoryImpl (persistence/), 외부 어댑터
+└── presentation/       # Controller, Request/Response DTO (dto/)
+```
 
-### 4.3 트랜잭션
-- `@Transactional`: Service에만
+### 4.3 레이어 분리 (의존 방향: presentation → application → domain ← infrastructure)
+- Presentation은 ApplicationService만 호출 (Repository / Entity 직접 X)
+- ApplicationService 간 호출은 다른 도메인의 ApplicationService를 통해 (Repository 직접 X)
+- **Domain layer는 Spring/JPA/Web 어노테이션 의존 금지** (`@Service`, `@Transactional`, `@Entity` 제외하고 순수 POJO)
+- Repository = 도메인 인터페이스, JPA 구현은 `infrastructure/persistence/`
+- Aggregate 자식 Entity는 외부에서 직접 조작 금지 (반드시 Root 메서드 통해)
+- Entity Setter X → 비즈니스 메서드(상태 전이 의도)
+- Application/Domain Service에 HttpServletRequest 받지 않기
+
+### 4.4 트랜잭션
+- `@Transactional`: **ApplicationService에만**
 - 조회 전용: `@Transactional(readOnly = true)`
+- DomainService는 트랜잭션을 모름 — 호출자가 책임
 
 ## 5. 리뷰 출력 형식
 
@@ -187,25 +214,68 @@ springdoc-openapi (Swagger)
 - 짧게 언급 (자만 방지용으로 최소화)
 ```
 
-## 6. 리뷰 강도
+## 6. 리뷰 강도 (게이트 시스템)
 
-### 6.1 강하게 리뷰할 영역
-- `global/security/**`
-- `global/infra/payment/**` (PG 추상화, 토스 클라이언트)
-- `domain/auth/**`
-- `domain/payment/**`, `domain/point/**`
-- 결제 웹훅, OAuth 콜백
-- 동시성 처리 코드 (락, 원자 연산)
+> **핵심 원칙**: 버그가 늦게 발견될수록 손해가 큰 코드일수록 빨리 리뷰한다.
+> 게이트 외 호출은 거절하거나 짧게 처리해 토큰을 아낀다.
+
+### 6.1 게이트 1 — 즉시 리뷰  🔴
+
+**대상 영역** (CLAUDE.md §9.2와 1:1 일치):
+- `global/security/**` (JwtAuthenticationFilter, JwtProvider, SecurityConfig)
+- `domain/auth/**` (OAuth2Service, 소셜 로그인 검증)
+- `domain/payment/**` (TossPaymentGateway, PaymentWebhookController)
+- `domain/point/**` (charge, deduct, refund, 출금 처리)
+- 거래 상태 머신 (예약 ↔ 채팅 차단 로직)
 - WebSocket 인증 흐름
 
-### 6.2 일반 리뷰
-- 일반 CRUD
-- DTO 변환
-- 컨트롤러 라우팅
+**강도**: 가장 강하게. Critical 누락 X. §3.1·§3.2·§8 절대 금지 항목 모두 점검.
 
-### 6.3 관대하게
-- 단순 데이터 조회
-- 어차피 5/6 이후 개선 예정인 부분 (TODO 주석 있는 곳)
+### 6.2 게이트 2 — PR 풀 리뷰  🟡
+
+**대상**: PR 전체 변경 (dev 대비 diff)
+**강도**: 강하게. 영역 간 일관성·아키텍처 정합성도 본다.
+- DDD 4-layer 의존 방향 위반 여부
+- 트랜잭션 경계가 ApplicationService에 모여 있는가
+- 영역별 테스트 커버리지(Jacoco) 누락 여부
+
+### 6.3 게이트 3 — 디버깅 보조  🟢
+
+**대상**: 막힌 단일 지점
+**강도**: 단서 제시 위주. 풀 리뷰 X. 사용자가 30분 디버깅 후 호출한 경우다 — 시간을 끌지 말고 가설을 좁혀준다.
+
+### 6.4 리뷰 거부 영역  ❌
+
+다음 영역은 호출이 들어와도 **"이 영역은 게이트 외라 리뷰하지 않음"** 으로 거절 (CLAUDE.md §9.5와 1:1 일치):
+- 단순 CRUD (Item, Wishlist, Block, Notice, Banner)
+- DTO 변환 코드, Controller 라우팅
+- 카테고리, 해시태그
+- 설정 파일 변경 (`application.yml` 항목 추가)
+- 마이그레이션 SQL의 단순 추가
+- 관리자 페이지 일반 기능 (통계, 회원 목록 조회 등)
+- 어차피 5/6 이후 개선 예정인 부분 (`// TODO(5/6 이후):` 주석)
+
+### 6.5 영역별 게이트 매핑 (요약 표)
+
+> CLAUDE.md §9.6과 1:1 일치. 한쪽 변경 시 양쪽 갱신.
+
+| 영역 | 게이트 | 이유 |
+|------|--------|------|
+| `global/security/**` | 🔴 즉시 | 보안 핵심 |
+| `domain/auth/**` (OAuth 포함) | 🔴 즉시 | 토큰/사용자 매핑 결함 위험 |
+| `domain/payment/**` | 🔴 즉시 | 결제 = 진짜 돈 |
+| `domain/point/**` | 🔴 즉시 | 충전식 머니 = 진짜 돈 |
+| 토스 웹훅 핸들러 | 🔴 즉시 | 멱등성/위변조 |
+| 거래 상태 머신 (예약/취소) | 🔴 즉시 | 동시 거래 차단 결함 시 분쟁 |
+| 출금 처리 | 🔴 즉시 | 락/정합성 |
+| WebSocket 인증 | 🔴 즉시 | 인증 누락 시 모든 메시지 노출 |
+| MongoDB ↔ MySQL 정합성 | 🟡 PR 전 | 트랜잭션 분리 영역 |
+| 검색/필터 (QueryDSL) | 🟡 PR 전 | N+1, 인덱스 |
+| Review 시스템 | 🟡 PR 전 | 평균 재계산 정합성 |
+| Item CRUD | ❌ 안 함 | 단순 |
+| Notice/Banner | ❌ 안 함 | 단순 |
+| Wishlist/Block | ❌ 안 함 | 단순 |
+| 관리자 일반 기능 | ❌ 안 함 | 단순 |
 
 ## 7. 일정 인식
 
@@ -225,6 +295,17 @@ springdoc-openapi (Swagger)
 - ❌ 트랜잭션 없이 다중 쓰기
 - ❌ 토스 결제 금액 백엔드 재검증 누락
 - ❌ 멱등성 키 없는 결제 처리
+- ❌ Domain layer가 Spring/JPA/Web 어노테이션 의존 (DDD 위반)
+- ❌ Aggregate 자식 Entity 외부 직접 조작 (Root 우회)
+- ❌ 보안/결제/포인트 코드 테스트 없이 작성 (TDD 강제 영역)
+
+### Codex 협업 안티패턴 (게이트 위반 — 호출 거절 사유)
+- ❌ 매 커밋마다 Codex 리뷰 요청 (토큰 낭비, 노이즈)
+- ❌ 함수 하나 짤 때마다 리뷰 요청 (컨텍스트 부족)
+- ❌ CRUD 무분별 리뷰 요청 (§6.4 거부 영역 — "게이트 외"로 거절)
+- ❌ 리뷰 결과를 무조건 다 반영 강요 (Codex도 틀림, 판단은 개발자)
+- ❌ 리뷰만 받고 안 고침 (반영 또는 명시적 reject 사유 요구)
+- ❌ 막힐 때 가장 먼저 Codex 호출 (먼저 30분 본인 디버깅 — §6.3 게이트 3 전제)
 
 ## 9. Claude Code와의 협업
 

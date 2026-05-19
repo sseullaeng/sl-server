@@ -1,0 +1,287 @@
+package com.sseulang.domain.escrow.presentation;
+
+import com.sseulang.domain.escrow.application.EscrowApplicationService;
+import com.sseulang.domain.escrow.application.dto.EscrowApplicationResult;
+import com.sseulang.domain.escrow.application.dto.EscrowLinkResult;
+import com.sseulang.domain.escrow.domain.EscrowApplicationStatus;
+import com.sseulang.domain.escrow.presentation.dto.EscrowApplicationCancelRequest;
+import com.sseulang.domain.escrow.presentation.dto.EscrowApplicationCreateRequest;
+import com.sseulang.domain.escrow.presentation.dto.EscrowLinkCreateRequest;
+import com.sseulang.global.common.ApiResponse;
+import com.sseulang.global.common.PageResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@Tag(name = "Escrow", description = "거래대행 (Escrow) — link 생성/진입 + 폼 제출 + 결제 + 정산.")
+@RestController
+@RequestMapping("/api/v1/escrow")
+public class EscrowController {
+
+    private final EscrowApplicationService service;
+
+    public EscrowController(EscrowApplicationService service) {
+        this.service = service;
+    }
+
+    
+    
+    
+    @Operation(summary = "거래대행 link 생성 (신청자)",
+            description = "이메일 인증 필수. UUID v4 token + 24h 만료 (env override 가능).")
+    @PostMapping("/links")
+    public ResponseEntity<ApiResponse<EscrowLinkResult>> createLink(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody EscrowLinkCreateRequest request
+    ) {
+        EscrowLinkResult result = service.createLink(request.toCommand(userId));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(result));
+    }
+
+    @Operation(summary = "거래대행 link 진입 (수신자)",
+            description = "비로그인 OK — 결정 #1 A1. 신청자 닉네임 + role + feePayer + 만료 노출.")
+    @GetMapping("/links/{linkToken}")
+    public ApiResponse<EscrowLinkResult> getLink(@PathVariable String linkToken) {
+        return ApiResponse.ok(service.getByToken(linkToken));
+    }
+
+    
+    
+    
+    @Operation(summary = "거래대행 수수료 미리보기 (실시간)",
+            description = "폼 작성 중 좌표·물품·feePayer 보내면 거리·deliveryFee·commissionFee + buyer/seller 부담분 응답. application 생성 X.")
+    @PostMapping("/applications/preview")
+    public ApiResponse<com.sseulang.domain.escrow.presentation.dto.EscrowApplicationPreviewResponse> previewFee(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody com.sseulang.domain.escrow.presentation.dto.EscrowApplicationPreviewRequest request
+    ) {
+        return ApiResponse.ok(
+                com.sseulang.domain.escrow.presentation.dto.EscrowApplicationPreviewResponse.from(
+                        service.previewFee(request.toCommand())
+                )
+        );
+    }
+
+    @Operation(summary = "거래대행 폼 제출 (수신자)",
+            description = "이메일 인증 필수. linkToken 매칭 + atomic claim + snapshot 저장. 동일 사용자 재제출 시 idempotent.")
+    @PostMapping("/applications")
+    public ResponseEntity<ApiResponse<EscrowApplicationResult>> createApplication(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody EscrowApplicationCreateRequest request
+    ) {
+        EscrowApplicationResult result = service.createApplication(request.toCommand(userId));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(result));
+    }
+
+    @Operation(summary = "거래대행 by-link 신청 (분리 입력 흐름)",
+            description = "라운드 12 추가. 발급자가 link 발급 시 본인 영역(pickup+물품 / delivery+연락처)을 미리 입력한 경우, "
+                    + "수신자는 본인 영역만 채워서 신청. role=seller link → buyer 가 delivery+receiverPhone, "
+                    + "role=buyer link → seller 가 pickup+물품 정보. 양쪽 합쳐 application 생성 + ±10원 fee 검증.")
+    @PostMapping("/applications/by-link")
+    public ResponseEntity<ApiResponse<EscrowApplicationResult>> createByLinkApplication(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody com.sseulang.domain.escrow.presentation.dto.EscrowApplicationByLinkRequest request
+    ) {
+        EscrowApplicationResult result = service.createByLinkApplication(request.toCommand(userId));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(result));
+    }
+
+    @Operation(summary = "거래대행 내부 신청 (판매자가 채팅방에서)",
+            description = "PR-B-3 라운드 12. 채팅방 안에서 판매자가 한 번에 양쪽 정보 입력. link 토큰 미사용. "
+                    + "검증: chatRoom 참여자 + chatRoom.itemId == cmd.itemId + 본인 == item.sellerId. "
+                    + "에러: ESCROW_FORM_INVALID, CHAT_ROOM_OPPONENT_LEFT, ESCROW_SELLER_ONLY.")
+    @PostMapping("/applications/internal")
+    public ResponseEntity<ApiResponse<EscrowApplicationResult>> createInternalApplication(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody com.sseulang.domain.escrow.presentation.dto.EscrowApplicationCreateInternalRequest request
+    ) {
+        EscrowApplicationResult result = service.createInternalApplication(request.toCommand(userId));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(result));
+    }
+
+    @Operation(summary = "거래대행 내부 draft (판매자가 본인 영역만 입력)",
+            description = "PR-B-4 라운드 12. 판매자가 본인 영역(출발지/물품/가격) 만 입력 → status=정보입력대기. "
+                    + "구매자가 buyer-info PATCH 시 양쪽 filled → 자동으로 결제대기 전환 + fee 산정. "
+                    + "에러: ESCROW_FORM_INVALID, CHAT_ROOM_OPPONENT_LEFT, ESCROW_SELLER_ONLY.")
+    @PostMapping("/applications/internal/draft")
+    public ResponseEntity<ApiResponse<EscrowApplicationResult>> createInternalDraft(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody com.sseulang.domain.escrow.presentation.dto.EscrowApplicationCreateInternalDraftRequest request
+    ) {
+        EscrowApplicationResult result = service.createInternalDraft(request.toCommand(userId));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(result));
+    }
+
+    @Operation(summary = "판매자 영역 수정 (정보입력대기 상태)",
+            description = "PR-B-4. 본인이 sellerId 인 경우만. 정보입력대기 외 상태 호출 시 ESCROW_INVALID_STATE.")
+    @PatchMapping("/applications/{id}/seller-info")
+    public ApiResponse<EscrowApplicationResult> patchSellerInfo(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id,
+            @Valid @RequestBody com.sseulang.domain.escrow.presentation.dto.EscrowSellerInfoPatchRequest request
+    ) {
+        return ApiResponse.ok(service.patchSellerInfo(id, userId, request.toCommand()));
+    }
+
+    @Operation(summary = "구매자 영역 입력 (정보입력대기 상태)",
+            description = "PR-B-4. 본인이 buyerId 인 경우만. 양쪽 입력 완료 시 자동 fee 산정 + 결제대기 전환. "
+                    + "정보입력대기 외 상태 호출 시 ESCROW_INVALID_STATE.")
+    @PatchMapping("/applications/{id}/buyer-info")
+    public ApiResponse<EscrowApplicationResult> patchBuyerInfo(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id,
+            @Valid @RequestBody com.sseulang.domain.escrow.presentation.dto.EscrowBuyerInfoPatchRequest request
+    ) {
+        return ApiResponse.ok(service.patchBuyerInfo(id, userId, request.toCommand()));
+    }
+
+    @Operation(summary = "본인 share 결제 미리보기 (PR-E)",
+            description = "본인 분담 + 현재 포인트 잔액 + 부족분 + 즉시 결제 가능 여부. 부족 시 프론트가 충전 UI 트리거. 참여자만 접근.")
+    @GetMapping("/applications/{id}/payment-preview")
+    public ApiResponse<com.sseulang.domain.escrow.presentation.dto.EscrowPaymentPreviewResponse> previewPayment(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        return ApiResponse.ok(com.sseulang.domain.escrow.presentation.dto.EscrowPaymentPreviewResponse.from(
+                service.previewPayShare(id, userId)
+        ));
+    }
+
+    @Operation(summary = "본인 share 포인트 결제 (PR-B-5)",
+            description = "결제대기 상태에서 본인 share 만큼 포인트 잔액 차감. 양쪽 결제 완료 시 자동 결제완료 + 라이더 매칭. "
+                    + "에러: 400 INSUFFICIENT_POINT (잔액 부족), 400 ESCROW_INVALID_STATE (상태/시점/이미 결제됨), 403 ESCROW_FORBIDDEN (참여자 아님).")
+    @PostMapping("/applications/{id}/pay")
+    public ApiResponse<com.sseulang.domain.escrow.presentation.dto.EscrowPayResponse> payShare(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        EscrowApplicationStatus status = service.payShare(id, userId);
+        return ApiResponse.ok(new com.sseulang.domain.escrow.presentation.dto.EscrowPayResponse(status.name()));
+    }
+
+    @Operation(summary = "본인 거래대행 신청 목록", description = "최신순. 필터는 후속 (5/11 단순).")
+    @GetMapping("/applications/me")
+    public ApiResponse<PageResponse<EscrowApplicationResult>> listMine(
+            @AuthenticationPrincipal Long userId,
+            Pageable pageable
+    ) {
+        return ApiResponse.ok(PageResponse.from(service.listMine(userId, pageable)));
+    }
+
+    @Operation(summary = "거래대행 신청 단건", description = "참여자만 (initiator/receiver).")
+    @GetMapping("/applications/{id}")
+    public ApiResponse<EscrowApplicationResult> getOne(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        return ApiResponse.ok(service.getById(id, userId));
+    }
+
+    @Operation(summary = "거래대행 신청 취소",
+            description = "매칭 전엔 양쪽 환불, 매칭 후엔 결정 #6 (귀책자 100% 부담 — 추가 결제 흐름은 R1).")
+    @PatchMapping("/applications/{id}/cancel")
+    public ApiResponse<Void> cancel(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id,
+            @Valid @RequestBody EscrowApplicationCancelRequest request
+    ) {
+        service.cancel(id, userId, request.reason());
+        return ApiResponse.ok();
+    }
+
+    @Operation(summary = "buyer 수령 확인 (Mode B)",
+            description = "Mode B INTERNAL 거래만. 진행중 → 완료 + 정산 (seller 적립, rider 적립).")
+    @PostMapping("/applications/{id}/confirm-receipt")
+    public ApiResponse<Void> confirmReceipt(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        service.confirmReceipt(id, userId);
+        return ApiResponse.ok();
+    }
+
+    @Operation(summary = "seller 물품 인계 확인 (라운드 12)",
+            description = "진행중 상태에서 seller 만 호출. 상태 머신 영향 X — UX 용 audit 타임스탬프. "
+                    + "에러: ESCROW_INVALID_STATE (진행중 외 상태), ESCROW_FORBIDDEN (seller 아님).")
+    @PostMapping("/applications/{id}/confirm-handover")
+    public ApiResponse<Void> confirmHandover(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        service.confirmHandoverBySeller(id, userId);
+        return ApiResponse.ok();
+    }
+
+    @Operation(summary = "buyer 반납 요청 (라운드 14 — 대여 거래대행)",
+            description = "rentalMode 거래대행에서 buyer 만 호출. 사용중 → 반납중 + return delivery 모집 자동 생성. "
+                    + "라이더가 buyer 위치에서 픽업 → seller 위치로 배송. 에러: ESCROW_INVALID_STATE / ESCROW_FORBIDDEN.")
+    @PostMapping("/applications/{id}/request-return")
+    public ApiResponse<Void> requestReturn(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        service.requestReturn(id, userId);
+        return ApiResponse.ok();
+    }
+
+    @Operation(summary = "seller 회신 확인 (라운드 14 — 대여 거래대행)",
+            description = "rentalMode 거래대행에서 seller 만 호출. 반납중 + return delivery 완료 후 호출 가능. "
+                    + "보증금 환불 + return 라이더 보상 + paired Tx (대여) 생성 + cascade 거래완료. "
+                    + "에러: ESCROW_INVALID_STATE / ESCROW_FORBIDDEN.")
+    @PostMapping("/applications/{id}/confirm-return")
+    public ApiResponse<Void> confirmReturn(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        service.confirmReturn(id, userId);
+        return ApiResponse.ok();
+    }
+
+    @Operation(summary = "사용중 단계 취소 요청 (라운드 14 PR7 — 양 당사자 합의 취소)",
+            description = "rentalMode + 사용중 status 한정. buyer/seller 어느 쪽이든 호출. "
+                    + "다른 참여자가 [동의] 또는 [철회] 응답해야 취소 확정. 한 번에 한 요청만. "
+                    + "에러: ESCROW_INVALID_STATE / ESCROW_FORBIDDEN.")
+    @PostMapping("/applications/{id}/cancel-request")
+    public ApiResponse<Void> requestCancelDuringUsing(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id,
+            @RequestBody(required = false) com.sseulang.domain.escrow.presentation.dto.EscrowCancelRequestRequest request
+    ) {
+        service.requestCancelDuringUsing(id, userId, request == null ? null : request.reason());
+        return ApiResponse.ok();
+    }
+
+    @Operation(summary = "사용중 단계 취소 동의 (라운드 14 PR7)",
+            description = "취소 요청자의 상대방만 호출. 호출 시 즉시 취소 status 전이. "
+                    + "에러: ESCROW_INVALID_STATE (요청 없음/사용중 아님) / ESCROW_FORBIDDEN (요청자 본인 또는 비참여자).")
+    @PostMapping("/applications/{id}/cancel-confirm")
+    public ApiResponse<Void> confirmCancelDuringUsing(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        service.confirmCancelDuringUsing(id, userId);
+        return ApiResponse.ok();
+    }
+
+    @Operation(summary = "사용중 단계 취소 요청 철회 (라운드 14 PR7)",
+            description = "요청자 본인만 호출. cancel_requested_by/at/reason 클리어. status 유지(사용중).")
+    @PostMapping("/applications/{id}/cancel-withdraw")
+    public ApiResponse<Void> withdrawCancelRequest(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        service.withdrawCancelRequest(id, userId);
+        return ApiResponse.ok();
+    }
+}

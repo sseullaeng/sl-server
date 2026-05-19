@@ -30,12 +30,34 @@ spring:
       port: 6380
     mongodb:
       uri: mongodb://sseulang:sseulangpw@localhost:27017/sseulang?authSource=admin
+  # 네이버 SMTP — 로컬 메일 발송 테스트용. .env 의 MAIL_* 채우면 활성화.
+  # 네이버 메일 설정 → 환경설정 → POP3/IMAP 설정 → SMTP 사용 ON
+  # MAIL_USERNAME = 네이버 이메일 전체 (예: alem6516@naver.com), MAIL_FROM 동일
+  # 587 (STARTTLS) 또는 465 (SSL) 둘 다 가능 — 본 설정은 587/STARTTLS.
+  mail:
+    host: ${MAIL_HOST:smtp.naver.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        # SMTP 디버그 로그 — true 로 켜면 EHLO/AUTH/MAIL FROM/RCPT TO 모두 stdout 찍힘.
+        # 진단 시에만 켜고 평소엔 false.
+        debug: ${MAIL_DEBUG:false}
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
 
 app:
   jwt:
     secret: ${JWT_SECRET:local-dev-secret-please-override-with-64-char-random-string-1234567890}
-    access-token-validity-seconds: 1800
-    refresh-token-validity-seconds: 604800
+    access-token-validity-seconds: 3600
+    refresh-token-validity-seconds: 1209600
   cookie:
     domain: localhost
     secure: false
@@ -58,7 +80,28 @@ app:
     client-key: ${TOSS_CLIENT_KEY:}
     secret-key: ${TOSS_SECRET_KEY:}
     base-url: https://api.tosspayments.com
+    # dev/QA 한정 — 토스 시크릿 키 미발급 환경에서 confirm 검증 우회.
+    skip-verify: ${TOSS_SKIP_VERIFY:false}
   cors:
     allowed-origins:
       - http://localhost:3000
+      - http://localhost:3001
       - http://localhost:5173
+  email:
+    # SMTP 활성 — true 면 SmtpEmailSender (실제 메일 발송), false/미설정 이면 LogEmailSender (로그만).
+    # MAIL_USERNAME / MAIL_PASSWORD 가 .env 에 채워져 있어야 발송 성공.
+    smtp-enabled: ${APP_EMAIL_SMTP_ENABLED:false}
+    from: ${MAIL_FROM:noreply@sseulang.local}
+    # 가입 직후 발송되는 인증 메일 링크 base. 프론트가 token query 파라미터를 받아서
+    # POST /api/v1/auth/verify-email 호출. (5/2 — 프론트 합의 path)
+    verification-url-base: http://localhost:3000/auth/verify-email
+  # 로컬 smoke test 전용 인증 우회 — DevAuthController. prod 배포 시 절대 true 금지.
+  dev-auth:
+    enabled: true
+  delivery:
+    auto-accept-rider-id: ${APP_DELIVERY_AUTO_ACCEPT_RIDER_ID:0}
+  overdue:
+    phase3-amount-krw: ${APP_OVERDUE_PHASE3_AMOUNT_KRW:50000}
+    phase3-days-threshold: ${APP_OVERDUE_PHASE3_DAYS_THRESHOLD:14}
+    phase4-days-after-suspend: ${APP_OVERDUE_PHASE4_DAYS_AFTER_SUSPEND:7}
+    phase2-daily-rate-percent: ${APP_OVERDUE_PHASE2_DAILY_RATE_PERCENT:20}

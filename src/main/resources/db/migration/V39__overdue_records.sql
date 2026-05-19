@@ -1,0 +1,27 @@
+CREATE TABLE overdue_records (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    escrow_application_id BIGINT NOT NULL UNIQUE,
+    buyer_id BIGINT NOT NULL,
+    seller_id BIGINT NOT NULL,
+    deposit_amount BIGINT NOT NULL,
+    rental_end_at DATETIME NOT NULL,
+    overdue_started_at DATETIME NOT NULL,
+    overdue_days INT NOT NULL DEFAULT 0,
+    phase VARCHAR(20) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    deposit_forfeited_amount BIGINT NOT NULL DEFAULT 0,
+    extra_debt_amount BIGINT NOT NULL DEFAULT 0,
+    account_suspended_at DATETIME NULL,
+    legal_action VARCHAR(30) NOT NULL DEFAULT 'NONE',
+    resolved_at DATETIME NULL,
+    resolution_note VARCHAR(1000) NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    INDEX idx_overdue_buyer (buyer_id, status),
+    INDEX idx_overdue_status_phase (status, phase),
+    INDEX idx_overdue_active (status, overdue_days),
+    CONSTRAINT fk_overdue_escrow FOREIGN KEY (escrow_application_id)
+        REFERENCES escrow_applications(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_overdue_buyer FOREIGN KEY (buyer_id) REFERENCES users(id),
+    CONSTRAINT fk_overdue_seller FOREIGN KEY (seller_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

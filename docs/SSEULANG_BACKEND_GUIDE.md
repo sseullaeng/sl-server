@@ -127,7 +127,7 @@ com.sseulang
   ```
   sseulang-bucket/
   ├── profiles/{userId}/{uuid}.jpg
-  ├── items/{itemId}/{uuid}.jpg          (최대 5장)
+  ├── items/{itemId}/{uuid}.jpg          (최대 10장)
   ├── messages/{roomId}/{uuid}.jpg
   ├── notices/{noticeId}/{uuid}.jpg
   └── banners/{bannerId}/{uuid}.jpg
@@ -153,9 +153,11 @@ com.sseulang
 ### 4.8 포인트 (충전식 — 플랫폼 머니)
 - **개념**: 추가 적립금 X. **실제 결제에 쓰는 머니**.
 - **충전**: 토스페이먼츠로 결제 → `point_balance` 증가
-- **거래 결제**: 구매자 포인트 차감 → 판매자 포인트 적립 (PG 안 거침)
+- **직접 거래**: 사이트 포인트 정산 없음. 백엔드는 상태와 Item 잠금만 관리
+- **거래대행 결제**: 참여자 share 포인트 차감, 완료 시 판매자/라이더 포인트 정산 (PG 안 거침)
+- **대여 보증금**: buyer 결제 시 `point_balance → point_hold`, 반납 완료 또는 사용중 취소 확정 시 `point_hold → point_balance`
 - **출금**: 판매자가 출금 신청 → 관리자 승인 → 외부 계좌 이체 (시뮬레이션)
-- **환불**: 거래 취소 시 양쪽 잔액 원복
+- **환불**: 취소/반납 정책에 따라 포인트 hold 또는 잔액 원복
 - **가입 보너스 X** / **거래 완료 추가 적립 X** (시스템이 진짜 돈 뿌리면 적자)
 - **만료**: 없음
 
@@ -173,6 +175,8 @@ com.sseulang
 - **멱등성**: `merchant_uid` UNIQUE로 중복 결제 방지
 - **검증**: 결제 완료 후 백엔드에서 토스 API로 금액 재검증 (위변조 방지)
 - **웹훅 엔드포인트**: `POST /api/v1/payments/webhook/toss`
+- **웹훅 보안**: `tosspayments-webhook-signature` + `tosspayments-webhook-timestamp` HMAC 검증 후 Toss lookup 재조회
+- **웹훅 처리 상태**: lookup 실패/불일치 시 `webhook_events.processed_at` 을 찍지 않고 다음 webhook 또는 reconciliation 재시도 대기
 
 ### 4.10 채팅 / 알림
 - **채팅방**: 1:1 고정 (`chat_rooms.user1_id, user2_id`)
@@ -187,12 +191,14 @@ com.sseulang
 - 채팅 메시지는 잃어도 비즈니스 크리티컬 X
 
 ### 4.11 거래 정책
-- **상태 머신**: `채팅중 → 예약 → 거래완료` (또는 `취소`)
+- **상태 머신(판매/나눔)**: `채팅중 → 예약 → 인계완료 → 거래완료` (또는 `취소`)
+- **상태 머신(대여)**: `채팅중 → 예약 → 인계완료 → 반납요청 → 거래완료` (또는 `취소`)
 - **동시 거래**:
     - 예약 전: 한 물품에 여러 명과 채팅 OK
     - **예약 직후: 다른 사용자와의 채팅 차단**
     - 예약 취소되면 채팅 다시 활성화
 - **거래 타입**: `대여`, `판매`, `나눔` (ERD 통일)
+- **정산**: 직접 거래는 포인트 정산 없음. 거래대행 완료 시 paired Transaction 이 생성되어 리뷰/관리자 화면과 통합
 
 ### 4.12 배달대행
 - **방식**: 외부 대행사 API 연동 X, **상태 전이 시뮬레이션**
@@ -200,10 +206,13 @@ com.sseulang
 - **기사 위치**: `driver_lat`, `driver_lng` (DECIMAL(10,7)) — 단일 컬럼 분리
 - **상태 머신**: `신청 → 배달중 → 완료` (또는 `취소`)
 
-### 4.13 보증금 처리
-- 대여 거래 결제 시 `payments` 두 건: `대여금` + `보증금`
-- 대여 종료 시 보증금 반환은 **관리자 수동 처리** (UC-43)
-- 환불은 토스 API 또는 포인트 복원
+### 4.13 거래대행 대여 lifecycle / 보증금 처리
+- **생성**: 내부 거래대행에서 source Item 이 대여면 `rentalMode=true`, `rentalEndAt` 필수
+- **진행**: `결제완료 → 진행중 → confirmReceipt → 사용중`
+- **반납**: buyer 수동 `request-return` 또는 `rentalEndAt` 경과 scheduler 자동 트리거 → `반납중` + return delivery 모집
+- **완료**: seller `confirm-return` → `완료`, 판매자 `itemPrice` 정산, forward/return 라이더 정산, 보증금 refundHold, paired Transaction 생성
+- **보증금**: Item 보증금 snapshot 을 `escrow_applications.deposit_amount` 에 저장. buyer 결제 시 hold, 반납 완료/사용중 취소 확정 시 반환
+- **return fee**: 수동/자동 반납 요청 모두 buyer 포인트에서 forward delivery fee 와 동일 금액을 추가 차감
 
 ---
 
@@ -305,12 +314,32 @@ POST   /api/v1/chat-rooms/{id}/messages
 
 # 거래
 POST   /api/v1/transactions
-PATCH  /api/v1/transactions/{id}           # 예약/완료/취소
+PATCH  /api/v1/transactions/{id}           # 예약/인계확인/인수확인/완료/반납요청/회신확인/취소
+
+# 거래대행 (Escrow)
+POST   /api/v1/escrow/links
+GET    /api/v1/escrow/links/{linkToken}
+POST   /api/v1/escrow/applications/preview
+POST   /api/v1/escrow/applications
+POST   /api/v1/escrow/applications/by-link
+POST   /api/v1/escrow/applications/internal
+POST   /api/v1/escrow/applications/internal/draft
+PATCH  /api/v1/escrow/applications/{id}/seller-info
+PATCH  /api/v1/escrow/applications/{id}/buyer-info
+GET    /api/v1/escrow/applications/{id}/payment-preview
+POST   /api/v1/escrow/applications/{id}/pay
+POST   /api/v1/escrow/applications/{id}/confirm-receipt
+POST   /api/v1/escrow/applications/{id}/confirm-handover
+POST   /api/v1/escrow/applications/{id}/request-return
+POST   /api/v1/escrow/applications/{id}/confirm-return
+POST   /api/v1/escrow/applications/{id}/cancel-request
+POST   /api/v1/escrow/applications/{id}/cancel-confirm
+POST   /api/v1/escrow/applications/{id}/cancel-withdraw
 
 # 결제 (토스 연동)
 POST   /api/v1/payments/charge             # 충전 시작
 POST   /api/v1/payments/charge/confirm     # 충전 승인 (콜백)
-POST   /api/v1/payments/webhook/toss       # 웹훅
+POST   /api/v1/payments/webhook/toss       # 웹훅. transmission-id/signature/timestamp 헤더 검증
 
 # 포인트
 GET    /api/v1/points/balance
@@ -356,7 +385,10 @@ PATCH  /api/v1/admin/items/{id}            # 비공개/삭제
 GET    /api/v1/admin/reports
 PATCH  /api/v1/admin/reports/{id}
 
-POST   /api/v1/admin/transactions/{id}/refund-deposit   # 보증금 반환
+GET    /api/v1/admin/escrow/applications
+GET    /api/v1/admin/escrow/applications/{id}
+GET    /api/v1/admin/escrow/fee-settings
+PATCH  /api/v1/admin/escrow/fee-settings
 
 GET    /api/v1/admin/withdrawals
 PATCH  /api/v1/admin/withdrawals/{id}      # 출금 승인/거부
@@ -428,6 +460,22 @@ main         (배포용, 항상 동작 보장)
 | 8 | 5/4 (일) | Point 사용/출금, Withdrawal, Delivery (Mock) |
 | 9 | 5/5 (월) | Notice, Banner, 관리자 페이지 (통계, 회원관리, 보증금반환, 신고처리) |
 | 10 | 5/6 (화) | **통합 테스트, 버그 수정, 마무리, PM 연동 시작** |
+
+### Codex 리뷰 게이트 (Day별)
+
+> 게이트 정의는 `CLAUDE.md §9` / `AGENTS.md §6` 참조.
+
+| Day | 작업 끝나는 시점 | 게이트 | 비고 |
+|-----|-----------------|--------|------|
+| 2 | SecurityConfig + JWT | 🔴 즉시 | 보안 핵심 |
+| 3 | OAuth2Service (카카오/구글) | 🔴 즉시 | 토큰/사용자 매핑 |
+| 4 | `feature/item-crud` PR 직전 | 🟡 PR 리뷰 | DDD-lite 구조 검증 |
+| 5 | 거래 상태 머신 | 🔴 즉시 | 동시 거래 차단 결함 시 분쟁 |
+| 6 | WebSocket 인증 | 🔴 즉시 | 인증 누락 시 모든 메시지 노출 |
+| 7 | Payment (토스 실연동) | 🔴 즉시 + 🟡 PR 리뷰 | **이중** — 결제는 가장 중요 |
+| 8 | Point / 출금 | 🔴 즉시 | 락/정합성 |
+| 9 | 관리자 페이지 머지 | 🟡 PR 리뷰 | 권한 누락 점검 |
+| 10 (5/6) | dev → main 전체 PR | 🟡 풀 리뷰 | 영역 간 일관성 최종 검증 |
 
 ### 위험 영역 (앞쪽에 배치)
 - **Day 1~2**: 카카오/구글 OAuth 콘솔 등록 (외부 의존성)
@@ -647,6 +695,128 @@ PM과 추가 협의 필요한 부분:
 - 출금 최소 금액 / 출금 수수료
 - 보증금 반환 분쟁 시 판단 기준
 - 신고 누적 N회 → 자동 제재 룰
+
+---
+
+## 13. 트러블슈팅 노트 (Day별 누계)
+
+> 작업 중 마주친 이슈 + 해결 + 교훈. 새 이슈 발생 시 본 섹션에 누적.
+
+### 13.1 JPAQueryFactory 빈 미등록 (Day 4)
+**증상**: ItemQuerydslRepository 작성 시 `NoSuchBeanDefinitionException: JPAQueryFactory`.
+**원인**: `querydsl-apt` 는 Q-class 생성만, 빈 자동 등록 X.
+**해결**: `global/config/QuerydslConfig.java` 에 `@Bean public JPAQueryFactory jpaQueryFactory()` 직접 등록.
+**교훈**: 외부 라이브러리 빈은 명시적 Config 필요.
+
+### 13.2 한국어 ENUM 매핑 (Day 4)
+**증상**: DB ENUM `'대여','판매','나눔'` 과 Java enum 매핑 — 영문 enum + AttributeConverter는 보일러플레이트(6+ enum).
+**해결**: 한국어 식별자 enum + `@Enumerated(EnumType.STRING)`. Java가 한국어 식별자 허용, `name()` 그대로 매칭.
+```java
+public enum TradeType { 대여, 판매, 나눔 }
+```
+**트레이드오프**: enum rename = 데이터 마이그(영문 enum 동일 비용). DDD Ubiquitous Language와 정합.
+
+### 13.3 자식 엔티티 BaseEntity 상속 시 컬럼 mismatch (Day 4)
+**증상**: ItemImage `extends BaseEntity` → `Schema-validation: missing column [updated_at]`.
+**원인**: `item_images` 테이블엔 `created_at` 만 있고 `updated_at` 없음.
+**해결**: BaseEntity 상속 X. `@CreatedDate` + `@EntityListeners(AuditingEntityListener.class)` 만.
+**교훈**: 자식 엔티티는 테이블 정의(`updated_at` 유무) 먼저 확인.
+
+### 13.4 @DataJpaTest + testcontainers MySQL (Day 4)
+**증상**: `@DataJpaTest` 기본 H2 → 한국어 ENUM/ngram/FULLTEXT 미지원.
+**해결**:
+```java
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Import({QuerydslConfig.class, JpaAuditingConfig.class, ItemQuerydslRepository.class})
+@Testcontainers
+class XxxIT {
+    @Container
+    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
+        .withCommand("--ngram_token_size=2", "--character-set-server=utf8mb4");
+    @DynamicPropertySource
+    static void mysqlProps(DynamicPropertyRegistry registry) { ... }
+}
+```
+**추가 함정**:
+- `@DataJpaTest` 는 `@EnableJpaAuditing` 자동 픽업 X → `@Import(JpaAuditingConfig.class)` 명시
+- `items.seller_id` FK RESTRICT → 테스트 setUp에서 User 1건 먼저 persist 필요
+
+### 13.5 Wishlist UNIQUE race — broad catch 위험 (Day 4, Codex 게이트 2)
+**증상**: 첫 구현 `catch (DataIntegrityViolationException e) { /* 무시 */ }` — UNIQUE 외 FK 위반도 "성공" 처리.
+**해결**: cause 좁은 검사
+```java
+if (cause instanceof ConstraintViolationException cve
+        && "uk_wishlists_user_item".equalsIgnoreCase(cve.getConstraintName())) {
+    return;
+}
+throw violation;
+```
+**교훈**: Day 3 OAuth race 처리 패턴 동일 — catch는 항상 의도한 케이스만 좁게.
+
+### 13.6 wishlist_count 영구 stale (Day 4, Codex 게이트 2)
+**증상**: Wishlist add/remove 가 `wishlists` 만 갱신, `items.wishlist_count` 0 고정.
+**해결**: `@Modifying` SQL atomic update + Wishlist 도메인이 ItemApplicationService 경유 호출. delete 영향 행 1건일 때만 -1, `wishlist_count > 0` 가드로 음수 방지.
+**교훈**: denormalized counter는 atomic update + 양방향 동기 필수.
+
+### 13.7 IllegalStateException → 500 회귀 (Day 4, Codex 게이트 2)
+**증상**: `Item.updateInfo` 거래완료/삭제 상태에서 IllegalStateException → GlobalExceptionHandler 500.
+**해결**: 신규 `ErrorCode.ITEM_INVALID_STATE` (400) + 도메인이 `BusinessException` throw.
+**교훈**: 단순 인자 검증은 `IllegalArgumentException`, 사용자 액션 컨텍스트의 상태 전이 거부는 `BusinessException` + 의미 있는 ErrorCode.
+
+### 13.8 File presign 권한 누수 (Day 4, Codex 게이트 2)
+**증상**: 일반 사용자가 `purpose=NOTICE`/`BANNER`/`MESSAGE` 로 관리자 자원 업로드 경로 선점 가능.
+**해결**: `FileApplicationService.issueForUser` 화이트리스트 (`{PROFILE, ITEM}` 만), 그 외 FORBIDDEN. 도메인 내부용 `issue` 는 권한 검증 책임 호출자.
+**교훈**: 사용자 입력 enum/discriminator는 항상 화이트리스트 검증, 진입점 분리로 권한 경계 명확히.
+
+### 13.9 레이어 위반 — 다른 도메인 Repository 직접 호출 (Day 4, Codex 게이트 2)
+**증상**: `ItemApplicationService → CategoryRepository`, `WishlistApplicationService → ItemRepository` 직접 호출. CLAUDE.md §3.3 위반.
+**해결**: `CategoryApplicationService.requireExists`, `ItemApplicationService.requireActiveItem` / `incrementWishlistCount` / `decrementWishlistCount` 추가, 다른 도메인은 ApplicationService 경유.
+**교훈**: 단순화 욕구로 컨벤션 우회 금지. 작업 시작 전 §3.3 룰 재확인.
+
+### 13.10 Codex 풀 리뷰 응답 30분+ 지연 (Day 4)
+**증상**: 첫 호출 60+ files / 3000+ insertions / 9 영역 prompt → 30분 응답 없음, 사용자 중단 (노트북 sleep 추정).
+**대응**: 메모리(`feedback_codex_dual_setup.md`)에 "게이트 2 라도 영역 2~3개씩 분할 호출" 룰 추가.
+**교훈**: prompt 사이즈 + 노트북 상태 양쪽 변수 고려.
+
+### 13.11 cause chain wrapper 누락 — 견고성 보강 (Day 4, Codex 검증)
+**증상**: `WishlistApplicationService` 의 isUniqueUserItemConflict 가 `violation.getCause()` 한 겹만 검사.
+**위험**: 드물게 `DataIntegrityViolationException → JpaSystemException → ConstraintViolationException` 처럼 wrapper 가 한 겹 더 끼면 race 가 500 으로 잘못 떨어질 수 있음.
+**해결**: cause chain traversal (자기참조 방어 포함) 으로 변경.
+```java
+Throwable cause = violation;
+while (cause != null) {
+    if (cause instanceof ConstraintViolationException cve
+            && UNIQUE_USER_ITEM.equalsIgnoreCase(cve.getConstraintName())) {
+        return true;
+    }
+    Throwable next = cause.getCause();
+    if (next == cause) return false;
+    cause = next;
+}
+```
+**교훈**: 예외 처리에서 cause chain 은 끝까지 따라가는 게 안전. 자기참조 방어 필수.
+
+### 13.12 Bulk update + persistence context 동기화 (Day 4, Codex 검증)
+**증상**: `Item.incrementWishlistCount` / `decrementWishlistCount` 가 JPA `@Modifying @Query` bulk update.
+**위험**: 같은 트랜잭션 안에서 후속으로 동일 Item 을 read 하면 stale 값 (persistence context 미동기).
+**현 상태**: wishlist add/remove 흐름은 호출 직후 read 가 없어 안전. 단 향후 같은 트랜잭션에서 재읽기 흐름 도입 시 회귀 가능.
+**해결**: 메서드에 stale 주의 javadoc 명시. 후속 `EntityManager.refresh` 또는 `flush+clear` 적용 hint.
+**교훈**: bulk update 는 동기화 책임이 호출자 → 항상 문서화.
+
+### 13.13 후속 이슈 트래킹 (Day 4 게이트 2 검증 권고)
+**Issue #12**: Item 등록 후 presigned key 승격 (`items/{userId}/...` → `items/{itemId}/...`) — 가이드 §4.5 정합 + ownership 검증
+**Issue #13**: Wishlist 동시성 IT — UNIQUE race + atomic counter underflow 검증 (testcontainers + CompletableFuture)
+머지 차단 X (견고성 보강 영역). 5/6 이후 또는 보안/돈 영역 작업 시 함께 진행 권장.
+
+---
+
+## 14. 작업 흐름 학습 (Day별 누계)
+
+- **TDD RED-GREEN-REFACTOR**: 도메인 단위는 테스트 우선, 어플리케이션은 권한·멱등성 케이스 우선
+- **Mockless Fake 패턴**: Mockito 대신 InMemoryFake* 직접 작성. 테스트 가독성 ↑, 단 prod 의미 드리프트 위험 → IT로 보완
+- **commit 분할**: 한 PR 내 의미 단위 분할 (Day 4 PR — 7 commit). 게이트 fix는 별도 commit으로 추적성 확보
+- **컨벤션 일관성**: CLAUDE.md / AGENTS.md 룰을 작업 시작 전 다시 확인. 단순화 욕구로 우회 금지
 
 ---
 
