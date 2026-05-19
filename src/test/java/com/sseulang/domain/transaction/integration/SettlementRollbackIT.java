@@ -4,7 +4,6 @@ import com.sseulang.domain.category.application.CategoryApplicationService;
 import com.sseulang.domain.category.infrastructure.persistence.CategoryRepositoryImpl;
 import com.sseulang.domain.chat.domain.ChatRoom;
 import com.sseulang.domain.file.application.NoOpPresignedUrlGenerator;
-import com.sseulang.domain.file.domain.PresignedUrlGenerator;
 import com.sseulang.domain.item.application.ItemApplicationService;
 import com.sseulang.domain.item.application.NoOpWishlistView;
 import com.sseulang.domain.item.application.dto.ItemRegisterCommand;

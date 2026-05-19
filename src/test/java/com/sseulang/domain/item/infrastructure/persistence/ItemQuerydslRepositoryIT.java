@@ -2,7 +2,6 @@ package com.sseulang.domain.item.infrastructure.persistence;
 
 import com.sseulang.domain.item.application.dto.ItemSearchCriteria;
 import com.sseulang.domain.item.domain.Item;
-import com.sseulang.domain.item.domain.ItemStatus;
 import com.sseulang.domain.item.domain.RentalUnit;
 import com.sseulang.domain.item.domain.TradeType;
 import com.sseulang.domain.user.domain.Email;
@@ -25,8 +24,6 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

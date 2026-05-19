@@ -4,8 +4,6 @@ import com.sseulang.domain.notification.application.dto.NotificationResult;
 import com.sseulang.domain.notification.domain.Notification;
 import com.sseulang.domain.notification.domain.NotificationRepository;
 import com.sseulang.domain.notification.domain.NotificationType;
-import com.sseulang.global.exception.BusinessException;
-import com.sseulang.global.exception.ErrorCode;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;

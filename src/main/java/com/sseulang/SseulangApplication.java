@@ -1,6 +1,5 @@
 package com.sseulang;
 
-import com.sseulang.global.security.JwtProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;

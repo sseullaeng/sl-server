@@ -11,10 +11,7 @@ import com.sseulang.domain.user.application.dto.UserStatsResult;
 import com.sseulang.domain.withdrawal.application.WithdrawalApplicationService;
 import com.sseulang.domain.withdrawal.application.dto.WithdrawalStatsResult;
 import com.sseulang.domain.report.application.UserReportApplicationService;
-import com.sseulang.domain.transaction.domain.TransactionStatus;
 import com.sseulang.domain.transaction.domain.TransactionStatusCount;
-import com.sseulang.domain.transaction.domain.TransactionRepository;
-import com.sseulang.domain.user.domain.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

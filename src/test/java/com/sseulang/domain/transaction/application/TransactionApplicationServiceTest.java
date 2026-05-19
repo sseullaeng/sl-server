@@ -16,7 +16,6 @@ import com.sseulang.domain.item.domain.RentalUnit;
 import com.sseulang.domain.item.domain.TradeType;
 import com.sseulang.domain.point.application.InMemoryFakePointHistoryRepository;
 import com.sseulang.domain.point.application.PointApplicationService;
-import com.sseulang.domain.point.domain.PointHistoryType;
 import com.sseulang.domain.transaction.application.dto.TransactionCreateCommand;
 import com.sseulang.domain.transaction.application.dto.TransactionResult;
 import com.sseulang.domain.transaction.domain.Transaction;

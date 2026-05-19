@@ -4,8 +4,6 @@ import com.sseulang.domain.delivery.application.dto.DeliveryCreateCommand;
 import com.sseulang.domain.delivery.application.dto.DeliveryResult;
 import com.sseulang.domain.delivery.domain.DeliveryStatus;
 import com.sseulang.domain.point.application.PointApplicationService;
-import com.sseulang.domain.point.domain.PointHistoryType;
-import com.sseulang.domain.point.domain.PointReferenceType;
 import com.sseulang.domain.user.application.UserApplicationService;
 import com.sseulang.global.exception.BusinessException;
 import com.sseulang.global.exception.ErrorCode;

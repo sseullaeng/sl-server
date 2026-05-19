@@ -3,8 +3,6 @@ package com.sseulang.domain.notification.application;
 import com.sseulang.domain.notification.application.dto.NotificationResult;
 import com.sseulang.domain.notification.domain.Notification;
 import com.sseulang.domain.notification.domain.NotificationType;
-import com.sseulang.global.exception.BusinessException;
-import com.sseulang.global.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,7 +10,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class NotificationApplicationServiceTest {
 

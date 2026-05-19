@@ -10,9 +10,7 @@
 com.sseulang.domain.overdue/
 ├── application/
 │   ├── OverdueApplicationService
-│   ├── OverdueDetectionScheduler
-│   └── dto/
-│       └── OverdueChargeQueryResult
+│   └── OverdueDetectionScheduler
 ├── domain/
 │   ├── OverdueRecord
 │   ├── OverdueRecordRepository

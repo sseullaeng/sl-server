@@ -4,8 +4,6 @@ import com.sseulang.domain.admin.domain.Admin;
 import com.sseulang.domain.admin.domain.AdminRepository;
 import com.sseulang.domain.admin.presentation.dto.AdminMeResponse;
 import com.sseulang.domain.user.application.UserApplicationService;
-import com.sseulang.global.exception.BusinessException;
-import com.sseulang.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
