@@ -159,6 +159,42 @@ com.sseulang
 
 동시성 테스트는 `CompletableFuture`와 `CountDownLatch`로 race 상황을 재현하고, 락 또는 원자 연산이 정상 동작하는지 검증했습니다.
 
+### 테스트 현황
+
+**총 895개** 테스트, 101개 테스트 클래스 (전부 통과 / 스킵 3).
+
+**레이어별 분포**
+
+| 레이어 | 테스트 수 | 설명 |
+|---|---:|---|
+| 애플리케이션 (Mockito 단위) | 417 | ApplicationService — 트랜잭션 경계 + 흐름 조율 |
+| 도메인 (순수 단위) | 289 | Aggregate / VO / DomainService — Spring 컨텍스트 없음 |
+| 통합 (`@SpringBootTest` + Testcontainers) | 75 | 회원가입·결제·거래대행·연체 등 핵심 플로우 e2e |
+| 글로벌 / 보안 | 62 | JWT, CSRF, 쿠키, STOMP 인증, SecurityFilterChain |
+| 인프라 (어댑터 / Slice) | 35 | QueryDSL, 토스 게이트웨이, Redis 토큰 저장소 |
+| 프레젠테이션 (`@WebMvcTest`) | 17 | Controller 라우팅 / 직렬화 |
+
+**도메인별 분포 (상위)**
+
+| 도메인 | 테스트 수 | 핵심 검증 |
+|---|---:|---|
+| escrow (거래대행) | 101 | 대여 lifecycle, 수수료 산정, 보증금 hold/refund |
+| item (물품) | 94 | 다중 거래유형, 검색·정렬, 풀텍스트 인덱스 |
+| auth (인증) | 86 | JWT Rotation, OAuth, 이메일 인증, 토큰 블랙리스트 |
+| transaction (거래) | 75 | 상태 머신, 정산 롤백, 동시성 race |
+| payment (결제) | 67 | 토스 멱등성, webhook HMAC, 금액 재검증 |
+| user (사용자) | 55 | 잔액 원자 연산, 정지/탈퇴, 휴면 전이 |
+| delivery (배달) | 49 | 라이더 매칭, 위치 트래킹, 동시 수락 race |
+| overdue (연체) | 35 | Phase 1~4 차감/채무, 스케줄러, 자동 정지 |
+| withdrawal (출금) | 34 | 비관적 락 정산, 거부 시 환불 |
+
+**핵심 검증 영역 (🔒 강제 영역)**
+
+- **동시성**: `SettlementRollbackIT`, `TransactionConcurrencyIT`, `DeliveryConcurrencyIT` — 잔액 race, 락 직렬화, 정산 롤백 원자성
+- **결제 멱등성**: 토스 `merchant_uid` 중복 차단, webhook 시그니처 위변조 차단
+- **거래대행 lifecycle**: `EscrowFlowE2EIT`, `OverdueLifecycleIT` — 대여 양방향 배달 + 연체 Phase 전이 e2e
+- **인증 보안**: `AuthSecurityFlowIT`, `WebSocketAuthFlowIT` — JWT Rotation, STOMP 인증 통합
+
 ---
 
 ## 배포
